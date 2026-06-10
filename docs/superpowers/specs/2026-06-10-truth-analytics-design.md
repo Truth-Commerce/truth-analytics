@@ -148,8 +148,9 @@ retry automático:
 - Chat com IA sobre os dados ("por que minha margem caiu?") — candidato a
   diferencial do plano top.
 - Dashboard com sincronização diária de métricas.
-- Multi-usuário por organização (times) — MVP assume 1+ usuários simples por
-  org, sem papéis granulares de cliente.
+- Multi-usuário por organização (times, convites, papéis granulares) — o MVP
+  assume exatamente **um usuário por organização** (quem se cadastrou). O
+  modelo de dados já suporta vários, mas não haverá fluxo de convite.
 
 ## 9. Riscos Conhecidos
 
