@@ -1,0 +1,229 @@
+<h1>Truth Analytics — Design da Plataforma de Análise Multi-Marketplace</h1>
+<p><strong>Data:</strong> 2026-06-10
+<strong>Autor:</strong> Matheus Kirsch (Truth Commerce)
+<strong>Status:</strong> Aprovado em brainstorm — aguardando aprovação da liderança</p>
+<h2>1. Visão Geral</h2>
+<p>SaaS da Truth Commerce para clientes de e-commerce/marketplace. A plataforma
+unifica os dados de venda de todos os canais do cliente (via Bling), coleta
+benchmark de mercado do nicho (Mercado Livre público + SerpAPI/DataForSEO) e
+gera, por IA (Claude ou OpenAI), um relatório periódico completo: métricas, gráficos,
+resumo executivo, gargalos, sugestões de melhoria, ideias de venda no nicho e
+recomendações de precificação.</p>
+<p><strong>Modelo comercial:</strong> venda consultiva. A Truth fecha contrato por fora
+(Pix/contrato), e um admin ativa o cliente no painel interno definindo o plano,
+que determina a frequência de geração de relatórios: a cada <strong>7, 15 ou 30 dias</strong>.
+Sem gateway de pagamento no MVP.</p>
+<p><strong>Princípio de custo:</strong> análise de IA roda apenas no ciclo do plano
+(relatório periódico completo — formato escolhido sobre dashboard &quot;sempre
+fresco&quot; ou chat sob demanda). Custo de IA por cliente é previsível e limitado.</p>
+<h2>2. Decisões de Arquitetura (com alternativas consideradas)</h2>
+<table>
+<thead>
+<tr>
+<th>Decisão</th>
+<th>Escolha</th>
+<th>Alternativas descartadas</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ingestão de dados do cliente</td>
+<td><strong>Híbrido faseado: Bling API v3 (OAuth) no MVP</strong>; APIs diretas de marketplaces depois</td>
+<td>APIs diretas já no MVP (lento de lançar); só upload CSV (experiência ruim)</td>
+</tr>
+<tr>
+<td>Dados de mercado/nicho</td>
+<td><strong>ML API pública + SerpAPI/DataForSEO</strong> (Shopee, Amazon BR, Google Shopping)</td>
+<td>Só ML público (cobertura insuficiente); só IA sem benchmark (sugestão de preço sem base real)</td>
+</tr>
+<tr>
+<td>Formato da análise</td>
+<td><strong>Relatório periódico completo (formato A)</strong> — geração travada pela frequência do plano</td>
+<td>Dashboard sincronizado diariamente (custo maior); chat IA sob demanda (custo imprevisível — candidato a fase 2)</td>
+</tr>
+<tr>
+<td>Cobrança</td>
+<td><strong>Manual: admin ativa cliente e plano no painel interno</strong></td>
+<td>Stripe/gateways BR (desnecessário enquanto a venda é consultiva; plugar depois)</td>
+</tr>
+<tr>
+<td>Stack</td>
+<td><strong>Next.js (App Router) + Vercel + Neon Postgres + Resend</strong></td>
+<td>Backend de jobs separado (Railway/BullMQ); VPS próprio — ambos adiam o lançamento sem ganho no volume atual</td>
+</tr>
+<tr>
+<td>Orquestração do pipeline</td>
+<td><strong>Vercel Workflow (durable workflows)</strong></td>
+<td>Cron + máquina de estados própria (retry/recuperação na mão); Inngest (fornecedor extra)</td>
+</tr>
+<tr>
+<td>IA</td>
+<td><strong>Claude API</strong>, saída JSON estruturada validada com Zod</td>
+<td>—</td>
+</tr>
+</tbody></table>
+<h2>3. Módulos</h2>
+<p>Projeto único Next.js na Vercel, 6 módulos com fronteiras claras.
+Regra de ouro: <strong>o pipeline só escreve relatórios; o dashboard só lê.</strong>
+Nenhuma lógica de análise no frontend.</p>
+<h3>3.1 Auth &amp; Contas</h3>
+<ul>
+<li>Cadastro/login com e-mail+senha via Auth.js.</li>
+<li>Usuário pertence a uma <code>organization</code> (o cliente da Truth).</li>
+<li>Conta nasce <strong>inativa</strong> (<code>organizations.status = pending</code>); só opera após
+ativação pelo admin.</li>
+<li>Roles: <code>admin_truth</code> (equipe interna) e <code>client</code>.</li>
+</ul>
+<h3>3.2 Painel Admin (interno Truth) — <code>/admin</code></h3>
+<ul>
+<li>Ativar/desativar/suspender clientes; definir plano (weekly/biweekly/monthly).</li>
+<li>Ver status de integrações, histórico e falhas de relatórios de todos os clientes.</li>
+<li>Protegido por role <code>admin_truth</code>.</li>
+</ul>
+<h3>3.3 Conexões (Integrações)</h3>
+<ul>
+<li>OAuth Bling v3; tokens criptografados (AES-256-GCM, chave em env var),
+refresh automático.</li>
+<li>Cadastro de <code>tracked_products</code> (produtos-chave + keywords) que alimentam a
+coleta de mercado.</li>
+<li>Camada <code>providers/</code> com interface comum — preparada para receber APIs
+diretas de marketplaces na fase 2 sem reescrever o pipeline.</li>
+</ul>
+<h3>3.4 Pipeline de Relatório (Vercel Workflow)</h3>
+<p>Disparado pelo botão &quot;Gerar análise&quot; (após validação). Steps duráveis com
+retry automático:</p>
+<ol>
+<li><strong>Coletar Bling</strong> — pedidos do período, produtos, estoque (paginado,
+upsert idempotente em <code>orders</code>). <em>Roda em paralelo com o step 2.</em></li>
+<li><strong>Coletar mercado</strong> — para cada <code>tracked_product</code>: ML público + SerpAPI →
+<code>market_snapshots</code>.</li>
+<li><strong>Calcular métricas</strong> — SQL puro, sem IA: vendas por canal, evolução,
+ticket médio, top produtos, posição de preço vs. mercado.</li>
+<li><strong>Análise IA (Claude)</strong> — recebe métricas calculadas + benchmark resumido
+(dados mastigados; ~2-4 chamadas por relatório). Devolve JSON estruturado:
+resumo executivo, gargalos, sugestões de melhoria, ideias de venda no
+nicho, recomendação de preço por produto. Validação com Zod.</li>
+<li><strong>Finalizar</strong> — salva jsonb no <code>report</code>, <code>status = done</code>, seta
+<code>proximo_relatorio_liberado_em = hoje + 7/15/30 dias</code>, e-mail &quot;relatório
+pronto&quot; via Resend.</li>
+</ol>
+<h3>3.5 Dashboard do Cliente</h3>
+<ul>
+<li>Último relatório: resumo executivo, gráficos (vendas por canal, evolução,
+ticket médio, top produtos), benchmark de preços, gargalos e sugestões da IA.</li>
+<li>Histórico de relatórios anteriores (imutáveis).</li>
+<li>Botão &quot;Gerar análise&quot; habilitado apenas quando
+<code>proximo_relatorio_liberado_em ≤ hoje</code> e org ativa e Bling conectado.</li>
+</ul>
+<h3>3.6 Notificações (Resend)</h3>
+<ul>
+<li>Conta ativada · relatório pronto · falha de conexão Bling · falha de
+pipeline (para admin).</li>
+</ul>
+<h2>4. Modelo de Dados (Neon Postgres)</h2>
+<p>8 tabelas. <code>organizations</code> é a raiz multi-tenant — <strong>toda query filtra por
+<code>org_id</code> da sessão</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Tabela</th>
+<th>Campos-chave</th>
+<th>Observações</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>organizations</code></td>
+<td>status (pending/active/suspended), plano (weekly/biweekly/monthly), nicho (texto p/ IA), <code>proximo_relatorio_liberado_em</code></td>
+<td>A data implementa a trava do plano</td>
+</tr>
+<tr>
+<td><code>users</code></td>
+<td>org_id, email, senha_hash, role (admin_truth/client)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>connections</code></td>
+<td>provider (bling), access/refresh_token 🔒 criptografados, expira_em, status (ok/erro/expirado), last_sync_at</td>
+<td>Extensível p/ outros providers</td>
+</tr>
+<tr>
+<td><code>tracked_products</code></td>
+<td>org_id, nome, sku (vínculo Bling), keywords[], ativo</td>
+<td>Base da coleta de mercado</td>
+</tr>
+<tr>
+<td><code>orders</code></td>
+<td>org_id, bling_order_id (unique p/ upsert), canal (ml/shopee/amazon/loja...), data, valor_total, frete, itens jsonb</td>
+<td>Idempotente — re-rodar pipeline nunca duplica</td>
+</tr>
+<tr>
+<td><code>market_snapshots</code></td>
+<td>org_id, report_id, fonte (ml_publico/serpapi), keyword, dados jsonb</td>
+<td>Foto do mercado por ciclo</td>
+</tr>
+<tr>
+<td><code>reports</code></td>
+<td>org_id, período, status (queued/running/done/failed), metricas jsonb, analise_ia jsonb, workflow_run_id</td>
+<td>Imutável e auto-contido</td>
+</tr>
+<tr>
+<td><code>audit_log</code></td>
+<td>org_id, user_id, ação, detalhes jsonb</td>
+<td>Rastro de ativações, gerações, conexões</td>
+</tr>
+</tbody></table>
+<h2>5. Tratamento de Erros</h2>
+<p><strong>Princípio: dado do cliente é sagrado, dado de mercado é desejável.</strong></p>
+<ul>
+<li><strong>Bling indisponível/token inválido</strong> → falha dura (sem vendas não há
+relatório). Refresh automático; persistindo, <code>connection.status = erro</code>,
+e-mail ao cliente e ao admin. <strong>Ciclo do plano não é consumido</strong> (a trava só
+é setada no sucesso do step 5).</li>
+<li><strong>ML/SerpAPI falham</strong> → degradação graciosa: relatório sai com aviso
+&quot;benchmark parcial neste ciclo&quot;; IA instruída a não inferir sobre dados
+ausentes.</li>
+<li><strong>Claude retorna JSON inválido</strong> → validação Zod; 1 re-tentativa com o erro
+no prompt; persistindo, o step falha e entra no retry do workflow.</li>
+<li><strong>Rate limits</strong> (Bling ~3 req/s) → throttling + backoff exponencial dentro
+dos steps.</li>
+<li><strong>Falha definitiva do workflow</strong> → <code>report.status = failed</code> + e-mail ao
+admin com step e erro; visível no painel admin.</li>
+</ul>
+<h2>6. Segurança</h2>
+<ul>
+<li>Tokens de integração criptografados com AES-256-GCM (chave em env var).</li>
+<li>Isolamento multi-tenant por <code>org_id</code> em todas as queries, com testes
+dedicados garantindo que cliente A nunca acessa dados do cliente B.</li>
+<li><code>/admin</code> exige role <code>admin_truth</code>; rate limiting no login.</li>
+<li>Senhas com hash (bcrypt/argon2 via Auth.js).</li>
+</ul>
+<h2>7. Estratégia de Testes</h2>
+<ul>
+<li><strong>Unit (Vitest):</strong> cálculo de métricas (parte determinística crítica) e
+trava de frequência do plano.</li>
+<li><strong>Integração:</strong> clientes Bling/ML/SerpAPI mockados com fixtures de respostas
+reais; validação Zod da saída da IA.</li>
+<li><strong>E2E (Playwright):</strong> cadastro → admin ativa → cliente conecta Bling →
+dashboard renderiza relatório fixture.</li>
+<li>Implementação via TDD.</li>
+</ul>
+<h2>8. Fora de Escopo do MVP (fase 2+)</h2>
+<ul>
+<li>Gateway de pagamento / self-service (Stripe).</li>
+<li>APIs diretas de marketplaces (Mercado Livre seller, Shopee, Amazon SP-API).</li>
+<li>Chat com IA sobre os dados (&quot;por que minha margem caiu?&quot;) — candidato a
+diferencial do plano top.</li>
+<li>Dashboard com sincronização diária de métricas.</li>
+<li>Multi-usuário por organização (times, convites, papéis granulares) — o MVP
+assume exatamente <strong>um usuário por organização</strong> (quem se cadastrou). O
+modelo de dados já suporta vários, mas não haverá fluxo de convite.</li>
+</ul>
+<h2>9. Riscos Conhecidos</h2>
+<ul>
+<li><strong>Vercel Workflow é produto recente</strong> — mitigação: steps finos e estado no
+Postgres; migrar para Inngest é troca de orquestrador, não reescrita.</li>
+<li><strong>Custo SerpAPI/DataForSEO cresce com nº de produtos rastreados</strong> —
+mitigação: limite de tracked_products por plano.</li>
+<li><strong>Termos de uso de coleta de dados de terceiros</strong> — usar APIs pagas
+(SerpAPI/DataForSEO assumem o risco de coleta) e ML público oficial; sem
+scraping próprio no MVP.</li>
+</ul>

@@ -1,7 +1,7 @@
 # Truth Analytics — Design da Plataforma de Análise Multi-Marketplace
 
 **Data:** 2026-06-10
-**Autor:** Matheus Kirsch (Truth Commerce) + Claude
+**Autor:** Matheus Kirsch (Truth Commerce)
 **Status:** Aprovado em brainstorm — aguardando aprovação da liderança
 
 ## 1. Visão Geral
@@ -9,7 +9,7 @@
 SaaS da Truth Commerce para clientes de e-commerce/marketplace. A plataforma
 unifica os dados de venda de todos os canais do cliente (via Bling), coleta
 benchmark de mercado do nicho (Mercado Livre público + SerpAPI/DataForSEO) e
-gera, por IA (Claude), um relatório periódico completo: métricas, gráficos,
+gera, por IA (Claude ou OpenAI), um relatório periódico completo: métricas, gráficos,
 resumo executivo, gargalos, sugestões de melhoria, ideias de venda no nicho e
 recomendações de precificação.
 
