@@ -2,5 +2,9 @@ node_modules/
 .next/
 .env
 .env.local
+.env*.local
 .superpowers/
 .vercel/
+playwright-report
+test-results
+tsconfig.tsbuildinfo
