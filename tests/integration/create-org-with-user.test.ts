@@ -2,9 +2,8 @@
  * Integration test for createOrgWithUser.
  *
  * Uses DATABASE_URL_TEST (Neon test branch) — never production.
- * We temporarily point POSTGRES_URL at the test branch so that
- * createOrgWithUser (which builds its db client from POSTGRES_URL)
- * writes to the same DB that tdb reads from.
+ * tests/setup.ts (setupFiles) already redirects POSTGRES_URL → DATABASE_URL_TEST
+ * before any module loads, so the app DB client writes to the test branch.
  */
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -12,17 +11,9 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import { organizations, users } from '@/db/schema';
+import { createOrgWithUser } from '@/modules/auth/user.repository';
 
 const url = process.env.DATABASE_URL_TEST;
-
-// Point the singleton db client at the test branch before any import resolves it.
-// vitest resets module registry between files so this is safe.
-if (url) {
-  process.env.POSTGRES_URL = url;
-}
-
-// Dynamic import so the db/client singleton picks up the patched POSTGRES_URL above.
-const { createOrgWithUser } = await import('@/modules/auth/user.repository');
 
 const sql = postgres(url ?? '', { prepare: false });
 const tdb = drizzle(sql);
