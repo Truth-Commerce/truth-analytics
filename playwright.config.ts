@@ -15,6 +15,9 @@ if (!testDbUrl) {
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
+  // Single worker: specs share one dev-server and one DB branch; running
+  // them sequentially prevents cross-spec session / redirect interference.
+  workers: 1,
   // globalSetup sets PW_E2E_RUN_ID once so all workers share the same test email.
   globalSetup: './tests/e2e/global-setup.ts',
   use: { baseURL: 'http://localhost:3100' },
