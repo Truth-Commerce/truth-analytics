@@ -44,7 +44,7 @@ function mapItem(item: BlingItemPayload): RawOrderItem {
 
 function mapOrder(raw: BlingOrderPayload): RawOrder {
   const id = String(raw.id ?? raw.numeroPedido ?? '');
-  const canal = raw.canal?.descricao ?? 'Bling';
+  const canal = (raw.canal?.descricao ?? 'Bling').slice(0, 32);
   const data = raw.data ? new Date(raw.data) : new Date(0);
   const valorTotal = Number(raw.total ?? raw.totalProdutos ?? 0);
   const frete = Number(raw.transporte?.frete ?? 0);

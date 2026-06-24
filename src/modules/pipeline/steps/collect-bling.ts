@@ -6,7 +6,7 @@ import { blingProvider } from '@/modules/providers/bling/provider';
 import type { Periodo } from '@/modules/providers/types';
 
 export type CollectResult = {
-  inseridos: number;
+  processados: number;
   total: number;
 };
 
@@ -17,10 +17,16 @@ export async function collectBlingOrders(
   const rawOrders = await blingProvider.fetchOrders(orgId, periodo);
 
   if (rawOrders.length === 0) {
-    return { inseridos: 0, total: 0 };
+    return { processados: 0, total: 0 };
   }
 
-  const values = rawOrders.map((o) => ({
+  const validOrders = rawOrders.filter((o) => o.blingOrderId.trim() !== '');
+
+  if (validOrders.length === 0) {
+    return { processados: 0, total: rawOrders.length };
+  }
+
+  const values = validOrders.map((o) => ({
     org_id: orgId,
     bling_order_id: o.blingOrderId,
     canal: o.canal,
@@ -45,5 +51,5 @@ export async function collectBlingOrders(
     })
     .returning({ id: orders.id });
 
-  return { inseridos: result.length, total: rawOrders.length };
+  return { processados: result.length, total: rawOrders.length };
 }

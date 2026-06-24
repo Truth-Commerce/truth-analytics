@@ -83,7 +83,7 @@ describe.skipIf(!url)('collect-bling — integração', () => {
     const result = await collectBlingOrders(orgId, PERIODO);
 
     expect(result.total).toBe(2);
-    expect(result.inseridos).toBe(2);
+    expect(result.processados).toBe(2);
   });
 
   it('upsert é idempotente — segunda execução não duplica', async () => {
@@ -145,6 +145,59 @@ describe.skipIf(!url)('collect-bling — integração', () => {
     expect(updated!.valor_total).toBe('299.90');
     expect(updated!.frete).toBe('20.00');
     expect(updated!.canal).toBe('Loja Virtual Atualizada');
+  });
+
+  it('guard: pedido com blingOrderId vazio é ignorado, válido é persistido', async () => {
+    const VALID_ORDER = {
+      blingOrderId: `bling-order-${RUN}-guard`,
+      canal: 'Loja Virtual',
+      data: new Date('2024-01-25T00:00:00.000Z'),
+      valorTotal: 100.0,
+      frete: 0,
+      itens: [],
+    };
+    const EMPTY_ID_ORDER = {
+      blingOrderId: '',
+      canal: 'Canal Inválido',
+      data: new Date('2024-01-25T00:00:00.000Z'),
+      valorTotal: 50.0,
+      frete: 0,
+      itens: [],
+    };
+
+    // Use a fresh org to avoid interference with other tests
+    const [guardOrg] = await tdb
+      .insert(organizations)
+      .values({ name: `ta-test-guard-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    const guardOrgId = guardOrg.id;
+
+    try {
+      const provider = await import('@/modules/providers/bling/provider');
+      vi.spyOn(provider.blingProvider, 'fetchOrders').mockResolvedValueOnce([
+        VALID_ORDER,
+        EMPTY_ID_ORDER,
+      ]);
+
+      const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
+      const result = await collectBlingOrders(guardOrgId, PERIODO);
+
+      // total reflects all fetched orders (including empty-id one)
+      expect(result.total).toBe(2);
+      // only the valid one is persisted
+      expect(result.processados).toBe(1);
+
+      // Verify DB directly
+      const rows = await tdb
+        .select()
+        .from(orders)
+        .where(eq(orders.org_id, guardOrgId));
+      expect(rows.length).toBe(1);
+      expect(rows[0].bling_order_id).toBe(`bling-order-${RUN}-guard`);
+    } finally {
+      await tdb.delete(orders).where(eq(orders.org_id, guardOrgId));
+      await tdb.delete(organizations).where(eq(organizations.id, guardOrgId));
+    }
   });
 
   it('isolamento por org — pedidos de uma org não aparecem na outra', async () => {
