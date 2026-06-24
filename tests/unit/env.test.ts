@@ -7,6 +7,7 @@ describe('parseServerEnv', () => {
       POSTGRES_URL: 'postgres://x',
       AUTH_SECRET: 'secret',
       APP_URL: 'http://localhost:3000',
+      ENCRYPTION_KEY: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
     } as unknown as NodeJS.ProcessEnv);
     expect(env.POSTGRES_URL).toBe('postgres://x');
   });

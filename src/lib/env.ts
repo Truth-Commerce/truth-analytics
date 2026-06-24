@@ -5,6 +5,15 @@ const schema = z.object({
   POSTGRES_URL_DIRECT: z.string().min(1).optional(),
   AUTH_SECRET: z.string().min(1, 'AUTH_SECRET é obrigatória'),
   APP_URL: z.string().url().default('http://localhost:3000'),
+  ENCRYPTION_KEY: z
+    .string()
+    .refine((v) => Buffer.from(v, 'base64').length === 32, {
+      message: 'ENCRYPTION_KEY deve ser 32 bytes em base64',
+    }),
+  BLING_CLIENT_ID: z.string().min(1).optional(),
+  BLING_CLIENT_SECRET: z.string().min(1).optional(),
+  BLING_REDIRECT_URI: z.string().url().optional(),
+  BLING_API_BASE: z.string().url().default('https://www.bling.com.br/Api/v3'),
 });
 
 export type ServerEnv = z.infer<typeof schema>;
