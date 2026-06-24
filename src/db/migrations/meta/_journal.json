@@ -15,6 +15,13 @@
       "when": 1782320189869,
       "tag": "0001_thankful_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782324357008,
+      "tag": "0002_open_golden_guardian",
+      "breakpoints": true
     }
   ]
 }
