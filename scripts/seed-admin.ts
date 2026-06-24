@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import { eq } from 'drizzle-orm';
 
 import { db } from '@/db/client';
@@ -34,7 +36,7 @@ export async function seedAdmin(input: {
   }
 
   const senha_hash = await hashPassword(input.senha);
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [org] = await tx
       .insert(organizations)
       .values({ name: input.orgName ?? 'Truth Commerce (interno)', status: 'active' })
@@ -43,14 +45,15 @@ export async function seedAdmin(input: {
       .insert(users)
       .values({ org_id: org.id, email, senha_hash, role: 'admin_truth' })
       .returning({ id: users.id });
-    await recordAudit({
-      orgId: org.id,
-      userId: user.id,
-      acao: 'admin.seed',
-      detalhes: { promoted: false },
-    });
-    return { userId: user.id, orgId: org.id, promoted: false };
+    return { orgId: org.id, userId: user.id };
   });
+  await recordAudit({
+    orgId: created.orgId,
+    userId: created.userId,
+    acao: 'admin.seed',
+    detalhes: { promoted: false },
+  });
+  return { ...created, promoted: false };
 }
 
 // CLI entrypoint: lê credenciais do ambiente (nunca hardcodar).
@@ -71,6 +74,6 @@ async function main() {
 }
 
 // Executa main() apenas quando rodado como script (não em import de teste).
-if (process.argv[1] && process.argv[1].includes('seed-admin')) {
+if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
   void main();
 }
