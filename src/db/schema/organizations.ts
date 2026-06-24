@@ -15,6 +15,7 @@ export const organizations = pgTable('organizations', {
     .notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' })
     .defaultNow()
+    .$onUpdateFn(() => new Date())
     .notNull(),
 });
 
