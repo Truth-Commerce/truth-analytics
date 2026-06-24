@@ -6,6 +6,7 @@ import postgres from 'postgres';
 import { auditLog, organizations, users } from '@/db/schema';
 import {
   activateOrganization,
+  getOrganizationById,
   listClientOrganizations,
   suspendOrganization,
 } from '@/modules/admin/admin.repository';
@@ -92,5 +93,19 @@ describe.skipIf(!url)('admin.repository — integração', () => {
       .where(eq(organizations.id, clientOrgId))
       .limit(1);
     expect(org.status).toBe('suspended');
+
+    const audits = await tdb
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.org_id, clientOrgId), eq(auditLog.acao, 'org.suspensa')));
+    expect(audits.length).toBe(1);
+  });
+
+  it('getOrganizationById retorna a org existente e null para id inexistente', async () => {
+    const found = await getOrganizationById(clientOrgId);
+    expect(found).not.toBeNull();
+    expect(found?.id).toBe(clientOrgId);
+    const missing = await getOrganizationById('00000000-0000-0000-0000-000000000000');
+    expect(missing).toBeNull();
   });
 });
