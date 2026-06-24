@@ -49,7 +49,7 @@ export function vendasPorCanal(orders: OrderRow[]): { canal: string; total: numb
   }
   return Array.from(map.entries())
     .map(([canal, v]) => ({ canal, total: round2(v.total), pedidos: v.pedidos }))
-    .sort((a, b) => b.total - a.total || a.canal.localeCompare(b.canal));
+    .sort((a, b) => b.total - a.total || a.canal.localeCompare(b.canal, 'pt-BR'));
 }
 
 /** Group orders by UTC day, sum valor_total per day, sort ascending by date string. */
@@ -61,7 +61,7 @@ export function evolucao(orders: OrderRow[]): { data: string; total: number }[] 
   }
   return Array.from(map.entries())
     .map(([data, total]) => ({ data, total: round2(total) }))
-    .sort((a, b) => a.data.localeCompare(b.data));
+    .sort((a, b) => a.data.localeCompare(b.data, 'pt-BR'));
 }
 
 /** Sum valor_total / count orders; 0 if no orders. Rounded to 2 decimals. */
@@ -96,7 +96,7 @@ export function topProdutos(orders: OrderRow[]): { nome: string; sku: string; qu
 
   return Array.from(map.values())
     .map((v) => ({ ...v, receita: round2(v.receita) }))
-    .sort((a, b) => b.receita - a.receita || a.nome.localeCompare(b.nome))
+    .sort((a, b) => b.receita - a.receita || a.nome.localeCompare(b.nome, 'pt-BR'))
     .slice(0, 10);
 }
 
@@ -109,7 +109,7 @@ export function medianaPreco(precos: number[]): number {
   const sorted = [...precos].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 1) {
-    return sorted[mid];
+    return round2(sorted[mid]);
   }
   return round2((sorted[mid - 1] + sorted[mid]) / 2);
 }
@@ -167,7 +167,8 @@ export function posicaoPreco(
     for (const keyword of p.keywords) {
       const snaps = snapshotsByKeyword.get(keyword) ?? [];
       for (const snap of snaps) {
-        allPrecos.push(...snap.dados.precos);
+        const precos = Array.isArray(snap.dados?.precos) ? snap.dados.precos : [];
+        allPrecos.push(...precos);
         fonteCount.set(snap.fonte, (fonteCount.get(snap.fonte) ?? 0) + 1);
       }
     }
@@ -178,13 +179,13 @@ export function posicaoPreco(
     let fonte = '';
     if (fonteCount.size > 0) {
       fonte = Array.from(fonteCount.entries())
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))[0][0];
     }
 
     result.push({ sku: p.sku, nome: p.nome, nossoPreco, precoMercadoMediano, fonte });
   }
 
-  return result.sort((a, b) => a.sku.localeCompare(b.sku));
+  return result.sort((a, b) => a.sku.localeCompare(b.sku, 'pt-BR'));
 }
 
 // ---------------------------------------------------------------------------
