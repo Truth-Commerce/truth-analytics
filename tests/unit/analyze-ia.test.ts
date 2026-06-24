@@ -72,6 +72,20 @@ function fakeMessage(textContent: string) {
   };
 }
 
+/** Build a fake Message with NO text block (only thinking) — extractTextBlock → null */
+function fakeThinkingOnlyMessage() {
+  return {
+    id: 'msg_fake_thinking',
+    type: 'message' as const,
+    role: 'assistant' as const,
+    model: serverEnv.ANALYSIS_MODEL,
+    stop_reason: 'end_turn' as const,
+    stop_sequence: null,
+    usage: { input_tokens: 100, output_tokens: 200, thinking_tokens: 80 },
+    content: [{ type: 'thinking', thinking: 'Only reasoning, no text block emitted' }],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -81,6 +95,7 @@ describe('analyzeWithIA', () => {
   let getAnthropic: typeof import('@/modules/ai/claude').getAnthropic;
   let analyzeWithIA: typeof import('@/modules/pipeline/steps/analyze-ia').analyzeWithIA;
   let mockCreate: ReturnType<typeof vi.fn>;
+  let claudeModuleRef: typeof import('@/modules/ai/claude');
 
   beforeEach(async () => {
     vi.resetModules();
@@ -88,6 +103,7 @@ describe('analyzeWithIA', () => {
 
     // Re-import after reset so we get fresh module instances
     const claudeModule = await import('@/modules/ai/claude');
+    claudeModuleRef = claudeModule;
     getAnthropic = claudeModule.getAnthropic;
 
     const analyzeModule = await import('@/modules/pipeline/steps/analyze-ia');
@@ -199,5 +215,39 @@ describe('analyzeWithIA', () => {
 
     const result = await analyzeWithIA(validMetricas, null);
     expect(result.resumoExecutivo).toBe(validAnalise.resumoExecutivo);
+  });
+
+  // -----------------------------------------------------------------------
+  // Case 6: sem chave — getAnthropic lança ia_nao_configurada e propaga
+  // -----------------------------------------------------------------------
+  it('Case 6 — sem chave: propaga ia_nao_configurada sem ser capturado como erro de parse', async () => {
+    vi.spyOn(claudeModuleRef, 'getAnthropic').mockImplementation(() => {
+      throw new Error('ia_nao_configurada');
+    });
+
+    await expect(analyzeWithIA(validMetricas, null)).rejects.toThrow('ia_nao_configurada');
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  // -----------------------------------------------------------------------
+  // Case 7: 1ª resposta sem bloco de texto (só thinking) → retry sem turno
+  // assistant vazio; 2ª válida → resultado correto
+  // -----------------------------------------------------------------------
+  it('Case 7 — resposta sem texto: faz retry com turno user único (sem assistant vazio) e resolve na 2ª', async () => {
+    mockCreate
+      .mockResolvedValueOnce(fakeThinkingOnlyMessage())
+      .mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
+
+    const result = await analyzeWithIA(validMetricas, null);
+
+    expect(result).toEqual(validAnalise);
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+
+    // A 2ª chamada NÃO deve conter um turno assistant (evita content '' rejeitado pela API)
+    const retryMessages: { role: string; content: string }[] = mockCreate.mock.calls[1][0].messages;
+    expect(retryMessages.every((m) => m.role !== 'assistant')).toBe(true);
+    expect(retryMessages).toHaveLength(1);
+    expect(retryMessages[0].role).toBe('user');
+    expect(retryMessages[0].content).toMatch(/não continha um bloco de texto/);
   });
 });

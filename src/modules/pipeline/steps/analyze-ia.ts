@@ -96,17 +96,25 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
   // Retry: append assistant response + correction request
   console.warn('[analyzeWithIA] Primeira tentativa inválida — re-tentando. Erro:', parseError);
 
-  const retryMessages: MessageParam[] = [
-    { role: 'user', content: userText },
-    {
-      role: 'assistant',
-      content: text1 ?? '',
-    },
-    {
-      role: 'user',
-      content: `A resposta anterior falhou na validação do schema: ${parseError}. responda APENAS com JSON válido conforme o schema, sem texto adicional.`,
-    },
-  ];
+  // Quando a 1ª resposta não trouxe bloco de texto (ex.: só thinking), NÃO enviar
+  // um turno assistant vazio (a API pode rejeitar content '') — basta um turno
+  // user com a correção. Caso contrário, espelhamos a resposta inválida + correção.
+  const retryMessages: MessageParam[] =
+    text1 !== null
+      ? [
+          { role: 'user', content: userText },
+          { role: 'assistant', content: text1 },
+          {
+            role: 'user',
+            content: `A resposta anterior falhou na validação do schema: ${parseError}. responda APENAS com JSON válido conforme o schema, sem texto adicional.`,
+          },
+        ]
+      : [
+          {
+            role: 'user',
+            content: `${userText}\n\nNOTA: a resposta anterior não continha um bloco de texto com JSON (${parseError}). Responda APENAS com JSON válido conforme o schema, sem texto adicional.`,
+          },
+        ];
 
   const response2 = await getAnthropic().messages.create({
     ...callParams,
