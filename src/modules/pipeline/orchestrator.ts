@@ -11,7 +11,7 @@ import { analyzeWithIA } from '@/modules/pipeline/steps/analyze-ia';
 import { finalize } from '@/modules/pipeline/steps/finalize';
 import { diasDoPlano } from '@/modules/pipeline/plan-lock';
 
-/** Trunca a mensagem de erro para evitar overflow no campo texto do banco. */
+/** Limita o erro persistido a 2000 chars para legibilidade no painel (a coluna `text` é ilimitada). */
 function truncateErro(msg: string, maxLen = 2000): string {
   return msg.length <= maxLen ? msg : msg.slice(0, maxLen) + '…';
 }
@@ -65,15 +65,27 @@ export async function generateReport(
 
   try {
     // 4a. Coletar pedidos Bling (∥ mercado)
-    //    Bling rejeita → propaga (falha dura).
-    //    collectMarket nunca lança → benchmarkParcial sinalizado graciosamente.
-    const [, marketResult] = await Promise.all([
+    //    allSettled garante que AMBAS as promessas finalizem antes de prosseguir
+    //    (sem promessa "solta" escrevendo depois que o fluxo já retornou).
+    //    Bling rejeita → falha dura (relança abaixo, capturado pelo catch).
+    //    collectMarket nunca lança → benchmarkParcial sinalizado graciosamente
+    //    (se ainda assim rejeitar, tratamos como benchmark parcial).
+    const [blingOutcome, marketOutcome] = await Promise.allSettled([
       collectBlingOrders(orgId, periodo),
       collectMarket(orgId, reportId),
     ]);
 
+    if (blingOutcome.status === 'rejected') {
+      throw blingOutcome.reason instanceof Error
+        ? blingOutcome.reason
+        : new Error(String(blingOutcome.reason));
+    }
+
+    const benchmarkParcial =
+      marketOutcome.status === 'fulfilled' ? marketOutcome.value.benchmarkParcial : true;
+
     // 4b. Calcular métricas
-    const metricas = await computeMetrics(orgId, reportId, periodo, marketResult.benchmarkParcial);
+    const metricas = await computeMetrics(orgId, reportId, periodo, benchmarkParcial);
 
     // 4c. Análise IA
     const analise = await analyzeWithIA(metricas, nicho);
