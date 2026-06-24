@@ -13,7 +13,10 @@ import type { Plano } from '@/modules/auth/user.types';
 
 export type ConnState = { error?: string; ok?: boolean };
 
-export async function disconnectBlingAction(): Promise<ConnState> {
+export async function disconnectBlingAction(
+  _prev: ConnState,
+  _formData: FormData,
+): Promise<ConnState> {
   const access = await requireActiveOrg();
   await disconnectBling(access.orgId);
   revalidatePath('/conexoes');

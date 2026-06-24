@@ -1,13 +1,15 @@
 import { expect, test } from '@playwright/test';
 
-import { cleanupE2E, E2E_PREFIX, seedE2EActiveClient } from './helpers/db';
+import { cleanupE2E, E2E_PREFIX, seedBlingConnection, seedE2EActiveClient } from './helpers/db';
 
 const RUN = process.env.PW_E2E_RUN_ID ?? String(Date.now());
 const clienteEmail = `${E2E_PREFIX}conn-${RUN}@example.com`;
 const clienteSenha = 'cliente-forte-456';
 
+let seededOrgId: string;
+
 test.beforeAll(async () => {
-  await seedE2EActiveClient(clienteEmail, clienteSenha);
+  seededOrgId = await seedE2EActiveClient(clienteEmail, clienteSenha);
 });
 
 test.afterAll(async () => {
@@ -42,6 +44,29 @@ test('adiciona produto monitorado e vê na lista', async ({ page }) => {
 
   // aguarda a página recarregar com o produto listado
   await expect(page.getByText('Tênis Running Pro')).toBeVisible();
+});
+
+test('Desconectar Bling: botão aparece quando conectado e desconecta ao clicar', async ({ page }) => {
+  // Seed a real (fake-token) connected Bling entry for this org
+  await seedBlingConnection(seededOrgId);
+
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', clienteEmail);
+  await page.fill('input[name="senha"]', clienteSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/conexoes');
+
+  // Should show connected status and the disconnect button
+  await expect(page.getByTestId('bling-status')).toHaveText('Conectado ✓');
+  await expect(page.getByTestId('disconnect-bling')).toBeVisible();
+
+  // Click disconnect
+  await page.click('[data-testid="disconnect-bling"]');
+
+  // Should flip to not connected
+  await expect(page.getByTestId('bling-status')).toHaveText('Não conectado');
 });
 
 test('remove produto monitorado da lista', async ({ page }) => {

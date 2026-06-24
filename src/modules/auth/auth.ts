@@ -45,6 +45,8 @@ export const {
         token.role = access?.role ?? 'client';
         token.orgId = access?.orgId ?? '';
         token.orgStatus = access?.orgStatus ?? 'pending';
+        // `plano` é deliberadamente NÃO persistido no JWT: ele governa limites (ex.: tracked_products)
+        // e deve ser sempre lido do banco via getUserAccessById (autoritativo). Não leia plano da sessão/JWT.
       }
       return token;
     },

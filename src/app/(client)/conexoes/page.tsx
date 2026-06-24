@@ -1,6 +1,7 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getConnection } from '@/modules/connections/connection.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { DisconnectBling } from './disconnect-bling';
 import { TrackedProducts } from './tracked-products';
 
 export default async function ConexoesPage() {
@@ -15,7 +16,10 @@ export default async function ConexoesPage() {
       <section className="mb-8">
         <h2 className="mb-2 font-medium">Bling</h2>
         {conn?.connected ? (
-          <p data-testid="bling-status" className="text-green-700">Conectado ✓</p>
+          <div>
+            <p data-testid="bling-status" className="mb-2 text-green-700">Conectado ✓</p>
+            <DisconnectBling />
+          </div>
         ) : (
           <div>
             <p data-testid="bling-status" className="mb-2 text-gray-600">Não conectado</p>
