@@ -17,4 +17,16 @@ describe('parseServerEnv', () => {
       parseServerEnv({ POSTGRES_URL: 'postgres://x' } as unknown as NodeJS.ProcessEnv),
     ).toThrow();
   });
+
+  it('rejeita ENCRYPTION_KEY com tamanho diferente de 32 bytes', () => {
+    expect(() =>
+      parseServerEnv({
+        POSTGRES_URL: 'postgres://x',
+        AUTH_SECRET: 'secret',
+        APP_URL: 'http://localhost:3000',
+        // 16 bytes em base64
+        ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      } as unknown as NodeJS.ProcessEnv),
+    ).toThrow('ENCRYPTION_KEY deve ser 32 bytes em base64');
+  });
 });
