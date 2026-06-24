@@ -210,7 +210,7 @@ describe.skipIf(!url)('collect-market — integração', () => {
     }
   });
 
-  it('Teste C (isolamento): snapshots de uma org não aparecem para outra org', async () => {
+  it('Teste D (isolamento): snapshots de uma org não aparecem para outra org', async () => {
     // Seed products in both orgs
     const [tp1] = await tdb
       .insert(trackedProducts)

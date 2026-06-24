@@ -33,17 +33,19 @@ class SerpapiProvider implements MarketProvider {
 
     const precos: number[] = shoppingResults
       .map((item) => {
+        // Prefer o campo numérico limpo do SerpAPI quando presente.
+        const extracted = item['extracted_price'];
+        if (typeof extracted === 'number') return extracted;
+
         const priceRaw = item['price'];
         if (typeof priceRaw === 'number') return priceRaw;
         if (typeof priceRaw === 'string') {
-          // Remove currency symbols and thousand separators, parse float
-          const cleaned = priceRaw.replace(/[^0-9,.]/g, '').replace(',', '.');
+          // Formato pt-BR "R$ 1.299,90": descarta tudo que não é dígito/vírgula
+          // (incluindo o ponto separador de milhar) e usa a vírgula como decimal.
+          const cleaned = priceRaw.replace(/[^0-9,]/g, '').replace(',', '.');
           const val = parseFloat(cleaned);
           return isNaN(val) ? null : val;
         }
-        // Some results expose extracted_price as a number
-        const extracted = item['extracted_price'];
-        if (typeof extracted === 'number') return extracted;
         return null;
       })
       .filter((v): v is number => v !== null && v > 0);
