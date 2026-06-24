@@ -5,6 +5,7 @@ import { loginAttempts } from '@/db/schema';
 import { normalizeEmail } from '@/modules/auth/user.repository';
 
 const MAX_FAILURES = 5;
+const MAX_FAILURES_PER_EMAIL = 20;
 const WINDOW_MINUTES = 15;
 
 export async function recordLoginAttempt(input: {
@@ -49,6 +50,9 @@ export async function isLoginRateLimited(
   email: string,
   ip: string | null,
 ): Promise<boolean> {
-  const failures = await countRecentFailures(email, ip, WINDOW_MINUTES);
-  return failures >= MAX_FAILURES;
+  const perIp = await countRecentFailures(email, ip, WINDOW_MINUTES);
+  if (perIp >= MAX_FAILURES) return true;
+  // Defesa contra rotação de X-Forwarded-For: contador por e-mail (todos os IPs).
+  const perEmail = await countRecentFailures(email, null, WINDOW_MINUTES);
+  return perEmail >= MAX_FAILURES_PER_EMAIL;
 }

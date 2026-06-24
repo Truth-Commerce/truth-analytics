@@ -10,6 +10,8 @@ import {
   recordLoginAttempt,
 } from '@/modules/auth/rate-limit';
 
+const MAX_FAILURES_PER_EMAIL = 20;
+
 const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
 const tdb = drizzle(sql);
@@ -42,5 +44,41 @@ describe.skipIf(!url)('rate-limit de login', () => {
     await recordLoginAttempt({ email: other, ip, success: true });
     expect(await countRecentFailures(other, ip, 15)).toBe(0);
     await tdb.delete(loginAttempts).where(eq(loginAttempts.email, other));
+  });
+});
+
+describe.skipIf(!url)('rate-limit por e-mail (defesa contra rotação de XFF)', () => {
+  const emailXff = `xff-${RUN}@ta-test-admin.example.com`;
+  // Conexão própria para não depender do sql/tdb do describe anterior (que fecha após afterAll)
+  const sql2 = postgres(url ?? '', { prepare: false });
+  const tdb2 = drizzle(sql2);
+
+  afterAll(async () => {
+    await tdb2.delete(loginAttempts).where(eq(loginAttempts.email, emailXff));
+    await sql2.end();
+  });
+
+  it('bloqueia quando o limite por e-mail é atingido mesmo com IPs diferentes', async () => {
+    // Abaixo do limite: 10 falhas distribuídas em 10 IPs distintos
+    for (let i = 0; i < 10; i++) {
+      await recordLoginAttempt({
+        email: emailXff,
+        ip: `198.51.100.${i}`,
+        success: false,
+      });
+    }
+    // Nenhum par (email+ip) atingiu MAX_FAILURES=5, e total < MAX_FAILURES_PER_EMAIL=20
+    expect(await isLoginRateLimited(emailXff, '198.51.100.250')).toBe(false);
+
+    // Completa até MAX_FAILURES_PER_EMAIL: mais 10 falhas em mais 10 IPs distintos
+    for (let i = 10; i < MAX_FAILURES_PER_EMAIL; i++) {
+      await recordLoginAttempt({
+        email: emailXff,
+        ip: `198.51.100.${i}`,
+        success: false,
+      });
+    }
+    // Agora total == 20: deve bloquear mesmo com IP nunca visto
+    expect(await isLoginRateLimited(emailXff, '198.51.100.250')).toBe(true);
   });
 });
