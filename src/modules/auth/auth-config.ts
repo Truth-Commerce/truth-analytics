@@ -4,7 +4,7 @@ import type { OrgStatus, UserRole } from '@/modules/auth/user.types';
 
 type SharedAuthConfig = Pick<NextAuthConfig, 'pages' | 'session' | 'callbacks' | 'providers'>;
 
-const clientRoutes = ['/dashboard'];
+const clientRoutes = ['/dashboard', '/conexoes'];
 const adminRoutes = ['/admin'];
 
 export const authConfig = {

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { organizations, users } from '@/db/schema';
 import { hashPassword } from '@/modules/auth/password';
-import type { OrgStatus, UserAccess, UserRole } from '@/modules/auth/user.types';
+import type { OrgStatus, Plano, UserAccess, UserRole } from '@/modules/auth/user.types';
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -28,6 +28,7 @@ export async function getUserAccessById(userId: string): Promise<UserAccess | nu
       orgId: users.org_id,
       role: users.role,
       orgStatus: organizations.status,
+      plano: organizations.plano,
     })
     .from(users)
     .innerJoin(organizations, eq(users.org_id, organizations.id))
@@ -39,6 +40,7 @@ export async function getUserAccessById(userId: string): Promise<UserAccess | nu
     orgId: row.orgId,
     role: row.role as UserRole,
     orgStatus: row.orgStatus as OrgStatus,
+    plano: (row.plano as Plano | null) ?? null,
   };
 }
 

@@ -2,7 +2,7 @@ import { eq, like } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import { organizations, users } from '@/db/schema';
+import { connections, organizations, trackedProducts, users } from '@/db/schema';
 import { hashPassword } from '@/modules/auth/password';
 
 export const E2E_PREFIX = 'ta-test-e2e-';
@@ -21,6 +21,8 @@ export async function cleanupE2E(): Promise<void> {
       .from(organizations)
       .where(like(organizations.name, `${E2E_PREFIX}%`));
     for (const org of orgs) {
+      await tdb.delete(trackedProducts).where(eq(trackedProducts.org_id, org.id));
+      await tdb.delete(connections).where(eq(connections.org_id, org.id));
       await tdb.delete(users).where(eq(users.org_id, org.id));
       await tdb.delete(organizations).where(eq(organizations.id, org.id));
     }
@@ -40,6 +42,22 @@ export async function seedE2EAdmin(email: string, senha: string): Promise<void> 
     await tdb
       .insert(users)
       .values({ org_id: org!.id, email, senha_hash, role: 'admin_truth' });
+  } finally {
+    await sql.end();
+  }
+}
+
+export async function seedE2EActiveClient(email: string, senha: string): Promise<void> {
+  const { sql, tdb } = makeDb();
+  try {
+    const senha_hash = await hashPassword(senha);
+    const [org] = await tdb
+      .insert(organizations)
+      .values({ name: `${E2E_PREFIX}cliente-ativo`, status: 'active', plano: 'weekly' })
+      .returning({ id: organizations.id });
+    await tdb
+      .insert(users)
+      .values({ org_id: org!.id, email, senha_hash, role: 'client' });
   } finally {
     await sql.end();
   }

@@ -1,0 +1,67 @@
+import { expect, test } from '@playwright/test';
+
+import { cleanupE2E, E2E_PREFIX, seedE2EActiveClient } from './helpers/db';
+
+const RUN = process.env.PW_E2E_RUN_ID ?? String(Date.now());
+const clienteEmail = `${E2E_PREFIX}conn-${RUN}@example.com`;
+const clienteSenha = 'cliente-forte-456';
+
+test.beforeAll(async () => {
+  await seedE2EActiveClient(clienteEmail, clienteSenha);
+});
+
+test.afterAll(async () => {
+  await cleanupE2E();
+});
+
+test('cliente ativo vê /conexoes com Bling não conectado', async ({ page }) => {
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', clienteEmail);
+  await page.fill('input[name="senha"]', clienteSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/conexoes');
+  await expect(page.getByTestId('bling-status')).toHaveText('Não conectado');
+});
+
+test('adiciona produto monitorado e vê na lista', async ({ page }) => {
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', clienteEmail);
+  await page.fill('input[name="senha"]', clienteSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/conexoes');
+
+  // preenche o form de adicionar produto
+  await page.fill('input[name="nome"]', 'Tênis Running Pro');
+  await page.fill('input[name="sku"]', 'TRP-001');
+  await page.fill('input[name="keywords"]', 'tênis, corrida, running');
+  await page.click('button[type="submit"]');
+
+  // aguarda a página recarregar com o produto listado
+  await expect(page.getByText('Tênis Running Pro')).toBeVisible();
+});
+
+test('remove produto monitorado da lista', async ({ page }) => {
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', clienteEmail);
+  await page.fill('input[name="senha"]', clienteSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/conexoes');
+
+  // deve ter o produto criado no teste anterior
+  const produtoTexto = page.getByText('Tênis Running Pro');
+  await expect(produtoTexto).toBeVisible();
+
+  // remove o produto
+  const li = page.locator('li', { hasText: 'Tênis Running Pro' });
+  await li.getByRole('button', { name: 'Remover' }).click();
+
+  // produto não deve mais aparecer
+  await expect(page.getByText('Tênis Running Pro')).not.toBeVisible();
+  await expect(page.getByText('Nenhum produto ainda.')).toBeVisible();
+});

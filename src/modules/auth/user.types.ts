@@ -7,4 +7,5 @@ export type UserAccess = {
   orgId: string;
   role: UserRole;
   orgStatus: OrgStatus;
+  plano: Plano | null;
 };
