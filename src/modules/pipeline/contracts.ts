@@ -16,7 +16,7 @@ export const MetricasSchema = z
       .array(
         z
           .object({
-            data: z.string(),
+            data: z.string().min(1),
             total: z.number(),
           })
           .strict(),
