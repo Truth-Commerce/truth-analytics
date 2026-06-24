@@ -16,6 +16,7 @@
     "db:seed-admin": "node --env-file=.env.local --import tsx scripts/seed-admin.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.106.0",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.36.0",
     "next": "^14.2.5",
@@ -23,7 +24,9 @@
     "postgres": "^3.4.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zod": "^3.23.8"
+    "resend": "^6.14.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",

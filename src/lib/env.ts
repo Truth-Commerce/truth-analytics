@@ -14,6 +14,12 @@ const schema = z.object({
   BLING_CLIENT_SECRET: z.string().min(1).optional(),
   BLING_REDIRECT_URI: z.string().url().optional(),
   BLING_API_BASE: z.string().url().default('https://www.bling.com.br/Api/v3'),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  ANALYSIS_MODEL: z.string().default('claude-opus-4-8'),
+  SERPAPI_KEY: z.string().min(1).optional(),
+  SERPAPI_BASE: z.string().url().default('https://serpapi.com'),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;
