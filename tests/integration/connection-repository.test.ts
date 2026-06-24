@@ -42,6 +42,7 @@ describe.skipIf(!url)('connection.repository — integração', () => {
       .where(eq(connections.org_id, orgId))
       .limit(1);
     expect(row.access_token).not.toContain('ACCESS-puro'); // cifrado
+    expect(row.refresh_token).not.toContain('REFRESH-puro'); // cifrado
     expect(row.status).toBe('ok');
     // token ainda válido (1h) → retorna sem refresh
     expect(await getValidAccessToken(orgId)).toBe('ACCESS-puro');
