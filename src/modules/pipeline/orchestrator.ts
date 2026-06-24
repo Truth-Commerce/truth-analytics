@@ -1,0 +1,101 @@
+import { eq } from 'drizzle-orm';
+
+import { db } from '@/db/client';
+import { reports } from '@/db/schema';
+import { getOrganizationById } from '@/modules/admin/admin.repository';
+import { sendPipelineFailedEmail } from '@/modules/notifications/email';
+import { collectBlingOrders } from '@/modules/pipeline/steps/collect-bling';
+import { collectMarket } from '@/modules/pipeline/steps/collect-market';
+import { computeMetrics } from '@/modules/pipeline/steps/compute-metrics';
+import { analyzeWithIA } from '@/modules/pipeline/steps/analyze-ia';
+import { finalize } from '@/modules/pipeline/steps/finalize';
+import { diasDoPlano } from '@/modules/pipeline/plan-lock';
+
+/** Trunca a mensagem de erro para evitar overflow no campo texto do banco. */
+function truncateErro(msg: string, maxLen = 2000): string {
+  return msg.length <= maxLen ? msg : msg.slice(0, maxLen) + '…';
+}
+
+/**
+ * Orquestrador principal do pipeline de relatório.
+ *
+ * Fluxo:
+ * 1. Carrega a org (plano + nicho).
+ * 2. Cria um `report` com status 'running'.
+ * 3. Roda collectBlingOrders ∥ collectMarket (Promise.all).
+ *    - Bling = falha dura: rejeição propaga e é capturada pelo catch.
+ *    - Mercado = graciosa: collectMarket nunca lança, apenas sinaliza benchmarkParcial.
+ * 4. computeMetrics → analyzeWithIA → finalize.
+ *    - A trava do plano (proximo_relatorio_liberado_em) só é setada dentro de finalize (sucesso).
+ * 5. Em qualquer erro: atualiza report→'failed'+erro, envia e-mail, NÃO seta a trava.
+ *    Retorna { reportId, status: 'failed' } sem relançar — o chamador inspeciona status.
+ *
+ * MVP: executa de forma síncrona (awaita o pipeline completo).
+ * Produção: mover para background job / Vercel Workflow para durabilidade — fora do escopo deste plano.
+ */
+export async function generateReport(
+  orgId: string,
+): Promise<{ reportId: string; status: 'done' | 'failed' }> {
+  // 1. Carregar a org
+  const org = await getOrganizationById(orgId);
+  if (!org) {
+    throw new Error('org_nao_encontrada');
+  }
+  const { plano, nicho } = org;
+  if (!plano) {
+    throw new Error('sem_plano');
+  }
+
+  // 2. Calcular período
+  const agora = new Date();
+  const inicio = new Date(agora.getTime() - diasDoPlano(plano) * 24 * 60 * 60 * 1000);
+  const periodo = { inicio, fim: agora };
+
+  // 3. Criar report com status 'running'
+  const [reportRow] = await db
+    .insert(reports)
+    .values({
+      org_id: orgId,
+      status: 'running',
+      periodo_inicio: periodo.inicio,
+      periodo_fim: periodo.fim,
+    })
+    .returning({ id: reports.id });
+  const reportId = reportRow.id;
+
+  try {
+    // 4a. Coletar pedidos Bling (∥ mercado)
+    //    Bling rejeita → propaga (falha dura).
+    //    collectMarket nunca lança → benchmarkParcial sinalizado graciosamente.
+    const [, marketResult] = await Promise.all([
+      collectBlingOrders(orgId, periodo),
+      collectMarket(orgId, reportId),
+    ]);
+
+    // 4b. Calcular métricas
+    const metricas = await computeMetrics(orgId, reportId, periodo, marketResult.benchmarkParcial);
+
+    // 4c. Análise IA
+    const analise = await analyzeWithIA(metricas, nicho);
+
+    // 4d. Finalizar (persiste done + trava + e-mail)
+    // adminEmail: null por ora — Plano 6 implementa lookup do e-mail do admin da org
+    await finalize({ reportId, orgId, metricas, analise, plano, adminEmail: null });
+
+    return { reportId, status: 'done' };
+  } catch (err) {
+    // 5. Falha: marcar report como failed, NÃO setar trava
+    const message = err instanceof Error ? err.message : String(err);
+    const erroTruncado = truncateErro(message);
+
+    await db
+      .update(reports)
+      .set({ status: 'failed', erro: erroTruncado })
+      .where(eq(reports.id, reportId));
+
+    // E-mail de falha nunca deve relançar (sendPipelineFailedEmail já garante)
+    await sendPipelineFailedEmail(orgId, reportId, erroTruncado);
+
+    return { reportId, status: 'failed' };
+  }
+}
