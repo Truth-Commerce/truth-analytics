@@ -13,6 +13,12 @@ export const authConfig = {
   providers: [],
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
+      // Checagem barata na BORDA usando o snapshot do JWT (`auth.user.role`).
+      // O JWT é só um retrato do login e pode estar defasado (ex.: admin
+      // rebaixado cujo token ainda não expirou). A AUTORIDADE de acesso é a
+      // reconsulta ao banco nos helpers de página (`requireAdmin`/`requireActiveOrg`,
+      // que chamam `getUserAccessById`). NUNCA troque essa reconsulta por
+      // `session.user.role`/`status` — isso quebraria o modelo de segurança.
       const isLoggedIn = Boolean(auth?.user);
       const isAdminRoute = adminRoutes.some((r) => nextUrl.pathname.startsWith(r));
       const isClientRoute = clientRoutes.some((r) => nextUrl.pathname.startsWith(r));
