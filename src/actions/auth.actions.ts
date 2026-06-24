@@ -1,12 +1,14 @@
 'use server';
 
 import { AuthError } from 'next-auth';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { signIn } from '@/modules/auth/auth';
 import { createOrgWithUser } from '@/modules/auth/user.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
+import { isLoginRateLimited, recordLoginAttempt } from '@/modules/auth/rate-limit';
 
 export type ActionState = { error?: string };
 
@@ -52,18 +54,26 @@ export async function signInAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const email = String(formData.get('email') ?? '');
+  const senha = String(formData.get('senha') ?? '');
+
+  const forwarded = headers().get('x-forwarded-for');
+  const ip = forwarded ? forwarded.split(',')[0]!.trim() : null;
+
+  if (await isLoginRateLimited(email, ip)) {
+    return { error: 'Muitas tentativas. Tente novamente em alguns minutos.' };
+  }
+
   try {
-    await signIn('credentials', {
-      email: String(formData.get('email') ?? ''),
-      senha: String(formData.get('senha') ?? ''),
-      redirect: false,
-    });
+    await signIn('credentials', { email, senha, redirect: false });
   } catch (err) {
     if (err instanceof AuthError) {
+      await recordLoginAttempt({ email, ip, success: false });
       return { error: 'Credenciais inválidas.' };
     }
     throw err;
   }
 
+  await recordLoginAttempt({ email, ip, success: true });
   redirect('/dashboard');
 }
