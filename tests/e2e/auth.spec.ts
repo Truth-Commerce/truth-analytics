@@ -26,6 +26,7 @@ test('cliente pending não acessa /dashboard (redireciona p/ aguardando)', async
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="senha"]', senha);
   await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
   await page.goto('/dashboard');
   await expect(page).toHaveURL(/\/aguardando/);
 });
@@ -35,6 +36,7 @@ test('cliente não acessa /admin', async ({ page }) => {
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="senha"]', senha);
   await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
   await page.goto('/admin');
   await expect(page).not.toHaveURL(/\/admin$/);
 });
