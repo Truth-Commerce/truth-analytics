@@ -23,7 +23,14 @@ export async function activateClientAction(
   if (!orgId) return { error: 'Cliente inválido.' };
   if (!isValidPlano(plano)) return { error: 'Selecione um plano válido.' };
 
-  await activateOrganization({ orgId, plano, actorUserId: admin.id });
+  try {
+    await activateOrganization({ orgId, plano, actorUserId: admin.id });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'org_nao_modificavel') {
+      return { error: 'Operação não permitida para esta organização.' };
+    }
+    throw e;
+  }
   revalidatePath('/admin');
   return { ok: true };
 }
@@ -35,7 +42,14 @@ export async function suspendClientAction(
   const admin = await requireAdmin();
   const orgId = String(formData.get('orgId') ?? '');
   if (!orgId) return { error: 'Cliente inválido.' };
-  await suspendOrganization({ orgId, actorUserId: admin.id });
+  try {
+    await suspendOrganization({ orgId, actorUserId: admin.id });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'org_nao_modificavel') {
+      return { error: 'Operação não permitida para esta organização.' };
+    }
+    throw e;
+  }
   revalidatePath('/admin');
   return { ok: true };
 }
@@ -47,7 +61,14 @@ export async function reactivateClientAction(
   const admin = await requireAdmin();
   const orgId = String(formData.get('orgId') ?? '');
   if (!orgId) return { error: 'Cliente inválido.' };
-  await reactivateOrganization({ orgId, actorUserId: admin.id });
+  try {
+    await reactivateOrganization({ orgId, actorUserId: admin.id });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'org_nao_modificavel') {
+      return { error: 'Operação não permitida para esta organização.' };
+    }
+    throw e;
+  }
   revalidatePath('/admin');
   return { ok: true };
 }
@@ -61,7 +82,14 @@ export async function setPlanoAction(
   const plano = formData.get('plano');
   if (!orgId) return { error: 'Cliente inválido.' };
   if (!isValidPlano(plano)) return { error: 'Selecione um plano válido.' };
-  await setPlano({ orgId, plano, actorUserId: admin.id });
+  try {
+    await setPlano({ orgId, plano, actorUserId: admin.id });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'org_nao_modificavel') {
+      return { error: 'Operação não permitida para esta organização.' };
+    }
+    throw e;
+  }
   revalidatePath('/admin');
   return { ok: true };
 }

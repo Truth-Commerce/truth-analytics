@@ -1,4 +1,4 @@
-import { and, desc, eq, exists } from 'drizzle-orm';
+import { and, desc, eq, exists, not } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { organizations, users } from '@/db/schema';
@@ -68,14 +68,18 @@ export async function activateOrganization(input: {
   plano: Plano;
   actorUserId: string;
 }): Promise<void> {
-  await db
+  const updated = await db
     .update(organizations)
     .set({
       status: 'active',
       plano: input.plano,
       proximo_relatorio_liberado_em: new Date(),
     })
-    .where(eq(organizations.id, input.orgId));
+    .where(and(eq(organizations.id, input.orgId), not(isInternalOrg())))
+    .returning({ id: organizations.id });
+  if (updated.length === 0) {
+    throw new Error('org_nao_modificavel');
+  }
   await recordAudit({
     orgId: input.orgId,
     userId: input.actorUserId,
@@ -88,10 +92,14 @@ export async function suspendOrganization(input: {
   orgId: string;
   actorUserId: string;
 }): Promise<void> {
-  await db
+  const updated = await db
     .update(organizations)
     .set({ status: 'suspended' })
-    .where(eq(organizations.id, input.orgId));
+    .where(and(eq(organizations.id, input.orgId), not(isInternalOrg())))
+    .returning({ id: organizations.id });
+  if (updated.length === 0) {
+    throw new Error('org_nao_modificavel');
+  }
   await recordAudit({
     orgId: input.orgId,
     userId: input.actorUserId,
@@ -103,10 +111,14 @@ export async function reactivateOrganization(input: {
   orgId: string;
   actorUserId: string;
 }): Promise<void> {
-  await db
+  const updated = await db
     .update(organizations)
     .set({ status: 'active' })
-    .where(eq(organizations.id, input.orgId));
+    .where(and(eq(organizations.id, input.orgId), not(isInternalOrg())))
+    .returning({ id: organizations.id });
+  if (updated.length === 0) {
+    throw new Error('org_nao_modificavel');
+  }
   await recordAudit({
     orgId: input.orgId,
     userId: input.actorUserId,
@@ -119,10 +131,14 @@ export async function setPlano(input: {
   plano: Plano;
   actorUserId: string;
 }): Promise<void> {
-  await db
+  const updated = await db
     .update(organizations)
     .set({ plano: input.plano })
-    .where(eq(organizations.id, input.orgId));
+    .where(and(eq(organizations.id, input.orgId), not(isInternalOrg())))
+    .returning({ id: organizations.id });
+  if (updated.length === 0) {
+    throw new Error('org_nao_modificavel');
+  }
   await recordAudit({
     orgId: input.orgId,
     userId: input.actorUserId,

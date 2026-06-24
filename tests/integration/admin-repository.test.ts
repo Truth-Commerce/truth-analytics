@@ -108,4 +108,16 @@ describe.skipIf(!url)('admin.repository — integração', () => {
     const missing = await getOrganizationById('00000000-0000-0000-0000-000000000000');
     expect(missing).toBeNull();
   });
+
+  it('mutações recusam org interna (admin_truth)', async () => {
+    await expect(
+      suspendOrganization({ orgId: internalOrgId, actorUserId: adminUserId }),
+    ).rejects.toThrow('org_nao_modificavel');
+    const [org] = await tdb
+      .select({ status: organizations.status })
+      .from(organizations)
+      .where(eq(organizations.id, internalOrgId))
+      .limit(1);
+    expect(org.status).toBe('active'); // inalterada
+  });
 });
