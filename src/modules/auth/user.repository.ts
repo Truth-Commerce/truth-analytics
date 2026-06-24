@@ -9,7 +9,9 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export async function getUserByEmail(email: string) {
+export async function getUserByEmail(
+  email: string,
+): Promise<{ id: string; email: string; senha_hash: string } | null> {
   const normalized = normalizeEmail(email);
   const [row] = await db
     .select({ id: users.id, email: users.email, senha_hash: users.senha_hash })
@@ -55,16 +57,23 @@ export async function createOrgWithUser(input: {
   const senha_hash = await hashPassword(input.senha);
 
   return db.transaction(async (tx) => {
-    const [org] = await tx
-      .insert(organizations)
-      .values({ name: input.orgName, status: 'pending' })
-      .returning({ id: organizations.id });
+    try {
+      const [org] = await tx
+        .insert(organizations)
+        .values({ name: input.orgName, status: 'pending' })
+        .returning({ id: organizations.id });
 
-    const [user] = await tx
-      .insert(users)
-      .values({ org_id: org.id, email, senha_hash, role: 'client' })
-      .returning({ id: users.id });
+      const [user] = await tx
+        .insert(users)
+        .values({ org_id: org.id, email, senha_hash, role: 'client' })
+        .returning({ id: users.id });
 
-    return { orgId: org.id, userId: user.id };
+      return { orgId: org.id, userId: user.id };
+    } catch (e: unknown) {
+      if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+        throw new Error('email_em_uso');
+      }
+      throw e;
+    }
   });
 }
