@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { sendPipelineFailedEmail } from '@/modules/notifications/email';
+import { getAdminAlertEmail } from '@/modules/notifications/recipients';
 import { collectBlingOrders } from '@/modules/pipeline/steps/collect-bling';
 import { collectMarket } from '@/modules/pipeline/steps/collect-market';
 import { computeMetrics } from '@/modules/pipeline/steps/compute-metrics';
@@ -106,7 +107,10 @@ export async function generateReport(
       .where(eq(reports.id, reportId));
 
     // E-mail de falha nunca deve relançar (sendPipelineFailedEmail já garante)
-    await sendPipelineFailedEmail(orgId, reportId, erroTruncado);
+    const adminEmail = getAdminAlertEmail();
+    if (adminEmail) {
+      await sendPipelineFailedEmail(adminEmail, orgId, reportId, erroTruncado);
+    }
 
     return { reportId, status: 'failed' };
   }

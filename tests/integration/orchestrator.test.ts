@@ -226,6 +226,10 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     const readySpy = vi.spyOn(emailMod, 'sendReportReadyEmail').mockResolvedValue(undefined);
     const failedSpy = vi.spyOn(emailMod, 'sendPipelineFailedEmail').mockResolvedValue(undefined);
 
+    // Mock getAdminAlertEmail para retornar um e-mail de alerta (evita dependência de env)
+    const recipientsMod = await import('@/modules/notifications/recipients');
+    vi.spyOn(recipientsMod, 'getAdminAlertEmail').mockReturnValue('admin@truth.com');
+
     const { generateReport } = await import('@/modules/pipeline/orchestrator');
     const result = await generateReport(orgId);
 
@@ -256,9 +260,14 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     // analyzeWithIA NÃO chamado (pipeline falhou antes)
     expect(analyzeSpyFail).not.toHaveBeenCalled();
 
-    // E-mail de falha chamado 1x
+    // E-mail de falha chamado 1x com nova assinatura: (to, orgId, reportId, erro)
     expect(failedSpy).toHaveBeenCalledTimes(1);
-    expect(failedSpy).toHaveBeenCalledWith(orgId, result.reportId, expect.stringContaining('bling_indisponivel_503'));
+    expect(failedSpy).toHaveBeenCalledWith(
+      'admin@truth.com',
+      orgId,
+      result.reportId,
+      expect.stringContaining('bling_indisponivel_503'),
+    );
 
     // E-mail de sucesso NÃO chamado
     expect(readySpy).not.toHaveBeenCalled();
