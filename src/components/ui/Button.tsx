@@ -36,7 +36,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary:
     'bg-brand text-[#04150a] font-semibold hover:shadow-glow focus-visible:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none',
   secondary:
-    'border border-[rgba(255,255,255,0.15)] bg-white/5 text-white hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed',
+    'border border-strong bg-white/5 text-white hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed',
   ghost:
     'text-muted hover:text-white focus-visible:ring-1 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed',
   danger:

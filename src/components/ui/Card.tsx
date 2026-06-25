@@ -25,11 +25,15 @@ export function CardHeader({ className = '', children }: CardProps) {
   );
 }
 
-export function CardTitle({ className = '', children }: CardProps) {
+export function CardTitle({
+  className = '',
+  children,
+  as: As = 'h2',
+}: CardProps & { as?: 'h2' | 'h3' | 'h4' }) {
   return (
-    <h2 className={`font-heading font-semibold text-white ${className}`}>
+    <As className={`font-heading font-semibold text-white ${className}`}>
       {children}
-    </h2>
+    </As>
   );
 }
 
