@@ -3,14 +3,15 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import { connections, organizations } from '@/db/schema';
+import { connections, organizations, users } from '@/db/schema';
 
 const url = process.env.DATABASE_URL_TEST;
-const sql = postgres(url ?? '', { prepare: false });
-const tdb = drizzle(sql);
 const RUN = Date.now();
 
+// ─── Suite 1: testes base (tokens, refresh, sem conexão) ───────────────────
 describe.skipIf(!url)('connection.repository — integração', () => {
+  const sql = postgres(url ?? '', { prepare: false });
+  const tdb = drizzle(sql);
   let orgId = '';
 
   beforeAll(async () => {
@@ -71,5 +72,116 @@ describe.skipIf(!url)('connection.repository — integração', () => {
     await expect(repo.getValidAccessToken('00000000-0000-0000-0000-000000000000')).rejects.toThrow(
       'sem_conexao_bling',
     );
+  });
+});
+
+// ─── Suite 2: notificação de falha de refresh (org e user dedicados) ────────
+describe.skipIf(!url)('connection.repository — notificação de falha de refresh', () => {
+  const sql2 = postgres(url ?? '', { prepare: false });
+  const tdb2 = drizzle(sql2);
+  let notifyOrgId = '';
+  let notifyUserId = '';
+  const CLIENT_EMAIL = `ta-test-notify-${RUN}@example.com`;
+
+  beforeAll(async () => {
+    const [o] = await tdb2
+      .insert(organizations)
+      .values({ name: `ta-test-conn-notify-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    notifyOrgId = o.id;
+
+    const [u] = await tdb2
+      .insert(users)
+      .values({
+        org_id: notifyOrgId,
+        email: CLIENT_EMAIL,
+        senha_hash: 'hash-placeholder',
+        role: 'client',
+      })
+      .returning({ id: users.id });
+    notifyUserId = u.id;
+  });
+
+  afterAll(async () => {
+    await tdb2.delete(connections).where(eq(connections.org_id, notifyOrgId));
+    await tdb2.delete(users).where(eq(users.id, notifyUserId));
+    await tdb2.delete(organizations).where(eq(organizations.id, notifyOrgId));
+    await sql2.end();
+  });
+
+  it('falha de refresh → notifica cliente e mantém comportamento de erro', async () => {
+    const repo = await import('@/modules/connections/connection.repository');
+    const provider = await import('@/modules/providers/bling/provider');
+    const emailMod = await import('@/modules/notifications/email');
+
+    // Seed: conexão com tokens expirados (força refresh)
+    await repo.saveBlingConnection(notifyOrgId, {
+      accessToken: 'velho',
+      refreshToken: 'refresh-velho',
+      expiresInSeconds: 0,
+    });
+
+    // Spy: refresh falha
+    vi.spyOn(provider.blingProvider, 'refresh').mockRejectedValueOnce(new Error('bling 500'));
+    // Spy: captura chamada de e-mail (live binding ESM — mesmo padrão do blingProvider)
+    const emailSpy = vi
+      .spyOn(emailMod, 'sendBlingConnectionFailedEmail')
+      .mockResolvedValueOnce(undefined);
+
+    // Ação: deve rejeitar com refresh_bling_falhou
+    await expect(repo.getValidAccessToken(notifyOrgId)).rejects.toThrow('refresh_bling_falhou');
+
+    // Assert: status virou 'expirado'
+    const [row] = await tdb2
+      .select({ status: connections.status })
+      .from(connections)
+      .where(eq(connections.org_id, notifyOrgId))
+      .limit(1);
+    expect(row.status).toBe('expirado');
+
+    // Assert: e-mail enviado ao cliente
+    expect(emailSpy).toHaveBeenCalledOnce();
+    expect(emailSpy).toHaveBeenCalledWith(CLIENT_EMAIL);
+
+    emailSpy.mockRestore();
+  });
+
+  it('refresh bem-sucedido → status ok e e-mail NÃO é chamado', async () => {
+    const repo = await import('@/modules/connections/connection.repository');
+    const provider = await import('@/modules/providers/bling/provider');
+    const emailMod = await import('@/modules/notifications/email');
+
+    // Seed: conexão expirada para forçar o caminho de refresh
+    await repo.saveBlingConnection(notifyOrgId, {
+      accessToken: 'velho2',
+      refreshToken: 'refresh-velho2',
+      expiresInSeconds: 0,
+    });
+
+    // Spy: refresh bem-sucedido
+    vi.spyOn(provider.blingProvider, 'refresh').mockResolvedValueOnce({
+      accessToken: 'novo2',
+      refreshToken: 'refresh-novo2',
+      expiresInSeconds: 3600,
+    });
+    const emailSpy = vi
+      .spyOn(emailMod, 'sendBlingConnectionFailedEmail')
+      .mockResolvedValueOnce(undefined);
+
+    const token = await repo.getValidAccessToken(notifyOrgId);
+    expect(token).toBe('novo2');
+
+    // Status voltou a ok
+    const [row] = await tdb2
+      .select({ status: connections.status })
+      .from(connections)
+      .where(eq(connections.org_id, notifyOrgId))
+      .limit(1);
+    expect(row.status).toBe('ok');
+
+    // E-mail NÃO foi chamado no caminho de sucesso
+    expect(emailSpy).not.toHaveBeenCalled();
+
+    emailSpy.mockRestore();
   });
 });
