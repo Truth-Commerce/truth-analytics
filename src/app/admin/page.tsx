@@ -12,7 +12,7 @@ export default async function AdminPage() {
     <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Painel Admin — Clientes</h1>
 
-      <Card className="p-0">
+      <Card className="!p-0">
         <Table>
           <THead>
             <TR>

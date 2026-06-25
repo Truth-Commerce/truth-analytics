@@ -22,3 +22,13 @@ export const STATUS_LABEL: Record<ReportStatus, string> = {
   done: 'Concluído',
   failed: 'Falhou',
 };
+
+/** Variante de Badge por status de relatório (done=verde, em progresso=amarelo, falha=vermelho). */
+export function reportStatusVariant(
+  status: string,
+): 'success' | 'warn' | 'danger' | 'neutral' {
+  if (status === 'done') return 'success';
+  if (status === 'queued' || status === 'running') return 'warn';
+  if (status === 'failed') return 'danger';
+  return 'neutral';
+}

@@ -1,6 +1,6 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getLatestReport, listReports } from '@/modules/reports/report.repository';
-import { STATUS_LABEL } from '@/modules/reports/report.types';
+import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { getConnection } from '@/modules/connections/connection.repository';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
@@ -9,13 +9,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { GenerateReport } from './generate-report';
-
-function statusVariant(status: string): 'success' | 'warn' | 'danger' | 'neutral' {
-  if (status === 'done') return 'success';
-  if (status === 'failed') return 'danger';
-  if (status === 'processing') return 'warn';
-  return 'neutral';
-}
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
@@ -74,7 +67,7 @@ export default async function DashboardPage() {
           {latest ? (
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex flex-col gap-2">
-                <Badge variant={statusVariant(latest.status)}>
+                <Badge variant={reportStatusVariant(latest.status)}>
                   {STATUS_LABEL[latest.status]}
                 </Badge>
                 <p className="text-sm text-muted">{formatPeriodo(latest.periodoInicio, latest.periodoFim)}</p>
@@ -98,20 +91,20 @@ export default async function DashboardPage() {
       <section data-testid="reports-list">
         <h2 className="mb-3 font-heading text-base font-semibold text-white">Histórico</h2>
         {reports.length > 0 ? (
-          <Card className="p-0">
+          <Card className="!p-0">
             <Table>
               <THead>
                 <TR>
                   <TH>Status</TH>
                   <TH>Período</TH>
-                  <TH></TH>
+                  <TH><span className="sr-only">Ações</span></TH>
                 </TR>
               </THead>
               <TBody>
                 {reports.map((r) => (
                   <TR key={r.id}>
                     <TD>
-                      <Badge variant={statusVariant(r.status)}>
+                      <Badge variant={reportStatusVariant(r.status)}>
                         {STATUS_LABEL[r.status]}
                       </Badge>
                     </TD>

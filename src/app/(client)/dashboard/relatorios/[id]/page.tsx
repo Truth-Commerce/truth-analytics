@@ -2,19 +2,12 @@ import { notFound } from 'next/navigation';
 
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getReportById } from '@/modules/reports/report.repository';
-import { STATUS_LABEL } from '@/modules/reports/report.types';
+import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Stat } from '@/components/ui/Stat';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
-
-function statusVariant(status: string): 'success' | 'warn' | 'danger' | 'neutral' {
-  if (status === 'done') return 'success';
-  if (status === 'failed') return 'danger';
-  if (status === 'processing') return 'warn';
-  return 'neutral';
-}
 
 export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
   const access = await requireActiveOrg();
@@ -33,7 +26,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
       <div className="flex flex-wrap items-start gap-3">
         <h1 className="font-heading text-2xl font-bold text-white">Relatório</h1>
         <span data-testid="report-status">
-          <Badge variant={statusVariant(rel.status)}>
+          <Badge variant={reportStatusVariant(rel.status)}>
             {STATUS_LABEL[rel.status]}
           </Badge>
         </span>
