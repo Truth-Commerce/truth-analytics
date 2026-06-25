@@ -24,6 +24,7 @@ import {
   organizations,
   reports,
   trackedProducts,
+  users,
 } from '@/db/schema';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 
@@ -73,6 +74,7 @@ const MOCK_ANALISE: AnaliseIa = {
 
 describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
   let orgId = '';
+  const CLIENT_EMAIL = `client-orch-${RUN}@test.local`;
 
   beforeAll(async () => {
     // Seed org active com plano weekly
@@ -87,6 +89,14 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
       })
       .returning({ id: organizations.id });
     orgId = o.id;
+
+    // Seed usuário cliente para que getOrgPrimaryEmail retorne um e-mail real
+    await tdb.insert(users).values({
+      org_id: orgId,
+      email: CLIENT_EMAIL,
+      senha_hash: 'hash-fake-test',
+      role: 'client',
+    });
 
     // Seed conexão Bling (status ok, token qualquer — fetchOrders é mockado)
     await tdb.insert(connections).values({
@@ -115,6 +125,7 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     await tdb.delete(reports).where(eq(reports.org_id, orgId));
     await tdb.delete(trackedProducts).where(eq(trackedProducts.org_id, orgId));
     await tdb.delete(connections).where(eq(connections.org_id, orgId));
+    await tdb.delete(users).where(eq(users.org_id, orgId));
     await tdb.delete(organizations).where(eq(organizations.id, orgId));
     await sql.end();
   });
@@ -186,9 +197,9 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     // analyzeWithIA foi chamado
     expect(analyzeSpyHappy).toHaveBeenCalledTimes(1);
 
-    // E-mail de sucesso: adminEmail é null → readySpy NÃO chamado
-    // (conforme decisão: adminEmail=null por ora — Plano 6 expande)
-    expect(readySpy).not.toHaveBeenCalled();
+    // E-mail de relatório pronto enviado ao cliente (clientEmail resolvido via getOrgPrimaryEmail)
+    expect(readySpy).toHaveBeenCalledTimes(1);
+    expect(readySpy).toHaveBeenCalledWith(CLIENT_EMAIL, result.reportId);
 
     // E-mail de falha NÃO deve ter sido chamado
     expect(failedSpy).not.toHaveBeenCalled();
