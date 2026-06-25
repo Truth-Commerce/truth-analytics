@@ -3,6 +3,8 @@
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { generateReportAction, type GenerateState } from '@/actions/reports.actions';
+import { Button } from '@/components/ui/Button';
+import { Spinner } from '@/components/ui/Spinner';
 
 const initial: GenerateState = {};
 
@@ -22,14 +24,22 @@ function errorLabel(code: string): string {
 function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button
+    <Button
       type="submit"
       data-testid="generate-report-button"
       disabled={pending || disabled}
-      className="bg-black px-4 py-2 text-white disabled:opacity-50"
+      variant="primary"
+      className="gap-2"
     >
-      {pending ? 'Gerando…' : 'Gerar análise'}
-    </button>
+      {pending ? (
+        <>
+          <Spinner size="sm" />
+          Gerando…
+        </>
+      ) : (
+        'Gerar análise'
+      )}
+    </Button>
   );
 }
 
@@ -48,14 +58,14 @@ export function GenerateReport({
       <form action={action} className="flex flex-wrap items-center gap-3">
         <SubmitButton disabled={isDisabled} />
         {isDisabled && motivo ? (
-          <span className="text-sm text-gray-500">{motivo}</span>
+          <span className="text-sm text-muted">{motivo}</span>
         ) : null}
       </form>
       {state.error ? (
-        <p className="mt-2 text-sm text-red-600">{errorLabel(state.error)}</p>
+        <p className="mt-3 text-sm text-red-400">{errorLabel(state.error)}</p>
       ) : null}
       {state.reportId && !state.error ? (
-        <p className="mt-2 text-sm text-green-700">Relatório gerado.</p>
+        <p className="mt-3 text-sm text-brand">Relatório gerado.</p>
       ) : null}
     </div>
   );

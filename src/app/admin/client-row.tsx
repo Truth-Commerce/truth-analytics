@@ -9,6 +9,8 @@ import {
   suspendClientAction,
   type AdminActionState,
 } from '@/actions/admin.actions';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 
 const initial: AdminActionState = {};
 
@@ -19,9 +21,20 @@ type Props = {
   plano: string | null;
 };
 
+function statusVariant(status: string): 'success' | 'warn' | 'danger' | 'neutral' {
+  if (status === 'active') return 'success';
+  if (status === 'suspended') return 'danger';
+  if (status === 'pending') return 'warn';
+  return 'neutral';
+}
+
 function PlanoSelect() {
   return (
-    <select name="plano" className="border p-1" defaultValue="">
+    <select
+      name="plano"
+      defaultValue=""
+      className="bg-bg-elevated border border-line rounded-lg px-3 py-1.5 text-sm text-white outline-none transition-colors focus:border-brand"
+    >
       <option value="" disabled>
         Plano…
       </option>
@@ -40,39 +53,49 @@ export function ClientRow({ orgId, name, status, plano }: Props) {
   const err = actState.error || suspState.error || reactState.error || planoState.error;
 
   return (
-    <tr className="border-b" data-testid={`org-${orgId}`}>
-      <td className="p-2">{name}</td>
-      <td className="p-2" data-testid={`status-${orgId}`}>{status}</td>
-      <td className="p-2">{plano ?? '—'}</td>
-      <td className="p-2">
+    <tr className="border-b border-line/50 last:border-0" data-testid={`org-${orgId}`}>
+      <td className="px-4 py-3 text-white/90">{name}</td>
+      <td className="px-4 py-3" data-testid={`status-${orgId}`}>
+        <Badge variant={statusVariant(status)}>{status}</Badge>
+      </td>
+      <td className="px-4 py-3 font-mono text-sm text-muted">{plano ?? '—'}</td>
+      <td className="px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           {status === 'pending' ? (
-            <form action={activate} className="flex gap-1">
+            <form action={activate} className="flex items-center gap-2">
               <input type="hidden" name="orgId" value={orgId} />
               <PlanoSelect />
-              <button type="submit" className="bg-black px-2 text-white">Ativar</button>
+              <Button type="submit" variant="primary" size="sm">
+                Ativar
+              </Button>
             </form>
           ) : null}
           {status === 'active' ? (
             <>
-              <form action={changePlano} className="flex gap-1">
+              <form action={changePlano} className="flex items-center gap-2">
                 <input type="hidden" name="orgId" value={orgId} />
                 <PlanoSelect />
-                <button type="submit" className="border px-2">Trocar plano</button>
+                <Button type="submit" variant="secondary" size="sm">
+                  Trocar plano
+                </Button>
               </form>
               <form action={suspend}>
                 <input type="hidden" name="orgId" value={orgId} />
-                <button type="submit" className="border px-2">Suspender</button>
+                <Button type="submit" variant="danger" size="sm">
+                  Suspender
+                </Button>
               </form>
             </>
           ) : null}
           {status === 'suspended' ? (
             <form action={reactivate}>
               <input type="hidden" name="orgId" value={orgId} />
-              <button type="submit" className="border px-2">Reativar</button>
+              <Button type="submit" variant="secondary" size="sm">
+                Reativar
+              </Button>
             </form>
           ) : null}
-          {err ? <span className="text-sm text-red-600">{err}</span> : null}
+          {err ? <span className="text-sm text-red-400">{err}</span> : null}
         </div>
       </td>
     </tr>
