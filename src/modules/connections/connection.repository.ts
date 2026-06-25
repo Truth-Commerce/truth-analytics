@@ -4,6 +4,8 @@ import { db } from '@/db/client';
 import { connections } from '@/db/schema';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { decryptSecret, encryptSecret } from '@/modules/crypto/crypto';
+import { sendBlingConnectionFailedEmail } from '@/modules/notifications/email';
+import { getOrgPrimaryEmail } from '@/modules/notifications/recipients';
 import { blingProvider } from '@/modules/providers/bling/provider';
 import type { OAuthTokens } from '@/modules/providers/types';
 
@@ -94,6 +96,12 @@ export async function getValidAccessToken(orgId: string): Promise<string> {
       .update(connections)
       .set({ status: 'expirado' })
       .where(eq(connections.id, row.id));
+    try {
+      const to = await getOrgPrimaryEmail(orgId);
+      if (to) await sendBlingConnectionFailedEmail(to);
+    } catch {
+      // e-mail nunca quebra o fluxo de erro do refresh
+    }
     throw new Error('refresh_bling_falhou');
   }
 }

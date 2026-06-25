@@ -10,6 +10,8 @@ import {
   setPlano,
   suspendOrganization,
 } from '@/modules/admin/admin.repository';
+import { sendAccountActivatedEmail } from '@/modules/notifications/email';
+import { getOrgPrimaryEmail } from '@/modules/notifications/recipients';
 
 export type AdminActionState = { error?: string; ok?: boolean };
 
@@ -31,6 +33,18 @@ export async function activateClientAction(
     }
     throw e;
   }
+
+  // Notificar cliente — best-effort: e-mail nunca quebra a ativação
+  try {
+    const to = await getOrgPrimaryEmail(orgId);
+    if (to) await sendAccountActivatedEmail(to, plano);
+  } catch (e) {
+    // e-mail nunca quebra a ativação — apenas registra para observabilidade
+    console.warn(
+      '[email:activate] lookup/envio falhou: ' + (e instanceof Error ? e.message : String(e)),
+    );
+  }
+
   revalidatePath('/admin');
   return { ok: true };
 }

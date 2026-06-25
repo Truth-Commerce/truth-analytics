@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { sendPipelineFailedEmail } from '@/modules/notifications/email';
+import { getAdminAlertEmail, getOrgPrimaryEmail } from '@/modules/notifications/recipients';
 import { collectBlingOrders } from '@/modules/pipeline/steps/collect-bling';
 import { collectMarket } from '@/modules/pipeline/steps/collect-market';
 import { computeMetrics } from '@/modules/pipeline/steps/compute-metrics';
@@ -91,8 +92,15 @@ export async function generateReport(
     const analise = await analyzeWithIA(metricas, nicho);
 
     // 4d. Finalizar (persiste done + trava + e-mail)
-    // adminEmail: null por ora — Plano 6 implementa lookup do e-mail do admin da org
-    await finalize({ reportId, orgId, metricas, analise, plano, adminEmail: null });
+    // Resolve o e-mail primário do cliente com try/catch: falha no lookup não pode
+    // abortar um pipeline que já concluiu com sucesso.
+    let clientEmail: string | null = null;
+    try {
+      clientEmail = await getOrgPrimaryEmail(orgId);
+    } catch {
+      // lookup falhou — e-mail pulado, pipeline continua
+    }
+    await finalize({ reportId, orgId, metricas, analise, plano, clientEmail });
 
     return { reportId, status: 'done' };
   } catch (err) {
@@ -106,7 +114,10 @@ export async function generateReport(
       .where(eq(reports.id, reportId));
 
     // E-mail de falha nunca deve relançar (sendPipelineFailedEmail já garante)
-    await sendPipelineFailedEmail(orgId, reportId, erroTruncado);
+    const adminEmail = getAdminAlertEmail();
+    if (adminEmail) {
+      await sendPipelineFailedEmail(adminEmail, orgId, reportId, erroTruncado);
+    }
 
     return { reportId, status: 'failed' };
   }
