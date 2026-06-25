@@ -54,7 +54,8 @@ describe.skipIf(!url)('report.repository — integração', () => {
       .returning({ id: organizations.id });
     orgBId = orgB.id;
 
-    // Inserir failed PRIMEIRO para que done seja mais recente (created_at = now())
+    // created_at explícitos e distintos → ordenação determinística (evita colisão
+    // de millisegundo entre dois inserts sequenciais com defaultNow()).
     const [failedRow] = await tdb
       .insert(reports)
       .values({
@@ -65,11 +66,12 @@ describe.skipIf(!url)('report.repository — integração', () => {
         metricas: null,
         analise_ia: null,
         erro: 'falha_geracao',
+        created_at: new Date('2026-06-24T00:00:00.000Z'),
       })
       .returning({ id: reports.id });
     failedReportId = failedRow.id;
 
-    // Inserir done por último — será o mais recente
+    // done com created_at posterior → será o mais recente
     const [doneRow] = await tdb
       .insert(reports)
       .values({
@@ -80,6 +82,7 @@ describe.skipIf(!url)('report.repository — integração', () => {
         metricas: METRICAS_SAMPLE,
         analise_ia: ANALISE_SAMPLE,
         erro: null,
+        created_at: new Date('2026-06-24T00:00:01.000Z'),
       })
       .returning({ id: reports.id });
     doneReportId = doneRow.id;
