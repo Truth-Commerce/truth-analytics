@@ -65,6 +65,7 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
             type="button"
             aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
             aria-expanded={menuOpen}
+            aria-controls="mobile-nav"
             onClick={() => setMenuOpen((v) => !v)}
             className="flex sm:hidden flex-col items-center justify-center gap-1.5 rounded-lg p-2 text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
           >
@@ -82,7 +83,7 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
 
         {/* Mobile menu drawer */}
         {menuOpen && (
-          <div className="border-t border-line bg-bg-surface/95 px-4 py-3 sm:hidden">
+          <div id="mobile-nav" className="border-t border-line bg-bg-surface/95 px-4 py-3 sm:hidden">
             <div className="flex flex-col gap-1">
               <a
                 href="/dashboard"
