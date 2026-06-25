@@ -66,8 +66,9 @@ test('ver relatório: dashboard mostra último relatório e detalhe exibe métri
   await page.goto('/dashboard');
   await expect(page.getByTestId('latest-report')).toBeVisible();
 
-  // Navega para o detalhe do relatório semeado
-  await page.goto(`/dashboard/relatorios/${seededReportId}`);
+  // Clica no link "Ver relatório" (valida href + data-testid de ponta a ponta)
+  await page.getByTestId('ver-relatorio').click();
+  await page.waitForURL((url) => url.pathname.includes('/dashboard/relatorios/'));
 
   // Deve mostrar o resumo executivo
   await expect(page.getByTestId('resumo-executivo')).toContainText(
