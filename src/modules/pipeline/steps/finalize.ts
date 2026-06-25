@@ -29,24 +29,29 @@ export type FinalizeInput = {
 export async function finalize(input: FinalizeInput): Promise<void> {
   const { reportId, orgId, metricas, analise, plano, adminEmail } = input;
 
-  // 1. Marcar relatório como concluído
-  await db
-    .update(reports)
-    .set({
-      status: 'done',
-      metricas,
-      analise_ia: analise,
-      erro: null,
-    })
-    .where(and(eq(reports.id, reportId), eq(reports.org_id, orgId)));
+  // 1+2. Concluir o relatório E setar a trava do ciclo atomicamente: ou ambos
+  // persistem, ou nenhum — evita relatório 'done' com trava não setada (que
+  // permitiria regenerar) caso o processo morra entre os dois updates.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(reports)
+      .set({
+        status: 'done',
+        metricas,
+        analise_ia: analise,
+        erro: null,
+      })
+      .where(and(eq(reports.id, reportId), eq(reports.org_id, orgId)));
 
-  // 2. Setar trava do ciclo do plano (só no sucesso)
-  await db
-    .update(organizations)
-    .set({ proximo_relatorio_liberado_em: proximoRelatorioEm(plano) })
-    .where(eq(organizations.id, orgId));
+    // A trava só é setada AQUI — no caminho de sucesso.
+    await tx
+      .update(organizations)
+      .set({ proximo_relatorio_liberado_em: proximoRelatorioEm(plano) })
+      .where(eq(organizations.id, orgId));
+  });
 
-  // 3. Notificar admin (no-op se adminEmail ausente ou chaves não configuradas)
+  // 3. Notificar admin (fora da transação — e-mail nunca deve reverter o banco;
+  // no-op se adminEmail ausente ou chaves não configuradas).
   if (adminEmail) {
     await sendReportReadyEmail(adminEmail, reportId);
   }
