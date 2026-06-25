@@ -40,7 +40,8 @@ test('adiciona produto monitorado e vê na lista', async ({ page }) => {
   await page.fill('input[name="nome"]', 'Tênis Running Pro');
   await page.fill('input[name="sku"]', 'TRP-001');
   await page.fill('input[name="keywords"]', 'tênis, corrida, running');
-  await page.click('button[type="submit"]');
+  // escopa o submit ao form de adicionar (há outros submit na página, ex.: "Sair" no shell)
+  await page.locator('[data-testid="add-form"] button[type="submit"]').click();
 
   // aguarda a página recarregar com o produto listado
   await expect(page.getByText('Tênis Running Pro')).toBeVisible();
