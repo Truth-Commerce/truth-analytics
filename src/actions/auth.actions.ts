@@ -5,7 +5,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
-import { signIn } from '@/modules/auth/auth';
+import { signIn, signOut } from '@/modules/auth/auth';
 import { createOrgWithUser } from '@/modules/auth/user.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { isLoginRateLimited, recordLoginAttempt } from '@/modules/auth/rate-limit';
@@ -76,4 +76,8 @@ export async function signInAction(
 
   await recordLoginAttempt({ email, ip, success: true });
   redirect('/dashboard');
+}
+
+export async function signOutAction(): Promise<void> {
+  await signOut({ redirectTo: '/sign-in' });
 }
