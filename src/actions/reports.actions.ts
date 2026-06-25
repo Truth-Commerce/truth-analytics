@@ -1,10 +1,14 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
+
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { getConnection } from '@/modules/connections/connection.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { generateReport } from '@/modules/pipeline/orchestrator';
+
+export type GenerateState = { error?: string; reportId?: string };
 
 /**
  * Server Action que dispara a geração de um relatório para a org autenticada.
@@ -18,7 +22,10 @@ import { generateReport } from '@/modules/pipeline/orchestrator';
  * MVP: aguarda o orquestrador de forma síncrona.
  * Produção: mover para background job / Vercel Workflow para durabilidade — fora do escopo.
  */
-export async function generateReportAction(): Promise<{ error?: string; reportId?: string }> {
+export async function generateReportAction(
+  _prev: GenerateState,
+  _formData: FormData,
+): Promise<GenerateState> {
   const access = await requireActiveOrg();
 
   const org = await getOrganizationById(access.orgId);
@@ -35,5 +42,6 @@ export async function generateReportAction(): Promise<{ error?: string; reportId
     return { error: 'falha_geracao', reportId: result.reportId };
   }
 
+  revalidatePath('/dashboard');
   return { reportId: result.reportId };
 }
