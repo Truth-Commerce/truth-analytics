@@ -2,6 +2,8 @@
   "name": "truth-analytics",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "description": "SaaS de inteligência de marketplace por IA — relatórios periódicos a partir do Bling (Truth Commerce)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
