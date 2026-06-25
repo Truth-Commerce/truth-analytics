@@ -38,7 +38,12 @@ export async function activateClientAction(
   try {
     const to = await getOrgPrimaryEmail(orgId);
     if (to) await sendAccountActivatedEmail(to, plano);
-  } catch { /* e-mail nunca quebra a ativação */ }
+  } catch (e) {
+    // e-mail nunca quebra a ativação — apenas registra para observabilidade
+    console.warn(
+      '[email:activate] lookup/envio falhou: ' + (e instanceof Error ? e.message : String(e)),
+    );
+  }
 
   revalidatePath('/admin');
   return { ok: true };
