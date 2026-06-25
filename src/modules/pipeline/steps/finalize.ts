@@ -51,8 +51,13 @@ export async function finalize(input: FinalizeInput): Promise<void> {
   });
 
   // 3. Notificar cliente (fora da transação — e-mail nunca deve reverter o banco;
-  // no-op se clientEmail ausente ou chaves não configuradas).
+  // no-op se clientEmail ausente ou chaves não configuradas). Best-effort: um
+  // envio jamais pode falhar uma finalização já comprometida (done + trava).
   if (clientEmail) {
-    await sendReportReadyEmail(clientEmail, reportId);
+    try {
+      await sendReportReadyEmail(clientEmail, reportId);
+    } catch {
+      // e-mail nunca quebra a finalização do relatório
+    }
   }
 }
