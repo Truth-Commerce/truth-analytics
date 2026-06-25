@@ -38,10 +38,12 @@ export async function generateReportAction(
   if (!conn?.connected) return { error: 'bling_nao_conectado' };
 
   const result = await generateReport(access.orgId);
+  // Em ambos os casos um `report` foi persistido (done ou failed) — revalida para
+  // que ele apareça no histórico/último sem precisar recarregar a página.
+  revalidatePath('/dashboard');
   if (result.status === 'failed') {
     return { error: 'falha_geracao', reportId: result.reportId };
   }
 
-  revalidatePath('/dashboard');
   return { reportId: result.reportId };
 }

@@ -11,6 +11,7 @@ const ERROR_LABELS: Record<string, string> = {
   sem_plano: 'Nenhum plano definido. Fale com o suporte.',
   ciclo_em_andamento: 'O próximo relatório ainda não foi liberado.',
   bling_nao_conectado: 'Conecte o Bling em Conexões.',
+  org_nao_encontrada: 'Organização não encontrada. Recarregue a página.',
   falha_geracao: 'Falha ao gerar o relatório. Tente novamente.',
 };
 

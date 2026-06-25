@@ -23,11 +23,13 @@ export default async function DashboardPage() {
 
   let motivo: string | undefined;
   if (!canGenerate) {
-    if (!blingOk) {
+    if (!org) {
+      motivo = 'Organização não encontrada. Recarregue a página.';
+    } else if (!blingOk) {
       motivo = 'Conecte o Bling em Conexões.';
     } else if (!gate.ok) {
       if (gate.motivo === 'ciclo_em_andamento') {
-        const proxData = org?.proximo_relatorio_liberado_em;
+        const proxData = org.proximo_relatorio_liberado_em;
         motivo = proxData
           ? `Próximo relatório liberado em ${formatData(proxData)}.`
           : 'O próximo relatório ainda não foi liberado.';
