@@ -59,12 +59,26 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
               </a>
             )}
             {variant === 'admin' && (
-              <a
-                href="/admin"
-                className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
-              >
-                Admin
-              </a>
+              <>
+                <a
+                  href="/admin"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Admin
+                </a>
+                <a
+                  href="/admin/playbooks"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Playbooks
+                </a>
+                <a
+                  href="/admin/consultoria"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Consultoria
+                </a>
+              </>
             )}
             {variant === 'analista' && (
               <a
@@ -155,13 +169,29 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
                 </a>
               )}
               {variant === 'admin' && (
-                <a
-                  href="/admin"
-                  onClick={() => setMenuOpen(false)}
-                  className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  Admin
-                </a>
+                <>
+                  <a
+                    href="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                  >
+                    Admin
+                  </a>
+                  <a
+                    href="/admin/playbooks"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                  >
+                    Playbooks
+                  </a>
+                  <a
+                    href="/admin/consultoria"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                  >
+                    Consultoria
+                  </a>
+                </>
               )}
               {variant === 'analista' && (
                 <a
