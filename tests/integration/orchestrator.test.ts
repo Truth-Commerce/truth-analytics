@@ -51,7 +51,6 @@ const MOCK_ORDERS = [
 
 const MOCK_MARKET_RESULT = {
   precos: [85.0, 95.0],
-  bruto: { results: [] },
 };
 
 const MOCK_ANALISE: AnaliseIa = {

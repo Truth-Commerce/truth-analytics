@@ -26,7 +26,7 @@ export type OrderRow = {
 export type SnapshotRow = {
   fonte: string;
   keyword: string;
-  dados: MarketResult;
+  dados: { precos: number[] };
 };
 
 export type ProductRow = {

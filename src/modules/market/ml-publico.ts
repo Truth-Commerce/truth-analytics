@@ -18,10 +18,10 @@ class MlPublicoProvider implements MarketProvider {
       throw new Error(`ml_publico_erro_${response.status}`);
     }
 
-    const bruto = (await response.json()) as Record<string, unknown>;
+    const payload = (await response.json()) as Record<string, unknown>;
 
-    const results = Array.isArray(bruto['results'])
-      ? (bruto['results'] as Record<string, unknown>[])
+    const results = Array.isArray(payload['results'])
+      ? (payload['results'] as Record<string, unknown>[])
       : [];
 
     const precos: number[] = results
@@ -32,7 +32,7 @@ class MlPublicoProvider implements MarketProvider {
       })
       .filter((v): v is number => v !== null);
 
-    return { precos, bruto };
+    return { precos };
   }
 }
 

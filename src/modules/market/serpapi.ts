@@ -25,10 +25,10 @@ class SerpapiProvider implements MarketProvider {
       throw new Error(`serpapi_erro_${response.status}`);
     }
 
-    const bruto = (await response.json()) as Record<string, unknown>;
+    const payload = (await response.json()) as Record<string, unknown>;
 
-    const shoppingResults = Array.isArray(bruto['shopping_results'])
-      ? (bruto['shopping_results'] as Record<string, unknown>[])
+    const shoppingResults = Array.isArray(payload['shopping_results'])
+      ? (payload['shopping_results'] as Record<string, unknown>[])
       : [];
 
     const precos: number[] = shoppingResults
@@ -50,7 +50,7 @@ class SerpapiProvider implements MarketProvider {
       })
       .filter((v): v is number => v !== null && v > 0);
 
-    return { precos, bruto };
+    return { precos };
   }
 }
 
