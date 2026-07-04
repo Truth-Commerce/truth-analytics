@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { signOutAction } from '@/actions/auth.actions';
+import { CommandPalette } from '@/components/command-palette';
 import { Logo } from '@/components/ui/Logo';
 
 interface AppShellProps {
@@ -49,6 +50,18 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
               </a>
             )}
           </div>
+
+          {/* Command palette hint (⌘K) */}
+          <button
+            type="button"
+            aria-label="Abrir comandos (Ctrl+K)"
+            onClick={() =>
+              document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+            }
+            className="hidden items-center gap-1.5 rounded-full border border-line px-3 py-1.5 font-mono text-[10px] text-dim outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50 sm:flex"
+          >
+            ⌘K
+          </button>
 
           {/* Desktop sign out */}
           <form action={signOutAction} className="hidden sm:block">
@@ -125,6 +138,8 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
 
       {/* Page content — div (not main) so each page provides the single <main> landmark */}
       <div className="px-4 py-8">{children}</div>
+
+      <CommandPalette variant={variant} />
     </div>
   );
 }
