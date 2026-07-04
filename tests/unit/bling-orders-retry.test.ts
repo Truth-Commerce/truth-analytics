@@ -34,6 +34,40 @@ describe('fetchOrders retry/backoff', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('429 com Retry-After maior que o exponencial → honra o header (não refaz antes)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 429, headers: { 'retry-after': '5' } }),
+      )
+      .mockResolvedValueOnce(paginaVazia());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = fetchOrders('org-1', PERIODO);
+
+    // Se o header fosse ignorado, o fallback exponencial (1s) já teria refeito o fetch aos 2s.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Honrando Retry-After: só refaz aos 5s.
+    await vi.advanceTimersByTimeAsync(3000);
+    await expect(promise).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('5xx → retry com backoff exponencial; sucesso na 2ª', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(paginaVazia());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = fetchOrders('org-1', PERIODO);
+    await vi.advanceTimersByTimeAsync(1000); // fallback exponencial da 1ª tentativa
+    await expect(promise).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('3× 429 → lança bling_erro_429', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 429 }));
     vi.stubGlobal('fetch', fetchMock);
