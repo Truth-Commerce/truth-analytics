@@ -57,3 +57,31 @@ export async function getReportById(
     .limit(1);
   return row ? rowToDetail(row) : null;
 }
+
+export async function createQueuedReport(
+  orgId: string,
+  periodo: { inicio: Date; fim: Date },
+): Promise<string> {
+  try {
+    const [row] = await db
+      .insert(reports)
+      .values({
+        org_id: orgId,
+        status: 'queued',
+        periodo_inicio: periodo.inicio,
+        periodo_fim: periodo.fim,
+      })
+      .returning({ id: reports.id });
+    return row.id;
+  } catch (e: unknown) {
+    // 23505 = unique_violation no índice parcial reports_org_ativo_uq
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+      throw new Error('relatorio_em_andamento');
+    }
+    throw e;
+  }
+}
+
+export async function markReportFailed(reportId: string, erro: string): Promise<void> {
+  await db.update(reports).set({ status: 'failed', erro }).where(eq(reports.id, reportId));
+}
