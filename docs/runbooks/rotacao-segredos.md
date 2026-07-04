@@ -67,6 +67,12 @@ Confirmado no código (`src/modules/crypto/crypto.ts`, `src/lib/env.ts`):
 4. Atualizar o `.env.local` com as **mesmas duas** envs novas (mantendo a `ENCRYPTION_KEY` legada).
 5. Redeploy: `vercel redeploy` (ou `git push` para disparar deploy) e **smoke**:
    login + página **Conexões** mostra o Bling conectado (getValidAccessToken decifra o legado).
+   **O que esse smoke prova:** que adicionar o chaveiro **não quebrou o caminho legado** — só isso.
+   Ainda **não** prova nada sobre decifragem v1 (nenhum payload foi migrado até aqui); "conectado"
+   neste ponto **não** significa migração concluída.
+   **Rollback (se o smoke falhar):**
+   `vercel env rm ENCRYPTION_KEYS production && vercel env rm ENCRYPTION_KEY_ACTIVE production`,
+   redeploy e investigue antes de prosseguir — o legado continua intacto neste ponto.
 6. Re-encriptar os tokens em repouso para o formato v1 (roda contra o banco de PRODUÇÃO do
    `.env.local`, que deve estar na URL **direct**):
    ```bash
