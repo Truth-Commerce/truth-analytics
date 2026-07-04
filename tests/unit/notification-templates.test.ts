@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   accountActivatedTemplate,
   blingConnectionFailedTemplate,
+  escapeHtml,
   pipelineFailedTemplate,
   reportReadyTemplate,
   taskAprovadaTemplate,
@@ -10,6 +11,20 @@ import {
   taskCriadaTemplate,
   taskDevolvidaTemplate,
 } from '@/modules/notifications/templates';
+
+describe('escapeHtml', () => {
+  it('escapa & < > " \' na ordem correta (sem double-escaping)', () => {
+    expect(escapeHtml('&<>"\'')).toBe('&amp;&lt;&gt;&quot;&#39;');
+  });
+
+  it('escapa & antes dos demais para não escapar duas vezes as entidades geradas', () => {
+    expect(escapeHtml('<')).toBe('&lt;');
+  });
+
+  it('mantém texto sem caracteres especiais inalterado', () => {
+    expect(escapeHtml('Catalogar produto X')).toBe('Catalogar produto X');
+  });
+});
 
 describe('notification templates (puro)', () => {
   describe('accountActivatedTemplate', () => {
@@ -146,6 +161,15 @@ describe('notification templates (puro)', () => {
       const result = taskCriadaTemplate('Catalogar produto X', 'http://app/tasks/1');
       expect(result.html).toContain('http://app/tasks/1');
     });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)><script>alert(2)</script>';
+      const result = taskCriadaTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).not.toContain('<script>');
+      expect(result.html).toContain('&lt;img');
+      expect(result.text).toContain(titulo);
+    });
   });
 
   describe('taskComentarioTemplate', () => {
@@ -174,6 +198,14 @@ describe('notification templates (puro)', () => {
     it('html contém a url', () => {
       const result = taskComentarioTemplate('Catalogar produto X', 'http://app/tasks/1');
       expect(result.html).toContain('http://app/tasks/1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)>';
+      const result = taskComentarioTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
+      expect(result.text).toContain(titulo);
     });
   });
 
@@ -204,6 +236,14 @@ describe('notification templates (puro)', () => {
       const result = taskDevolvidaTemplate('Catalogar produto X', 'http://app/tasks/1');
       expect(result.html).toContain('http://app/tasks/1');
     });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)>';
+      const result = taskDevolvidaTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
+      expect(result.text).toContain(titulo);
+    });
   });
 
   describe('taskAprovadaTemplate', () => {
@@ -232,6 +272,16 @@ describe('notification templates (puro)', () => {
     it('html contém a url', () => {
       const result = taskAprovadaTemplate('Catalogar produto X', 'http://app/tasks/1');
       expect(result.html).toContain('http://app/tasks/1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = `<img src=x onerror=alert(1)> and "quotes" and 'apostrophes'`;
+      const result = taskAprovadaTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
+      expect(result.html).toContain('&quot;quotes&quot;');
+      expect(result.html).toContain('&#39;apostrophes&#39;');
+      expect(result.text).toContain(titulo);
     });
   });
 });
