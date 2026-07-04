@@ -24,6 +24,17 @@ describe('logger estruturado', () => {
     expect(linha.erro.name).toBe('Error');
   });
 
+  it('ctx com referência circular não derruba o logger (fallback ctxSerializationError)', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const ctx: Record<string, unknown> = { orgId: 'org-1' };
+    ctx.self = ctx;
+    expect(() => logger.info('ctx circular', ctx)).not.toThrow();
+    const linha = JSON.parse(spy.mock.calls[0]![0] as string);
+    expect(linha.nivel).toBe('info');
+    expect(linha.msg).toBe('ctx circular');
+    expect(linha.ctxSerializationError).toBe(true);
+  });
+
   it('createLogger mescla contexto base', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const log = createLogger({ reportId: 'rep-9' });

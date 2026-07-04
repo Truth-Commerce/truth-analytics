@@ -24,8 +24,9 @@ export async function captureException(
   if (!dsn) return;
   const parsed = parseDsn(dsn);
   if (!parsed) return;
-  const e = err instanceof Error ? err : new Error(String(err));
   try {
+    // Dentro do try: String(err) pode lançar (toString hostil) — nunca propaga.
+    const e = err instanceof Error ? err : new Error(String(err));
     await fetch(parsed.url, {
       method: 'POST',
       headers: {

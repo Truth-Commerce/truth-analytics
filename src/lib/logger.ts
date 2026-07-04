@@ -22,7 +22,14 @@ function emit(nivel: Nivel, msg: string, ctx?: LogContext, err?: unknown): void 
         ? { name: err.name, message: err.message, stack: err.stack }
         : String(err);
   }
-  const out = JSON.stringify(linha);
+  let out: string;
+  try {
+    out = JSON.stringify(linha);
+  } catch {
+    // ctx não serializável (referência circular, BigInt, toJSON que lança):
+    // observabilidade nunca quebra o fluxo — emite fallback mínimo.
+    out = JSON.stringify({ ts: linha.ts, nivel, msg, ctxSerializationError: true });
+  }
   if (nivel === 'error') console.error(out);
   else if (nivel === 'warn') console.warn(out);
   else console.log(out);
