@@ -299,4 +299,39 @@ describe.skipIf(!url)('collect-market — integração', () => {
       await tdb.delete(trackedProducts).where(eq(trackedProducts.id, tp.id));
     }
   });
+
+  it('insert que rejeita → resolve com benchmarkParcial=true e não lança', async () => {
+    const [tp] = await tdb
+      .insert(trackedProducts)
+      .values({
+        org_id: orgId,
+        nome: `Produto InsertFail ${RUN}`,
+        sku: `SKU-INSFAIL-${RUN}`,
+        keywords: [`keyword-insfail-${RUN}`],
+        ativo: true,
+      })
+      .returning({ id: trackedProducts.id });
+
+    const { db } = await import('@/db/client');
+    const insertSpy = vi.spyOn(db, 'insert').mockImplementation(() => {
+      throw new Error('conexao_caiu');
+    });
+
+    try {
+      const ok: MarketProvider = {
+        fonte: 'ml_publico',
+        search: async () => ({ precos: [10, 20] }),
+      };
+
+      const { collectMarket } = await import('@/modules/pipeline/steps/collect-market');
+      await expect(collectMarket(orgId, reportId, [ok])).resolves.toEqual({
+        benchmarkParcial: true,
+      });
+      expect(insertSpy).toHaveBeenCalled();
+    } finally {
+      insertSpy.mockRestore();
+      await tdb.delete(marketSnapshots).where(eq(marketSnapshots.report_id, reportId));
+      await tdb.delete(trackedProducts).where(eq(trackedProducts.id, tp.id));
+    }
+  });
 });

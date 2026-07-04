@@ -71,7 +71,15 @@ export async function collectMarket(
   );
 
   for (let i = 0; i < rows.length; i += LOTE_INSERT) {
-    await db.insert(marketSnapshots).values(rows.slice(i, i + LOTE_INSERT));
+    try {
+      await db.insert(marketSnapshots).values(rows.slice(i, i + LOTE_INSERT));
+    } catch (err) {
+      // Semântica graciosa preservada: falha de gravação marca parcial e segue
+      // com os lotes restantes — nunca derruba a coleta (como no código
+      // anterior, que capturava por operação de insert).
+      benchmarkParcial = true;
+      logger.warn('market_insert_falhou', { orgId, reportId, batch: i }, err);
+    }
   }
 
   if (rows.length === 0) {
