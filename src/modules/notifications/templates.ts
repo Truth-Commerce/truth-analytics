@@ -90,6 +90,30 @@ export function pipelineFailedTemplate(
 }
 
 /**
+ * Template: redefinição de senha (link expira em 1h; single-use).
+ */
+export function passwordResetTemplate(link: string): EmailContent {
+  const subject = 'Redefinição de senha — Truth Analytics';
+  const text = [
+    'Recebemos um pedido para redefinir a senha da sua conta no Truth Analytics.',
+    '',
+    `Para criar uma nova senha, acesse: ${link}`,
+    '',
+    'O link expira em 1 hora e só pode ser usado uma vez.',
+    'Se você não pediu a redefinição, ignore este e-mail — sua senha permanece a mesma.',
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Recebemos um pedido para redefinir a senha da sua conta no <strong>Truth Analytics</strong>.</p>
+<p><a href="${link}">Clique aqui para criar uma nova senha</a></p>
+<p>O link expira em <strong>1 hora</strong> e só pode ser usado uma vez.</p>
+<p>Se você não pediu a redefinição, ignore este e-mail — sua senha permanece a mesma.</p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+  return { subject, html, text };
+}
+
+/**
  * Template: conexão Bling expirou (enviado ao cliente).
  */
 export function blingConnectionFailedTemplate(appUrl: string): EmailContent {

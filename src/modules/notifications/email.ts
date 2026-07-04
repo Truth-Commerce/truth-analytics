@@ -4,6 +4,7 @@ import type { Plano } from '@/modules/auth/user.types';
 import {
   accountActivatedTemplate,
   blingConnectionFailedTemplate,
+  passwordResetTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
 } from './templates';
@@ -84,5 +85,14 @@ export async function sendPipelineFailedEmail(
  */
 export async function sendBlingConnectionFailedEmail(to: string): Promise<void> {
   const content = blingConnectionFailedTemplate(serverEnv.APP_URL);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Envia o link de redefinição de senha. Nunca lança.
+ */
+export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
+  const link = `${serverEnv.APP_URL}/redefinir-senha/${token}`;
+  const content = passwordResetTemplate(link);
   await sendEmail({ to, ...content });
 }
