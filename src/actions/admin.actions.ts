@@ -209,5 +209,6 @@ export async function setOrgAnalistaAction(
     throw e;
   }
   revalidatePath('/admin');
+  revalidatePath(`/admin/${orgId}`);
   return { ok: true };
 }
