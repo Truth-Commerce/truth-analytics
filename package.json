@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
+    "@react-pdf/renderer": "^4.5.1",
     "@vercel/functions": "^3.7.5",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.36.0",

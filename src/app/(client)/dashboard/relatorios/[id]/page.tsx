@@ -8,6 +8,7 @@ import { PRIORIDADE_LABEL, recomendacaoCards } from '@/modules/reports/report-vi
 import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Stat } from '@/components/ui/Stat';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { Alert } from '@/components/ui/Alert';
@@ -52,9 +53,22 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
             </p>
             <p className="mt-0.5 text-xs text-dim">Gerado em {formatData(rel.createdAt)}</p>
           </div>
-          <span data-testid="report-status">
-            <Badge variant={reportStatusVariant(rel.status)}>{STATUS_LABEL[rel.status]}</Badge>
-          </span>
+          <div className="flex items-center gap-3">
+            {rel.status === 'done' && rel.metricas ? (
+              <Button
+                as="a"
+                href={`/api/reports/${rel.id}/pdf`}
+                variant="secondary"
+                size="sm"
+                data-testid="export-pdf"
+              >
+                Exportar PDF
+              </Button>
+            ) : null}
+            <span data-testid="report-status">
+              <Badge variant={reportStatusVariant(rel.status)}>{STATUS_LABEL[rel.status]}</Badge>
+            </span>
+          </div>
         </div>
       </header>
 
