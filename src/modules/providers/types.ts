@@ -31,5 +31,9 @@ export interface ConnectionProvider {
   buildAuthorizeUrl(state: string): string;
   exchangeCode(code: string): Promise<OAuthTokens>;
   refresh(refreshToken: string): Promise<OAuthTokens>;
-  fetchOrders(orgId: string, periodo: Periodo): Promise<RawOrder[]>;
+  fetchOrders(
+    orgId: string,
+    periodo: Periodo,
+    onPage?: (pagina: RawOrder[]) => Promise<void>,
+  ): Promise<RawOrder[]>;
 }

@@ -3,28 +3,17 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { orders } from '@/db/schema';
 import { blingProvider } from '@/modules/providers/bling/provider';
-import type { Periodo } from '@/modules/providers/types';
+import type { Periodo, RawOrder } from '@/modules/providers/types';
 
 export type CollectResult = {
   processados: number;
   total: number;
 };
 
-export async function collectBlingOrders(
-  orgId: string,
-  periodo: Periodo,
-): Promise<CollectResult> {
-  const rawOrders = await blingProvider.fetchOrders(orgId, periodo);
-
-  if (rawOrders.length === 0) {
-    return { processados: 0, total: 0 };
-  }
-
+/** Upsert idempotente de UMA página de pedidos (org_id, bling_order_id). */
+async function upsertOrdersPage(orgId: string, rawOrders: RawOrder[]): Promise<number> {
   const validOrders = rawOrders.filter((o) => o.blingOrderId.trim() !== '');
-
-  if (validOrders.length === 0) {
-    return { processados: 0, total: rawOrders.length };
-  }
+  if (validOrders.length === 0) return 0;
 
   const values = validOrders.map((o) => ({
     org_id: orgId,
@@ -50,6 +39,24 @@ export async function collectBlingOrders(
       },
     })
     .returning({ id: orders.id });
+  return result.length;
+}
 
-  return { processados: result.length, total: rawOrders.length };
+/**
+ * Step 1: coleta pedidos do Bling página a página (lotes de 100) — nunca
+ * acumula o período inteiro em RAM. Erro do Bling propaga (falha dura).
+ */
+export async function collectBlingOrders(
+  orgId: string,
+  periodo: Periodo,
+): Promise<CollectResult> {
+  let processados = 0;
+  let total = 0;
+
+  await blingProvider.fetchOrders(orgId, periodo, async (pagina) => {
+    total += pagina.length;
+    processados += await upsertOrdersPage(orgId, pagina);
+  });
+
+  return { processados, total };
 }
