@@ -61,7 +61,14 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
   const system = buildSystemPrompt(metricas.benchmarkParcial);
   const userText = buildUserMessage(metricas, nicho);
 
-  const messages: MessageParam[] = [{ role: 'user', content: userText }];
+  // Bloco de métricas marcado p/ prompt caching: o retry reaproveita o prefixo
+  // inteiro (system + métricas) do cache e paga só o delta da correção.
+  const userBlock = {
+    type: 'text' as const,
+    text: userText,
+    cache_control: { type: 'ephemeral' as const },
+  };
+  const messages: MessageParam[] = [{ role: 'user', content: [userBlock] }];
 
   const callParams = {
     model: serverEnv.ANALYSIS_MODEL,
@@ -74,7 +81,15 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
         schema: ANALISE_JSON_SCHEMA,
       },
     },
-    system,
+    // Bloco system estável marcado p/ prompt caching: toda geração (e o retry)
+    // reaproveita o prefixo — reduz custo/latência da chamada Opus.
+    system: [
+      {
+        type: 'text' as const,
+        text: system,
+        cache_control: { type: 'ephemeral' as const },
+      },
+    ],
     messages,
   };
 
@@ -94,27 +109,29 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
     parseError = 'Nenhum bloco de texto encontrado na resposta';
   }
 
-  // Retry: append assistant response + correction request
-  logger.warn('análise IA: primeira tentativa inválida, re-tentando', { parseError });
+  // Retry de correção CURTO: em vez de refazer a chamada inteira (dobrando
+  // latência e tokens de thinking), o turno final envia apenas o erro de
+  // validação truncado + a instrução de corrigir. O prefixo (system + métricas)
+  // vem do cache — o retry paga só o delta.
+  const erroCurto = (parseError ?? 'resposta sem bloco de texto').slice(0, 500);
+  logger.warn('análise IA: primeira tentativa inválida, re-tentando', { parseError: erroCurto });
+
+  const correcao = `A resposta anterior falhou na validação do schema: ${erroCurto}. Responda APENAS com o objeto JSON válido conforme o schema, sem texto adicional.`;
 
   // Quando a 1ª resposta não trouxe bloco de texto (ex.: só thinking), NÃO enviar
-  // um turno assistant vazio (a API pode rejeitar content '') — basta um turno
-  // user com a correção. Caso contrário, espelhamos a resposta inválida + correção.
+  // um turno assistant vazio (a API pode rejeitar content '') — basta o bloco de
+  // métricas cacheado + o turno user de correção. Caso contrário, espelhamos a
+  // resposta inválida + correção.
   const retryMessages: MessageParam[] =
     text1 !== null
       ? [
-          { role: 'user', content: userText },
+          { role: 'user', content: [userBlock] }, // prefixo cacheado — não paga de novo
           { role: 'assistant', content: text1 },
-          {
-            role: 'user',
-            content: `A resposta anterior falhou na validação do schema: ${parseError}. responda APENAS com JSON válido conforme o schema, sem texto adicional.`,
-          },
+          { role: 'user', content: correcao },
         ]
       : [
-          {
-            role: 'user',
-            content: `${userText}\n\nNOTA: a resposta anterior não continha um bloco de texto com JSON (${parseError}). Responda APENAS com JSON válido conforme o schema, sem texto adicional.`,
-          },
+          { role: 'user', content: [userBlock] },
+          { role: 'user', content: correcao },
         ];
 
   const response2 = await getAnthropic().messages.create({
@@ -132,5 +149,6 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
     }
   }
 
+  logger.error('análise IA inválida após retry', { parseError: erroCurto });
   throw new Error('analise_ia_invalida');
 }
