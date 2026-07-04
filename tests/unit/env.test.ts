@@ -29,4 +29,52 @@ describe('parseServerEnv', () => {
       } as unknown as NodeJS.ProcessEnv),
     ).toThrow('ENCRYPTION_KEY deve ser 32 bytes em base64');
   });
+
+  const KEY_32 = Buffer.alloc(32, 1).toString('base64');
+
+  it('aceita cripto versionada (KEYS + ACTIVE) sem ENCRYPTION_KEY legado', () => {
+    const env = parseServerEnv({
+      POSTGRES_URL: 'postgres://x',
+      AUTH_SECRET: 'secret',
+      APP_URL: 'http://localhost:3000',
+      ENCRYPTION_KEYS: JSON.stringify({ k1: KEY_32 }),
+      ENCRYPTION_KEY_ACTIVE: 'k1',
+    } as unknown as NodeJS.ProcessEnv);
+    expect(env.ENCRYPTION_KEYS).toEqual({ k1: KEY_32 });
+    expect(env.ENCRYPTION_KEY_ACTIVE).toBe('k1');
+  });
+
+  it('rejeita ausência de ambas as configurações de cripto', () => {
+    expect(() =>
+      parseServerEnv({
+        POSTGRES_URL: 'postgres://x',
+        AUTH_SECRET: 'secret',
+        APP_URL: 'http://localhost:3000',
+      } as unknown as NodeJS.ProcessEnv),
+    ).toThrow('Configure ENCRYPTION_KEYS');
+  });
+
+  it('rejeita ENCRYPTION_KEY_ACTIVE ausente em ENCRYPTION_KEYS', () => {
+    expect(() =>
+      parseServerEnv({
+        POSTGRES_URL: 'postgres://x',
+        AUTH_SECRET: 'secret',
+        APP_URL: 'http://localhost:3000',
+        ENCRYPTION_KEYS: JSON.stringify({ k1: KEY_32 }),
+        ENCRYPTION_KEY_ACTIVE: 'k9',
+      } as unknown as NodeJS.ProcessEnv),
+    ).toThrow('ENCRYPTION_KEY_ACTIVE não existe em ENCRYPTION_KEYS');
+  });
+
+  it('rejeita chave de 16 bytes em ENCRYPTION_KEYS', () => {
+    expect(() =>
+      parseServerEnv({
+        POSTGRES_URL: 'postgres://x',
+        AUTH_SECRET: 'secret',
+        APP_URL: 'http://localhost:3000',
+        ENCRYPTION_KEYS: JSON.stringify({ k1: 'AAAAAAAAAAAAAAAAAAAAAA==' }),
+        ENCRYPTION_KEY_ACTIVE: 'k1',
+      } as unknown as NodeJS.ProcessEnv),
+    ).toThrow('32 bytes');
+  });
 });

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-const schema = z.object({
+const KEY_ID_RE = /^[a-z0-9_-]{1,16}$/;
+
+const schema = z
+  .object({
   POSTGRES_URL: z.string().min(1, 'POSTGRES_URL é obrigatória'),
   POSTGRES_URL_DIRECT: z.string().min(1).optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(20).optional(),
@@ -10,7 +13,39 @@ const schema = z.object({
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, {
       message: 'ENCRYPTION_KEY deve ser 32 bytes em base64',
+    })
+    .optional(),
+  ENCRYPTION_KEYS: z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      if (!v) return undefined;
+      let obj: Record<string, string>;
+      try {
+        obj = JSON.parse(v) as Record<string, string>;
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'ENCRYPTION_KEYS deve ser JSON' });
+        return z.NEVER;
+      }
+      for (const [keyId, b64] of Object.entries(obj)) {
+        if (!KEY_ID_RE.test(keyId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `keyId inválido em ENCRYPTION_KEYS: ${keyId}`,
+          });
+          return z.NEVER;
+        }
+        if (Buffer.from(b64, 'base64').length !== 32) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `chave ${keyId} deve ser 32 bytes em base64`,
+          });
+          return z.NEVER;
+        }
+      }
+      return obj;
     }),
+  ENCRYPTION_KEY_ACTIVE: z.string().regex(KEY_ID_RE).optional(),
   BLING_CLIENT_ID: z.string().min(1).optional(),
   BLING_CLIENT_SECRET: z.string().min(1).optional(),
   BLING_REDIRECT_URI: z.string().url().optional(),
@@ -25,7 +60,26 @@ const schema = z.object({
   PIPELINE_SECRET: z.string().min(16).optional(),
   CRON_SECRET: z.string().min(16).optional(),
   SENTRY_DSN: z.string().url().optional(),
-});
+  })
+  .superRefine((env, ctx) => {
+    const temVersionada = Boolean(env.ENCRYPTION_KEYS && env.ENCRYPTION_KEY_ACTIVE);
+    if (!temVersionada && !env.ENCRYPTION_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Configure ENCRYPTION_KEYS + ENCRYPTION_KEY_ACTIVE (ou ENCRYPTION_KEY legado)',
+      });
+    }
+    if (
+      env.ENCRYPTION_KEYS &&
+      env.ENCRYPTION_KEY_ACTIVE &&
+      !(env.ENCRYPTION_KEY_ACTIVE in env.ENCRYPTION_KEYS)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'ENCRYPTION_KEY_ACTIVE não existe em ENCRYPTION_KEYS',
+      });
+    }
+  });
 
 export type ServerEnv = z.infer<typeof schema>;
 
