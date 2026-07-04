@@ -37,6 +37,7 @@ export async function finalize(input: FinalizeInput): Promise<void> {
       .update(reports)
       .set({
         status: 'done',
+        etapa: null,
         metricas,
         analise_ia: analise,
         erro: null,

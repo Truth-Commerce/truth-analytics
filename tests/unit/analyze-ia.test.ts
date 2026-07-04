@@ -140,9 +140,60 @@ describe('analyzeWithIA', () => {
     expect(callArgs.output_config.format.schema).toHaveProperty('properties');
     // Must NOT have a top-level $schema key (stripped for API compatibility)
     expect(callArgs.output_config.format.schema).not.toHaveProperty('$schema');
-    // System prompt must be a string
-    expect(typeof callArgs.system).toBe('string');
-    expect(callArgs.system.length).toBeGreaterThan(0);
+    // System prompt must be um array de blocos de texto (prompt caching)
+    expect(Array.isArray(callArgs.system)).toBe(true);
+    expect(callArgs.system[0].type).toBe('text');
+    expect(callArgs.system[0].text.length).toBeGreaterThan(0);
+  });
+
+  // -----------------------------------------------------------------------
+  // Case 1b: prompt caching — cache_control no system e no bloco de métricas
+  // -----------------------------------------------------------------------
+  it('Case 1b — usa cache_control no system e no bloco de métricas', async () => {
+    mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
+    await analyzeWithIA(validMetricas, 'moda');
+    const params = mockCreate.mock.calls[0][0];
+
+    // system como array de blocos com cache_control ephemeral
+    expect(Array.isArray(params.system)).toBe(true);
+    expect(params.system[0].type).toBe('text');
+    expect(params.system[0].cache_control).toEqual({ type: 'ephemeral' });
+
+    // 1º turno user: bloco de texto com métricas + cache_control
+    const user = params.messages[0];
+    expect(user.role).toBe('user');
+    expect(user.content[0].cache_control).toEqual({ type: 'ephemeral' });
+    expect(user.content[0].text).toContain('Métricas do período');
+  });
+
+  // -----------------------------------------------------------------------
+  // Case 1c: retry envia correção curta (só o erro + instrução, sem métricas)
+  // -----------------------------------------------------------------------
+  it('Case 1c — retry envia correção curta: só o erro + instrução, sem repetir as métricas', async () => {
+    const invalidAnalise = {
+      gargalos: ['Frete alto'],
+      sugestoesMelhoria: ['Negociar frete'],
+      ideiasVenda: ['Bundle'],
+      recomendacoesPreco: [],
+      // resumoExecutivo ausente → falha AnaliseIaSchema.parse
+    };
+
+    mockCreate
+      .mockResolvedValueOnce(fakeMessage(JSON.stringify(invalidAnalise)))
+      .mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
+
+    await analyzeWithIA(validMetricas, 'moda');
+    const paramsRetry = mockCreate.mock.calls[1][0];
+    const turnos = paramsRetry.messages;
+
+    expect(turnos).toHaveLength(3); // user(métricas, cacheada) + assistant(inválida) + user(correção)
+    const correcao = turnos[2];
+    expect(correcao.role).toBe('user');
+    const textoCorrecao =
+      typeof correcao.content === 'string' ? correcao.content : correcao.content[0].text;
+    expect(textoCorrecao).not.toContain('Métricas do período'); // NÃO repete as métricas
+    expect(textoCorrecao).toContain('JSON válido');
+    expect(textoCorrecao.length).toBeLessThan(700); // erro truncado a 500 + instrução
   });
 
   // -----------------------------------------------------------------------
@@ -172,7 +223,7 @@ describe('analyzeWithIA', () => {
       mockCreate.mock.calls[1][0].messages;
     const lastMsg = secondCallMessages[secondCallMessages.length - 1];
     expect(lastMsg.role).toBe('user');
-    expect(lastMsg.content).toMatch(/responda APENAS com JSON válido/);
+    expect(lastMsg.content).toMatch(/Responda APENAS com o objeto JSON válido/);
   });
 
   // -----------------------------------------------------------------------
@@ -198,8 +249,8 @@ describe('analyzeWithIA', () => {
     await analyzeWithIA(metricasParciais, null);
 
     const callArgs = mockCreate.mock.calls[0][0];
-    expect(callArgs.system).toMatch(/benchmarkParcial=true/);
-    expect(callArgs.system).toMatch(/NÃO infira/);
+    expect(callArgs.system[0].text).toMatch(/benchmarkParcial=true/);
+    expect(callArgs.system[0].text).toMatch(/NÃO infira/);
   });
 
   // -----------------------------------------------------------------------
@@ -243,11 +294,18 @@ describe('analyzeWithIA', () => {
     expect(result).toEqual(validAnalise);
     expect(mockCreate).toHaveBeenCalledTimes(2);
 
-    // A 2ª chamada NÃO deve conter um turno assistant (evita content '' rejeitado pela API)
-    const retryMessages: { role: string; content: string }[] = mockCreate.mock.calls[1][0].messages;
+    // A 2ª chamada NÃO deve conter um turno assistant (evita content '' rejeitado pela API):
+    // apenas o bloco de métricas cacheado + o turno user de correção curta.
+    const retryMessages: { role: string; content: unknown }[] = mockCreate.mock.calls[1][0].messages;
     expect(retryMessages.every((m) => m.role !== 'assistant')).toBe(true);
-    expect(retryMessages).toHaveLength(1);
+    expect(retryMessages).toHaveLength(2);
     expect(retryMessages[0].role).toBe('user');
-    expect(retryMessages[0].content).toMatch(/não continha um bloco de texto/);
+    expect(retryMessages[1].role).toBe('user');
+    const corr =
+      typeof retryMessages[1].content === 'string'
+        ? retryMessages[1].content
+        : (retryMessages[1].content as { text: string }[])[0].text;
+    expect(corr).toMatch(/Responda APENAS com o objeto JSON válido/);
+    expect(corr).not.toContain('Métricas do período');
   });
 });

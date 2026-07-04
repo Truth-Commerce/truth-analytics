@@ -1,12 +1,30 @@
 import { db } from '@/db/client';
 import { marketSnapshots } from '@/db/schema';
+import { logger } from '@/lib/logger';
+import { pLimit } from '@/lib/p-limit';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { mlPublicoProvider } from '@/modules/market/ml-publico';
 import { serpapiProvider } from '@/modules/market/serpapi';
-import type { MarketProvider } from '@/modules/market/market.types';
+import type { MarketProvider, SnapshotDados } from '@/modules/market/market.types';
 
 export type CollectMarketResult = { benchmarkParcial: boolean };
 
+const CONCORRENCIA = 6;
+const LOTE_INSERT = 100;
+
+type SnapshotValues = {
+  org_id: string;
+  report_id: string;
+  fonte: MarketProvider['fonte'];
+  keyword: string;
+  dados: SnapshotDados;
+};
+
+/**
+ * Step 2: coleta de mercado paralelizada (limite 6) com bulk insert.
+ * Degradação graciosa por job: falha de provedor/keyword marca benchmarkParcial
+ * e segue — nunca derruba o pipeline.
+ */
 export async function collectMarket(
   orgId: string,
   reportId: string,
@@ -15,40 +33,57 @@ export async function collectMarket(
   const allProducts = await listTrackedProducts(orgId);
   const activeProducts = allProducts.filter((p) => p.ativo === true);
 
-  let benchmarkParcial = false;
-  let totalSnapshots = 0;
-
+  const jobs: { keyword: string; provider: MarketProvider }[] = [];
   for (const product of activeProducts) {
-    const keywords = product.keywords.filter((k) => k.trim() !== '');
-
-    for (const keyword of keywords) {
+    for (const keyword of product.keywords.filter((k) => k.trim() !== '')) {
       for (const provider of providers) {
-        try {
-          const result = await provider.search(keyword);
-
-          await db.insert(marketSnapshots).values({
-            org_id: orgId,
-            report_id: reportId,
-            fonte: provider.fonte,
-            keyword,
-            dados: result,
-          });
-
-          totalSnapshots++;
-        } catch (err) {
-          benchmarkParcial = true;
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(
-            `[collect-market] provedor="${provider.fonte}" keyword="${keyword}" falhou: ${msg}`,
-          );
-        }
+        jobs.push({ keyword, provider });
       }
     }
   }
 
-  if (totalSnapshots === 0) {
-    benchmarkParcial = true;
+  const limit = pLimit(CONCORRENCIA);
+  let benchmarkParcial = false;
+  const rows: SnapshotValues[] = [];
+
+  await Promise.all(
+    jobs.map((job) =>
+      limit(async () => {
+        try {
+          const result = await job.provider.search(job.keyword);
+          rows.push({
+            org_id: orgId,
+            report_id: reportId,
+            fonte: job.provider.fonte,
+            keyword: job.keyword,
+            dados: { precos: result.precos, quantidadeResultados: result.precos.length },
+          });
+        } catch (err) {
+          benchmarkParcial = true;
+          logger.warn(
+            'provedor de mercado falhou',
+            { orgId, reportId, fonte: job.provider.fonte, keyword: job.keyword },
+            err,
+          );
+        }
+      }),
+    ),
+  );
+
+  for (let i = 0; i < rows.length; i += LOTE_INSERT) {
+    try {
+      await db.insert(marketSnapshots).values(rows.slice(i, i + LOTE_INSERT));
+    } catch (err) {
+      // Semântica graciosa preservada: falha de gravação marca parcial e segue
+      // com os lotes restantes — nunca derruba a coleta (como no código
+      // anterior, que capturava por operação de insert).
+      benchmarkParcial = true;
+      logger.warn('market_insert_falhou', { orgId, reportId, batch: i }, err);
+    }
   }
 
+  if (rows.length === 0) {
+    benchmarkParcial = true;
+  }
   return { benchmarkParcial };
 }

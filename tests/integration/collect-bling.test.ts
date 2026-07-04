@@ -4,11 +4,29 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import { connections, orders, organizations } from '@/db/schema';
+import type { RawOrder } from '@/modules/providers/types';
 
 const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
 const tdb = drizzle(sql);
 const RUN = Date.now();
+
+// Respeita o novo contrato de fetchOrders(onPage): entrega os pedidos via
+// onPage (streaming por página) e retorna [] — como o provider real faz.
+function mockFetchOrdersOnce(
+  provider: typeof import('@/modules/providers/bling/provider'),
+  pedidos: RawOrder[],
+) {
+  return vi
+    .spyOn(provider.blingProvider, 'fetchOrders')
+    .mockImplementationOnce(async (_orgId, _periodo, onPage) => {
+      if (onPage) {
+        await onPage(pedidos);
+        return [];
+      }
+      return pedidos;
+    });
+}
 
 describe.skipIf(!url)('collect-bling — integração', () => {
   let orgId = '';
@@ -77,7 +95,7 @@ describe.skipIf(!url)('collect-bling — integração', () => {
 
   it('insere pedidos e retorna contagem correta', async () => {
     const provider = await import('@/modules/providers/bling/provider');
-    vi.spyOn(provider.blingProvider, 'fetchOrders').mockResolvedValueOnce(MOCK_ORDERS);
+    mockFetchOrdersOnce(provider, MOCK_ORDERS);
 
     const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
     const result = await collectBlingOrders(orgId, PERIODO);
@@ -88,7 +106,7 @@ describe.skipIf(!url)('collect-bling — integração', () => {
 
   it('upsert é idempotente — segunda execução não duplica', async () => {
     const provider = await import('@/modules/providers/bling/provider');
-    vi.spyOn(provider.blingProvider, 'fetchOrders').mockResolvedValueOnce(MOCK_ORDERS);
+    mockFetchOrdersOnce(provider, MOCK_ORDERS);
 
     const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
     await collectBlingOrders(orgId, PERIODO);
@@ -127,7 +145,7 @@ describe.skipIf(!url)('collect-bling — integração', () => {
     ];
 
     const provider = await import('@/modules/providers/bling/provider');
-    vi.spyOn(provider.blingProvider, 'fetchOrders').mockResolvedValueOnce(UPDATED_ORDERS);
+    mockFetchOrdersOnce(provider, UPDATED_ORDERS);
 
     const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
     await collectBlingOrders(orgId, PERIODO);
@@ -174,10 +192,7 @@ describe.skipIf(!url)('collect-bling — integração', () => {
 
     try {
       const provider = await import('@/modules/providers/bling/provider');
-      vi.spyOn(provider.blingProvider, 'fetchOrders').mockResolvedValueOnce([
-        VALID_ORDER,
-        EMPTY_ID_ORDER,
-      ]);
+      mockFetchOrdersOnce(provider, [VALID_ORDER, EMPTY_ID_ORDER]);
 
       const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
       const result = await collectBlingOrders(guardOrgId, PERIODO);
@@ -213,7 +228,7 @@ describe.skipIf(!url)('collect-bling — integração', () => {
     ];
 
     const provider = await import('@/modules/providers/bling/provider');
-    vi.spyOn(provider.blingProvider, 'fetchOrders').mockResolvedValueOnce(ORG2_ORDERS);
+    mockFetchOrdersOnce(provider, ORG2_ORDERS);
 
     const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
     await collectBlingOrders(orgId2, PERIODO);

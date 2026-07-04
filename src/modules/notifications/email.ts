@@ -1,8 +1,10 @@
 import { serverEnv } from '@/lib/env';
+import { logger } from '@/lib/logger';
 import type { Plano } from '@/modules/auth/user.types';
 import {
   accountActivatedTemplate,
   blingConnectionFailedTemplate,
+  passwordResetTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
 } from './templates';
@@ -21,7 +23,7 @@ export async function sendEmail(input: {
   text: string;
 }): Promise<void> {
   if (!serverEnv.RESEND_API_KEY || !serverEnv.EMAIL_FROM) {
-    console.info('[email] (no-op) ' + input.subject);
+    logger.info('e-mail em modo no-op', { subject: input.subject });
     return;
   }
 
@@ -36,7 +38,7 @@ export async function sendEmail(input: {
       text: input.text,
     });
   } catch (err) {
-    console.warn('[email] falha ao enviar: ' + (err instanceof Error ? err.message : String(err)));
+    logger.warn('falha ao enviar e-mail', { subject: input.subject }, err);
   }
 }
 
@@ -83,5 +85,14 @@ export async function sendPipelineFailedEmail(
  */
 export async function sendBlingConnectionFailedEmail(to: string): Promise<void> {
   const content = blingConnectionFailedTemplate(serverEnv.APP_URL);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Envia o link de redefinição de senha. Nunca lança.
+ */
+export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
+  const link = `${serverEnv.APP_URL}/redefinir-senha/${token}`;
+  const content = passwordResetTemplate(link);
   await sendEmail({ to, ...content });
 }

@@ -133,14 +133,14 @@ describe.skipIf(!url)('compute-metrics — integração', () => {
         report_id: reportId,
         fonte: 'serpapi',
         keyword: `kw-a-${RUN}`,
-        dados: { precos: [100, 200, 300], bruto: {} },
+        dados: { precos: [100, 200, 300] },
       },
       {
         org_id: orgId,
         report_id: reportId,
         fonte: 'ml_publico',
         keyword: `kw-a-${RUN}`,
-        dados: { precos: [150, 250], bruto: {} },
+        dados: { precos: [150, 250] },
       },
     ]);
 
@@ -289,7 +289,7 @@ describe.skipIf(!url)('compute-metrics — integração', () => {
       report_id: reportId2,
       fonte: 'serpapi',
       keyword: `kw-iso-${RUN}`,
-      dados: { precos: [99999], bruto: {} },
+      dados: { precos: [99999] },
     });
 
     try {

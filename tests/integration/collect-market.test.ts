@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import { marketSnapshots, organizations, reports, trackedProducts } from '@/db/schema';
+import type { MarketProvider } from '@/modules/market/market.types';
 
 const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
@@ -77,7 +78,6 @@ describe.skipIf(!url)('collect-market — integração', () => {
 
       vi.spyOn(serpapi.serpapiProvider, 'search').mockResolvedValueOnce({
         precos: [99.9, 109.9],
-        bruto: { shopping_results: [{ price: 99.9 }, { price: 109.9 }] },
       });
       vi.spyOn(mlPublico.mlPublicoProvider, 'search').mockRejectedValueOnce(
         new Error('ml_publico_erro_503'),
@@ -100,8 +100,8 @@ describe.skipIf(!url)('collect-market — integração', () => {
       expect(rows.length).toBe(1);
       expect(rows[0].fonte).toBe('serpapi');
       expect(rows[0].keyword).toBe(`keyword-a-${RUN}`);
-      const dados = rows[0].dados as { precos: number[] };
-      expect(dados.precos).toEqual([99.9, 109.9]);
+      const dados = rows[0].dados as { precos: number[]; quantidadeResultados: number };
+      expect(dados).toEqual({ precos: [99.9, 109.9], quantidadeResultados: 2 });
     } finally {
       await tdb.delete(marketSnapshots).where(eq(marketSnapshots.report_id, reportId));
       await tdb.delete(trackedProducts).where(eq(trackedProducts.id, tp.id));
@@ -127,12 +127,12 @@ describe.skipIf(!url)('collect-market — integração', () => {
 
       // 2 keywords × 2 providers = 4 calls → 4 mock results
       vi.spyOn(serpapi.serpapiProvider, 'search')
-        .mockResolvedValueOnce({ precos: [50.0], bruto: {} })
-        .mockResolvedValueOnce({ precos: [60.0], bruto: {} });
+        .mockResolvedValueOnce({ precos: [50.0] })
+        .mockResolvedValueOnce({ precos: [60.0] });
 
       vi.spyOn(mlPublico.mlPublicoProvider, 'search')
-        .mockResolvedValueOnce({ precos: [48.0], bruto: {} })
-        .mockResolvedValueOnce({ precos: [58.0], bruto: {} });
+        .mockResolvedValueOnce({ precos: [48.0] })
+        .mockResolvedValueOnce({ precos: [58.0] });
 
       const { collectMarket } = await import('@/modules/pipeline/steps/collect-market');
       const result = await collectMarket(orgId, reportId, [
@@ -182,11 +182,9 @@ describe.skipIf(!url)('collect-market — integração', () => {
 
       const serpSpy = vi.spyOn(serpapi.serpapiProvider, 'search').mockResolvedValue({
         precos: [100.0],
-        bruto: {},
       });
       const mlSpy = vi.spyOn(mlPublico.mlPublicoProvider, 'search').mockResolvedValue({
         precos: [95.0],
-        bruto: {},
       });
 
       const { collectMarket } = await import('@/modules/pipeline/steps/collect-market');
@@ -239,7 +237,6 @@ describe.skipIf(!url)('collect-market — integração', () => {
 
       vi.spyOn(serpapi.serpapiProvider, 'search').mockResolvedValue({
         precos: [200.0],
-        bruto: {},
       });
 
       const { collectMarket } = await import('@/modules/pipeline/steps/collect-market');
@@ -266,6 +263,75 @@ describe.skipIf(!url)('collect-market — integração', () => {
       await tdb.delete(marketSnapshots).where(eq(marketSnapshots.org_id, orgId2));
       await tdb.delete(trackedProducts).where(eq(trackedProducts.id, tp1.id));
       await tdb.delete(trackedProducts).where(eq(trackedProducts.id, tp2.id));
+    }
+  });
+
+  it('persiste dados podados (sem bruto) com quantidadeResultados', async () => {
+    const [tp] = await tdb
+      .insert(trackedProducts)
+      .values({
+        org_id: orgId,
+        nome: `Produto Podado ${RUN}`,
+        sku: `SKU-PODA-${RUN}`,
+        keywords: [`keyword-poda-${RUN}`],
+        ativo: true,
+      })
+      .returning({ id: trackedProducts.id });
+
+    try {
+      const ok: MarketProvider = {
+        fonte: 'ml_publico',
+        search: async () => ({ precos: [10, 20] }),
+      };
+
+      const { collectMarket } = await import('@/modules/pipeline/steps/collect-market');
+      const { benchmarkParcial } = await collectMarket(orgId, reportId, [ok]);
+      expect(benchmarkParcial).toBe(false);
+
+      const snaps = await tdb
+        .select()
+        .from(marketSnapshots)
+        .where(eq(marketSnapshots.report_id, reportId));
+      expect(snaps.length).toBeGreaterThan(0);
+      expect(snaps[0]!.dados).toEqual({ precos: [10, 20], quantidadeResultados: 2 });
+    } finally {
+      await tdb.delete(marketSnapshots).where(eq(marketSnapshots.report_id, reportId));
+      await tdb.delete(trackedProducts).where(eq(trackedProducts.id, tp.id));
+    }
+  });
+
+  it('insert que rejeita → resolve com benchmarkParcial=true e não lança', async () => {
+    const [tp] = await tdb
+      .insert(trackedProducts)
+      .values({
+        org_id: orgId,
+        nome: `Produto InsertFail ${RUN}`,
+        sku: `SKU-INSFAIL-${RUN}`,
+        keywords: [`keyword-insfail-${RUN}`],
+        ativo: true,
+      })
+      .returning({ id: trackedProducts.id });
+
+    const { db } = await import('@/db/client');
+    const insertSpy = vi.spyOn(db, 'insert').mockImplementation(() => {
+      throw new Error('conexao_caiu');
+    });
+
+    try {
+      const ok: MarketProvider = {
+        fonte: 'ml_publico',
+        search: async () => ({ precos: [10, 20] }),
+      };
+
+      const { collectMarket } = await import('@/modules/pipeline/steps/collect-market');
+      await expect(collectMarket(orgId, reportId, [ok])).resolves.toEqual({
+        benchmarkParcial: true,
+      });
+      expect(insertSpy).toHaveBeenCalled();
+    } finally {
+      insertSpy.mockRestore();
+      await tdb.delete(marketSnapshots).where(eq(marketSnapshots.report_id, reportId));
+      await tdb.delete(trackedProducts).where(eq(trackedProducts.id, tp.id));
     }
   });
 });

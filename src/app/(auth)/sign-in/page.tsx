@@ -40,6 +40,11 @@ export default function SignInPage() {
               Entrar
             </Button>
           </form>
+          <p className="mt-3 text-center text-sm">
+            <a href="/esqueci-senha" className="text-muted hover:text-brand hover:underline" data-testid="esqueci-senha-link">
+              Esqueci minha senha
+            </a>
+          </p>
           <p className="mt-4 text-center text-sm text-muted">
             Não tem conta?{' '}
             <a href="/sign-up" className="text-brand hover:underline">

@@ -27,6 +27,7 @@ import {
   users,
 } from '@/db/schema';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
+import { createQueuedReport } from '@/modules/reports/report.repository';
 
 const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
@@ -50,7 +51,6 @@ const MOCK_ORDERS = [
 
 const MOCK_MARKET_RESULT = {
   precos: [85.0, 95.0],
-  bruto: { results: [] },
 };
 
 const MOCK_ANALISE: AnaliseIa = {
@@ -154,11 +154,14 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     const failedSpy = vi.spyOn(emailMod, 'sendPipelineFailedEmail').mockResolvedValue(undefined);
 
     const { generateReport } = await import('@/modules/pipeline/orchestrator');
-    const result = await generateReport(orgId);
+    const agora = new Date();
+    const inicio = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const queuedId = await createQueuedReport(orgId, { inicio, fim: agora });
+    const result = await generateReport(queuedId);
 
     // Retorno correto
     expect(result.status).toBe('done');
-    expect(typeof result.reportId).toBe('string');
+    expect(result.reportId).toBe(queuedId);
 
     // Report no banco: done + metricas + analise_ia preenchidos
     const [reportRow] = await tdb
@@ -168,6 +171,7 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     expect(reportRow).toBeDefined();
     expect(reportRow.status).toBe('done');
+    expect(reportRow.etapa).toBeNull();
     expect(reportRow.metricas).not.toBeNull();
     expect(reportRow.analise_ia).not.toBeNull();
     expect(reportRow.erro).toBeNull();
@@ -242,11 +246,14 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     vi.spyOn(recipientsMod, 'getAdminAlertEmail').mockReturnValue('admin@truth.com');
 
     const { generateReport } = await import('@/modules/pipeline/orchestrator');
-    const result = await generateReport(orgId);
+    const agora = new Date();
+    const inicio = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const queuedId = await createQueuedReport(orgId, { inicio, fim: agora });
+    const result = await generateReport(queuedId);
 
     // Retorno: failed
     expect(result.status).toBe('failed');
-    expect(typeof result.reportId).toBe('string');
+    expect(result.reportId).toBe(queuedId);
 
     // Report no banco: failed + erro preenchido
     const [reportRow] = await tdb
@@ -257,6 +264,8 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     expect(reportRow).toBeDefined();
     expect(reportRow.status).toBe('failed');
     expect(reportRow.erro).toContain('bling_indisponivel_503');
+    // etapa preservada onde o pipeline morreu (coleta) — diagnóstico
+    expect(reportRow.etapa).toBe('coletando_vendas');
     // metricas e analise_ia devem ser null
     expect(reportRow.metricas).toBeNull();
     expect(reportRow.analise_ia).toBeNull();
@@ -282,5 +291,67 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     // E-mail de sucesso NÃO chamado
     expect(readySpy).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Idempotência de re-POST
+  // -------------------------------------------------------------------------
+  it('re-executar generateReport de um report não-queued retorna ignorado', async () => {
+    // Mock Bling rejeitando: 1ª execução falha rápido (sem chamada real), consome o queued
+    const blingMod = await import('@/modules/providers/bling/provider');
+    vi.spyOn(blingMod.blingProvider, 'fetchOrders').mockRejectedValue(
+      new Error('bling_indisponivel_503'),
+    );
+
+    // Mercado mockado para evitar chamada real (roda em paralelo à coleta Bling)
+    const serpapiMod = await import('@/modules/market/serpapi');
+    const mlMod = await import('@/modules/market/ml-publico');
+    vi.spyOn(serpapiMod.serpapiProvider, 'search').mockResolvedValue(MOCK_MARKET_RESULT);
+    vi.spyOn(mlMod.mlPublicoProvider, 'search').mockResolvedValue(MOCK_MARKET_RESULT);
+
+    // Sem e-mail de alerta admin: evita envio real na 1ª (failed)
+    const recipientsMod = await import('@/modules/notifications/recipients');
+    vi.spyOn(recipientsMod, 'getAdminAlertEmail').mockReturnValue(null);
+
+    const { generateReport } = await import('@/modules/pipeline/orchestrator');
+    const agora = new Date();
+    const inicio = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const reportId = await createQueuedReport(orgId, { inicio, fim: agora });
+
+    await generateReport(reportId); // 1ª execução consome o queued (→ failed)
+    const segunda = await generateReport(reportId);
+    expect(segunda.status).toBe('ignorado');
+    expect(segunda.reportId).toBe(reportId);
+  });
+
+  // -------------------------------------------------------------------------
+  // Transição guarda queued→running: report já finalizado não é reaberto
+  // -------------------------------------------------------------------------
+  it('generateReport de um report done retorna ignorado e NÃO reabre para running', async () => {
+    const { generateReport } = await import('@/modules/pipeline/orchestrator');
+    // Report já concluído (não-queued) — simula pipeline que já terminou
+    const [done] = await tdb
+      .insert(reports)
+      .values({
+        org_id: orgId,
+        status: 'done',
+        periodo_inicio: new Date('2026-06-01T00:00:00Z'),
+        periodo_fim: new Date('2026-06-30T23:59:59Z'),
+        metricas: { ticketMedio: 42 },
+        analise_ia: MOCK_ANALISE,
+      })
+      .returning({ id: reports.id });
+
+    const outcome = await generateReport(done.id);
+    expect(outcome.status).toBe('ignorado');
+    expect(outcome.reportId).toBe(done.id);
+
+    // Estado intocado: continua done, etapa não vira 'coletando_vendas'
+    const [linha] = await tdb
+      .select({ status: reports.status, etapa: reports.etapa })
+      .from(reports)
+      .where(eq(reports.id, done.id));
+    expect(linha.status).toBe('done');
+    expect(linha.etapa).toBeNull();
   });
 });

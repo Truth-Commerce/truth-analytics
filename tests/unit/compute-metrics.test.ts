@@ -338,7 +338,7 @@ describe('posicaoPreco', () => {
   const makeSnapshot = (overrides: Partial<SnapshotRow> = {}): SnapshotRow => ({
     fonte: 'serpapi',
     keyword: 'keyword-t',
-    dados: { precos: [100, 200], bruto: {} },
+    dados: { precos: [100, 200] },
     ...overrides,
   });
 
@@ -393,7 +393,7 @@ describe('posicaoPreco', () => {
   it('calcula precoMercadoMediano via keyword mapping', () => {
     const p: ProductRow = makeProduct({ sku: 'SKU-A', keywords: ['kw-a'] });
     const snaps: SnapshotRow[] = [
-      makeSnapshot({ keyword: 'kw-a', dados: { precos: [100, 200, 300], bruto: {} } }),
+      makeSnapshot({ keyword: 'kw-a', dados: { precos: [100, 200, 300] } }),
     ];
     const result = posicaoPreco([p], snaps, []);
     expect(result[0].precoMercadoMediano).toBe(200);
@@ -402,8 +402,8 @@ describe('posicaoPreco', () => {
   it('agrega precos de múltiplas keywords', () => {
     const p: ProductRow = makeProduct({ sku: 'SKU-M', keywords: ['kw-1', 'kw-2'] });
     const snaps: SnapshotRow[] = [
-      makeSnapshot({ keyword: 'kw-1', dados: { precos: [10, 20], bruto: {} } }),
-      makeSnapshot({ keyword: 'kw-2', dados: { precos: [30, 40], bruto: {} } }),
+      makeSnapshot({ keyword: 'kw-1', dados: { precos: [10, 20] } }),
+      makeSnapshot({ keyword: 'kw-2', dados: { precos: [30, 40] } }),
     ];
     // all precos: [10,20,30,40] → sorted: [10,20,30,40] → median = (20+30)/2 = 25
     const result = posicaoPreco([p], snaps, []);
@@ -413,9 +413,9 @@ describe('posicaoPreco', () => {
   it('fonte predominante = mais frequente; tie-break asc', () => {
     const p: ProductRow = makeProduct({ sku: 'SKU-F', keywords: ['kw-f'] });
     const snaps: SnapshotRow[] = [
-      makeSnapshot({ keyword: 'kw-f', fonte: 'serpapi', dados: { precos: [100], bruto: {} } }),
-      makeSnapshot({ keyword: 'kw-f', fonte: 'serpapi', dados: { precos: [110], bruto: {} } }),
-      makeSnapshot({ keyword: 'kw-f', fonte: 'ml_publico', dados: { precos: [90], bruto: {} } }),
+      makeSnapshot({ keyword: 'kw-f', fonte: 'serpapi', dados: { precos: [100] } }),
+      makeSnapshot({ keyword: 'kw-f', fonte: 'serpapi', dados: { precos: [110] } }),
+      makeSnapshot({ keyword: 'kw-f', fonte: 'ml_publico', dados: { precos: [90] } }),
     ];
     const result = posicaoPreco([p], snaps, []);
     expect(result[0].fonte).toBe('serpapi');
@@ -424,8 +424,8 @@ describe('posicaoPreco', () => {
   it('fonte tie-break alfabético asc', () => {
     const p: ProductRow = makeProduct({ sku: 'SKU-T', keywords: ['kw-t'] });
     const snaps: SnapshotRow[] = [
-      makeSnapshot({ keyword: 'kw-t', fonte: 'serpapi', dados: { precos: [100], bruto: {} } }),
-      makeSnapshot({ keyword: 'kw-t', fonte: 'ml_publico', dados: { precos: [90], bruto: {} } }),
+      makeSnapshot({ keyword: 'kw-t', fonte: 'serpapi', dados: { precos: [100] } }),
+      makeSnapshot({ keyword: 'kw-t', fonte: 'ml_publico', dados: { precos: [90] } }),
     ];
     const result = posicaoPreco([p], snaps, []);
     // tie: both 1 snapshot → 'ml_publico' < 'serpapi'
@@ -435,7 +435,7 @@ describe('posicaoPreco', () => {
   it('não usa snapshots de keywords fora do produto', () => {
     const p: ProductRow = makeProduct({ sku: 'SKU-X', keywords: ['kw-x'] });
     const snaps: SnapshotRow[] = [
-      makeSnapshot({ keyword: 'kw-other', dados: { precos: [999], bruto: {} } }),
+      makeSnapshot({ keyword: 'kw-other', dados: { precos: [999] } }),
     ];
     const result = posicaoPreco([p], snaps, []);
     expect(result[0].precoMercadoMediano).toBe(0);

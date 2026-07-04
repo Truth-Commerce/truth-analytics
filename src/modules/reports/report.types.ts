@@ -2,6 +2,12 @@ import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 
 export type ReportStatus = 'queued' | 'running' | 'done' | 'failed';
 
+export type ReportEtapa =
+  | 'coletando_vendas'
+  | 'analisando_mercado'
+  | 'analisando_ia'
+  | 'finalizando';
+
 export type ReportSummary = {
   id: string;
   status: ReportStatus;

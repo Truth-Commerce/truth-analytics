@@ -15,6 +15,8 @@ const ERROR_LABELS: Record<string, string> = {
   bling_nao_conectado: 'Conecte o Bling em Conexões.',
   org_nao_encontrada: 'Organização não encontrada. Recarregue a página.',
   falha_geracao: 'Falha ao gerar o relatório. Tente novamente.',
+  relatorio_em_andamento: 'Já existe um relatório em processamento para sua conta.',
+  pipeline_nao_configurado: 'Geração indisponível no momento. Fale com o suporte.',
 };
 
 function errorLabel(code: string): string {
@@ -65,7 +67,9 @@ export function GenerateReport({
         <p className="mt-3 text-sm text-red-400">{errorLabel(state.error)}</p>
       ) : null}
       {state.reportId && !state.error ? (
-        <p className="mt-3 text-sm text-brand">Relatório gerado.</p>
+        <p className="mt-3 text-sm text-brand" data-testid="report-queued">
+          Relatório em processamento. Avisaremos por e-mail quando estiver pronto.
+        </p>
       ) : null}
     </div>
   );
