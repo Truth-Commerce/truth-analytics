@@ -35,6 +35,36 @@ describe('logger estruturado', () => {
     expect(linha.ctxSerializationError).toBe(true);
   });
 
+  it('getter hostil no ctx não derruba o logger (avaliado no spread)', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const ctx = {
+      get bad(): string {
+        throw new Error('getter explode');
+      },
+    };
+    expect(() => logger.info('getter hostil', ctx)).not.toThrow();
+    const linha = JSON.parse(spy.mock.calls[0]![0] as string);
+    expect(linha.nivel).toBe('info');
+    expect(linha.msg).toBe('getter hostil');
+    expect(linha.ctxSerializationError).toBe(true);
+  });
+
+  it('err não-Error com toString hostil não derruba logger.warn/logger.error', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const evil = {
+      toString(): string {
+        throw new Error('toString explode');
+      },
+    };
+    expect(() => logger.warn('aviso', { orgId: 'org-1' }, evil)).not.toThrow();
+    expect(() => logger.error('falhou', { orgId: 'org-1' }, evil)).not.toThrow();
+    const linhaWarn = JSON.parse(warnSpy.mock.calls[0]![0] as string);
+    expect(linhaWarn.ctxSerializationError).toBe(true);
+    const linhaError = JSON.parse(errorSpy.mock.calls[0]![0] as string);
+    expect(linhaError.ctxSerializationError).toBe(true);
+  });
+
   it('createLogger mescla contexto base', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const log = createLogger({ reportId: 'rep-9' });

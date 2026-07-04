@@ -10,25 +10,23 @@ export type LogContext = {
 };
 
 function emit(nivel: Nivel, msg: string, ctx?: LogContext, err?: unknown): void {
-  const linha: Record<string, unknown> = {
-    ts: new Date().toISOString(),
-    nivel,
-    msg,
-    ...ctx,
-  };
-  if (err !== undefined) {
-    linha.erro =
-      err instanceof Error
-        ? { name: err.name, message: err.message, stack: err.stack }
-        : String(err);
-  }
+  const ts = new Date().toISOString();
   let out: string;
   try {
+    // TODA a montagem fica dentro do try: o spread avalia getters do ctx,
+    // e String(err) pode lançar (toString hostil) — logger nunca lança.
+    const linha: Record<string, unknown> = { ts, nivel, msg, ...ctx };
+    if (err !== undefined) {
+      linha.erro =
+        err instanceof Error
+          ? { name: err.name, message: err.message, stack: err.stack }
+          : String(err);
+    }
     out = JSON.stringify(linha);
   } catch {
-    // ctx não serializável (referência circular, BigInt, toJSON que lança):
-    // observabilidade nunca quebra o fluxo — emite fallback mínimo.
-    out = JSON.stringify({ ts: linha.ts, nivel, msg, ctxSerializationError: true });
+    // ctx/err não serializável (getter hostil, referência circular, BigInt,
+    // toString/toJSON que lança): observabilidade nunca quebra o fluxo.
+    out = JSON.stringify({ ts, nivel, msg, ctxSerializationError: true });
   }
   if (nivel === 'error') console.error(out);
   else if (nivel === 'warn') console.warn(out);
