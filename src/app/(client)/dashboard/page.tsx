@@ -8,6 +8,7 @@ import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.type
 import { dashboardStats, insightsFromAnalise } from '@/modules/reports/dashboard-model';
 import { getConnection } from '@/modules/connections/connection.repository';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
+import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -17,16 +18,18 @@ import { GenerateReport } from './generate-report';
 import { StatCards } from './stat-cards';
 import { InsightsMarquee } from './insights-marquee';
 import { DashboardCharts } from './dashboard-charts';
+import { OnboardingChecklist } from './onboarding-checklist';
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
 
-  const [latest, reports, conn, org, latestDone] = await Promise.all([
+  const [latest, reports, conn, org, latestDone, produtos] = await Promise.all([
     getLatestReport(access.orgId),
     listReports(access.orgId),
     getConnection(access.orgId),
     getOrganizationById(access.orgId),
     getLatestDoneReport(access.orgId),
+    listTrackedProducts(access.orgId),
   ]);
 
   const blingOk = !!conn?.connected;
@@ -59,6 +62,12 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Dashboard</h1>
+
+      <OnboardingChecklist
+        blingOk={blingOk}
+        temProdutos={produtos.length > 0}
+        temRelatorio={reports.length > 0}
+      />
 
       {/* Marquee de insights do último relatório */}
       <InsightsMarquee insights={insights} />
