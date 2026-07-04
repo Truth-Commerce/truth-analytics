@@ -1,11 +1,10 @@
-import { timingSafeEqual } from 'node:crypto';
-
 import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { secretsMatch } from '@/lib/secret-compare';
 import { generateReport } from '@/modules/pipeline/orchestrator';
 
 export const dynamic = 'force-dynamic';
@@ -13,14 +12,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const bodySchema = z.object({ reportId: z.string().uuid() });
-
-function secretsMatch(recebido: string | null, esperado: string): boolean {
-  if (!recebido) return false;
-  const a = Buffer.from(recebido);
-  const b = Buffer.from(esperado);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
 
 export async function POST(req: Request): Promise<NextResponse> {
   if (!serverEnv.PIPELINE_SECRET) {

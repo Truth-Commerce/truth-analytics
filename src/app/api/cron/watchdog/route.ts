@@ -5,6 +5,7 @@ import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { secretsMatch } from '@/lib/secret-compare';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!serverEnv.CRON_SECRET) {
     return NextResponse.json({ error: 'cron_nao_configurado' }, { status: 500 });
   }
-  if (req.headers.get('authorization') !== `Bearer ${serverEnv.CRON_SECRET}`) {
+  if (!secretsMatch(req.headers.get('authorization'), `Bearer ${serverEnv.CRON_SECRET}`)) {
     return NextResponse.json({ error: 'nao_autorizado' }, { status: 401 });
   }
 
