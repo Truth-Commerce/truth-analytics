@@ -3,9 +3,28 @@ import { describe, expect, it } from 'vitest';
 import {
   accountActivatedTemplate,
   blingConnectionFailedTemplate,
+  escapeHtml,
   pipelineFailedTemplate,
   reportReadyTemplate,
+  taskAprovadaTemplate,
+  taskComentarioTemplate,
+  taskCriadaTemplate,
+  taskDevolvidaTemplate,
 } from '@/modules/notifications/templates';
+
+describe('escapeHtml', () => {
+  it('escapa & < > " \' na ordem correta (sem double-escaping)', () => {
+    expect(escapeHtml('&<>"\'')).toBe('&amp;&lt;&gt;&quot;&#39;');
+  });
+
+  it('escapa & antes dos demais para não escapar duas vezes as entidades geradas', () => {
+    expect(escapeHtml('<')).toBe('&lt;');
+  });
+
+  it('mantém texto sem caracteres especiais inalterado', () => {
+    expect(escapeHtml('Catalogar produto X')).toBe('Catalogar produto X');
+  });
+});
 
 describe('notification templates (puro)', () => {
   describe('accountActivatedTemplate', () => {
@@ -112,6 +131,157 @@ describe('notification templates (puro)', () => {
     it('subject menciona "expirou"', () => {
       const result = blingConnectionFailedTemplate('http://app');
       expect(result.subject.toLowerCase()).toContain('expirou');
+    });
+  });
+
+  describe('taskCriadaTemplate', () => {
+    it('retorna subject, html e text não-vazios', () => {
+      const result = taskCriadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject.length).toBeGreaterThan(0);
+      expect(result.html.length).toBeGreaterThan(0);
+      expect(result.text.length).toBeGreaterThan(0);
+    });
+
+    it('subject está em pt-BR e menciona Truth Analytics', () => {
+      const result = taskCriadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject).toContain('Truth Analytics');
+    });
+
+    it('text contém o título da tarefa', () => {
+      const result = taskCriadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('Catalogar produto X');
+    });
+
+    it('text contém a url', () => {
+      const result = taskCriadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('http://app/tasks/1');
+    });
+
+    it('html contém a url', () => {
+      const result = taskCriadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.html).toContain('http://app/tasks/1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)><script>alert(2)</script>';
+      const result = taskCriadaTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).not.toContain('<script>');
+      expect(result.html).toContain('&lt;img');
+      expect(result.text).toContain(titulo);
+    });
+  });
+
+  describe('taskComentarioTemplate', () => {
+    it('retorna subject, html e text não-vazios', () => {
+      const result = taskComentarioTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject.length).toBeGreaterThan(0);
+      expect(result.html.length).toBeGreaterThan(0);
+      expect(result.text.length).toBeGreaterThan(0);
+    });
+
+    it('subject está em pt-BR e menciona Truth Analytics', () => {
+      const result = taskComentarioTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject).toContain('Truth Analytics');
+    });
+
+    it('text contém o título da tarefa', () => {
+      const result = taskComentarioTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('Catalogar produto X');
+    });
+
+    it('text contém a url', () => {
+      const result = taskComentarioTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('http://app/tasks/1');
+    });
+
+    it('html contém a url', () => {
+      const result = taskComentarioTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.html).toContain('http://app/tasks/1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)>';
+      const result = taskComentarioTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
+      expect(result.text).toContain(titulo);
+    });
+  });
+
+  describe('taskDevolvidaTemplate', () => {
+    it('retorna subject, html e text não-vazios', () => {
+      const result = taskDevolvidaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject.length).toBeGreaterThan(0);
+      expect(result.html.length).toBeGreaterThan(0);
+      expect(result.text.length).toBeGreaterThan(0);
+    });
+
+    it('subject está em pt-BR e menciona Truth Analytics', () => {
+      const result = taskDevolvidaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject).toContain('Truth Analytics');
+    });
+
+    it('text contém o título da tarefa', () => {
+      const result = taskDevolvidaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('Catalogar produto X');
+    });
+
+    it('text contém a url', () => {
+      const result = taskDevolvidaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('http://app/tasks/1');
+    });
+
+    it('html contém a url', () => {
+      const result = taskDevolvidaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.html).toContain('http://app/tasks/1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)>';
+      const result = taskDevolvidaTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
+      expect(result.text).toContain(titulo);
+    });
+  });
+
+  describe('taskAprovadaTemplate', () => {
+    it('retorna subject, html e text não-vazios', () => {
+      const result = taskAprovadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject.length).toBeGreaterThan(0);
+      expect(result.html.length).toBeGreaterThan(0);
+      expect(result.text.length).toBeGreaterThan(0);
+    });
+
+    it('subject está em pt-BR e menciona Truth Analytics', () => {
+      const result = taskAprovadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.subject).toContain('Truth Analytics');
+    });
+
+    it('text contém o título da tarefa', () => {
+      const result = taskAprovadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('Catalogar produto X');
+    });
+
+    it('text contém a url', () => {
+      const result = taskAprovadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.text).toContain('http://app/tasks/1');
+    });
+
+    it('html contém a url', () => {
+      const result = taskAprovadaTemplate('Catalogar produto X', 'http://app/tasks/1');
+      expect(result.html).toContain('http://app/tasks/1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = `<img src=x onerror=alert(1)> and "quotes" and 'apostrophes'`;
+      const result = taskAprovadaTemplate(titulo, 'http://app/tasks/1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
+      expect(result.html).toContain('&quot;quotes&quot;');
+      expect(result.html).toContain('&#39;apostrophes&#39;');
+      expect(result.text).toContain(titulo);
     });
   });
 });

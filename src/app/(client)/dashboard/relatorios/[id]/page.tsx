@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation';
 
+import { AchadosParaTasks } from '@/components/tasks/AchadosParaTasks';
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getReportById } from '@/modules/reports/report.repository';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { friendlyReportError } from '@/modules/reports/report-errors';
-import { PRIORIDADE_LABEL, recomendacaoCards } from '@/modules/reports/report-view-model';
+import { listTaskTitulosByReport } from '@/modules/tasks/task.repository';
 import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -16,15 +17,15 @@ import { Reveal } from './reveal';
 import { Toc } from './toc';
 import { EvolucaoChart } from './evolucao-chart';
 
-const PRIORIDADE_BADGE = { alta: 'danger', media: 'warn', baixa: 'neutral' } as const;
-
 export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
   const access = await requireActiveOrg();
   const rel = await getReportById(params.id, access.orgId);
 
   if (!rel) notFound();
 
-  const cards = rel.analiseIa ? recomendacaoCards(rel.analiseIa) : [];
+  const titulosExistentes = rel.analiseIa
+    ? await listTaskTitulosByReport(rel.id, access.orgId)
+    : [];
 
   return (
     <main className="mx-auto max-w-6xl p-6 md:p-8">
@@ -234,18 +235,56 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                   </Card>
                 </Reveal>
 
-                {cards.length > 0 ? (
+                {rel.analiseIa.gargalos.length > 0 ||
+                rel.analiseIa.sugestoesMelhoria.length > 0 ||
+                rel.analiseIa.ideiasVenda.length > 0 ? (
                   <Reveal id="recomendacoes" className="space-y-4 scroll-mt-24">
                     <h2 className="font-heading text-xl font-semibold text-white">Recomendações</h2>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {cards.map((c, i) => (
-                        <Card key={i} className="flex flex-col gap-2">
-                          <Badge variant={PRIORIDADE_BADGE[c.prioridade]} className="w-fit">
-                            Prioridade {PRIORIDADE_LABEL[c.prioridade]}
-                          </Badge>
-                          <p className="text-sm leading-relaxed text-white/80">{c.texto}</p>
+                    <div className="space-y-4">
+                      {rel.analiseIa.gargalos.length > 0 ? (
+                        <Card className="flex flex-col gap-3">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="danger">Prioridade Alta</Badge>
+                            <CardTitle as="h3" className="text-sm">Gargalos</CardTitle>
+                          </div>
+                          <AchadosParaTasks
+                            reportId={rel.id}
+                            fonte="gargalos"
+                            itens={rel.analiseIa.gargalos}
+                            titulosExistentes={titulosExistentes}
+                          />
                         </Card>
-                      ))}
+                      ) : null}
+
+                      {rel.analiseIa.sugestoesMelhoria.length > 0 ? (
+                        <Card className="flex flex-col gap-3">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="warn">Prioridade Média</Badge>
+                            <CardTitle as="h3" className="text-sm">Sugestões de melhoria</CardTitle>
+                          </div>
+                          <AchadosParaTasks
+                            reportId={rel.id}
+                            fonte="sugestoesMelhoria"
+                            itens={rel.analiseIa.sugestoesMelhoria}
+                            titulosExistentes={titulosExistentes}
+                          />
+                        </Card>
+                      ) : null}
+
+                      {rel.analiseIa.ideiasVenda.length > 0 ? (
+                        <Card className="flex flex-col gap-3">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="neutral">Prioridade Baixa</Badge>
+                            <CardTitle as="h3" className="text-sm">Ideias de venda</CardTitle>
+                          </div>
+                          <AchadosParaTasks
+                            reportId={rel.id}
+                            fonte="ideiasVenda"
+                            itens={rel.analiseIa.ideiasVenda}
+                            titulosExistentes={titulosExistentes}
+                          />
+                        </Card>
+                      ) : null}
                     </div>
                   </Reveal>
                 ) : null}

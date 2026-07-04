@@ -1,10 +1,23 @@
 import { createCipheriv, randomBytes } from 'node:crypto';
 
-import { eq, like } from 'drizzle-orm';
+import { eq, inArray, like } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import { connections, marketSnapshots, orders, organizations, reports, trackedProducts, users } from '@/db/schema';
+import {
+  connections,
+  marketSnapshots,
+  notifications,
+  orders,
+  organizations,
+  reports,
+  taskActivities,
+  taskComments,
+  taskTemplates,
+  tasks,
+  trackedProducts,
+  users,
+} from '@/db/schema';
 import { hashPassword } from '@/modules/auth/password';
 
 /** Mirrors encryptSecret from @/modules/crypto/crypto — avoids importing serverEnv in the test helper. */
@@ -34,6 +47,24 @@ export async function cleanupE2E(): Promise<void> {
       .from(organizations)
       .where(like(organizations.name, `${E2E_PREFIX}%`));
     for (const org of orgs) {
+      // FK order (CRM tables, Task 14): notifications (→ users) → task_activities
+      // & task_comments (→ tasks, users) → tasks (→ orgs, reports, users) —
+      // all BEFORE the pre-existing chain below (tasks.report_id references
+      // reports, so tasks must go before reports too).
+      const orgUsers = await tdb.select({ id: users.id }).from(users).where(eq(users.org_id, org.id));
+      const userIds = orgUsers.map((u) => u.id);
+      if (userIds.length > 0) {
+        await tdb.delete(notifications).where(inArray(notifications.user_id, userIds));
+      }
+
+      const orgTasks = await tdb.select({ id: tasks.id }).from(tasks).where(eq(tasks.org_id, org.id));
+      const taskIds = orgTasks.map((t) => t.id);
+      if (taskIds.length > 0) {
+        await tdb.delete(taskActivities).where(inArray(taskActivities.task_id, taskIds));
+        await tdb.delete(taskComments).where(inArray(taskComments.task_id, taskIds));
+      }
+      await tdb.delete(tasks).where(eq(tasks.org_id, org.id));
+
       // FK order: market_snapshots (→ reports & orgs) → reports (→ orgs) → orders (→ orgs)
       // → trackedProducts, connections, users → organizations
       await tdb.delete(marketSnapshots).where(eq(marketSnapshots.org_id, org.id));
@@ -44,6 +75,9 @@ export async function cleanupE2E(): Promise<void> {
       await tdb.delete(users).where(eq(users.org_id, org.id));
       await tdb.delete(organizations).where(eq(organizations.id, org.id));
     }
+
+    // Globalmente: templates semeados em algum teste (não pertencem a nenhuma org).
+    await tdb.delete(taskTemplates).where(like(taskTemplates.titulo, `${E2E_PREFIX}%`));
   } finally {
     await sql.end();
   }
@@ -141,6 +175,36 @@ export async function seedBlingConnection(orgId: string): Promise<void> {
           status: 'ok',
         },
       });
+  } finally {
+    await sql.end();
+  }
+}
+
+/** Inserts a task row into the test DB for the given org. Returns the new task id. */
+export async function seedTask(
+  orgId: string,
+  opts: {
+    titulo: string;
+    criadoPor?: 'analista' | 'cliente' | 'ia';
+    status?: string;
+    tipo?: string;
+    prioridade?: string;
+  },
+): Promise<string> {
+  const { sql, tdb } = makeDb();
+  try {
+    const [row] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgId,
+        titulo: opts.titulo,
+        criado_por: opts.criadoPor ?? 'analista',
+        status: opts.status ?? 'backlog',
+        tipo: opts.tipo ?? 'outro',
+        prioridade: opts.prioridade ?? 'media',
+      })
+      .returning({ id: tasks.id });
+    return row!.id;
   } finally {
     await sql.end();
   }

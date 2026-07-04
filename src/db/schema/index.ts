@@ -8,3 +8,8 @@ export * from './tracked-products';
 export * from './reports';
 export * from './orders';
 export * from './market-snapshots';
+export * from './tasks';
+export * from './task-comments';
+export * from './task-activities';
+export * from './task-templates';
+export * from './notifications';

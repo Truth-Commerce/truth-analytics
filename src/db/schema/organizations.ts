@@ -1,4 +1,6 @@
-import { pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { type AnyPgColumn, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+
+import { users } from './users';
 
 export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -6,6 +8,7 @@ export const organizations = pgTable('organizations', {
   status: varchar('status', { length: 32 }).notNull().default('pending'),
   plano: varchar('plano', { length: 16 }),
   nicho: text('nicho'),
+  analista_id: uuid('analista_id').references((): AnyPgColumn => users.id),
   proximo_relatorio_liberado_em: timestamp('proximo_relatorio_liberado_em', {
     withTimezone: true,
     mode: 'date',

@@ -3,14 +3,16 @@
 import React, { useState } from 'react';
 import { signOutAction } from '@/actions/auth.actions';
 import { CommandPalette } from '@/components/command-palette';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Logo } from '@/components/ui/Logo';
 
 interface AppShellProps {
   children: React.ReactNode;
-  variant?: 'client' | 'admin';
+  variant?: 'client' | 'admin' | 'analista';
+  planoDeAcaoCount?: number;
 }
 
-export function AppShell({ children, variant = 'client' }: AppShellProps) {
+export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -41,12 +43,50 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
             >
               Conexões
             </a>
-            {variant === 'admin' && (
+            {variant === 'client' && (
               <a
-                href="/admin"
+                href="/dashboard/plano-de-acao"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+              >
+                Plano de Ação
+                {planoDeAcaoCount > 0 && (
+                  <span
+                    data-testid="nav-plano-badge"
+                    className="inline-flex items-center justify-center rounded-full bg-brand px-1.5 py-0.5 font-mono text-[10px] text-[#04150a]"
+                  >
+                    {planoDeAcaoCount}
+                  </span>
+                )}
+              </a>
+            )}
+            {variant === 'admin' && (
+              <>
+                <a
+                  href="/admin"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Admin
+                </a>
+                <a
+                  href="/admin/playbooks"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Playbooks
+                </a>
+                <a
+                  href="/admin/consultoria"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Consultoria
+                </a>
+              </>
+            )}
+            {variant === 'analista' && (
+              <a
+                href="/analista"
                 className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
               >
-                Admin
+                Carteira
               </a>
             )}
           </div>
@@ -62,6 +102,11 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
           >
             ⌘K
           </button>
+
+          {/* Notificações (desktop) */}
+          <div className="hidden sm:block">
+            <NotificationBell />
+          </div>
 
           {/* Desktop sign out */}
           <form action={signOutAction} className="hidden sm:block">
@@ -97,6 +142,9 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
         {/* Mobile menu drawer */}
         {menuOpen && (
           <div id="mobile-nav" className="border-t border-line bg-bg-surface/95 px-4 py-3 sm:hidden">
+            <div className="mb-2 flex justify-end">
+              <NotificationBell />
+            </div>
             <div className="flex flex-col gap-1">
               <a
                 href="/dashboard"
@@ -112,13 +160,55 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
               >
                 Conexões
               </a>
-              {variant === 'admin' && (
+              {variant === 'client' && (
                 <a
-                  href="/admin"
+                  href="/dashboard/plano-de-acao"
+                  onClick={() => setMenuOpen(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Plano de Ação
+                  {planoDeAcaoCount > 0 && (
+                    <span
+                      data-testid="nav-plano-badge"
+                      className="inline-flex items-center justify-center rounded-full bg-brand px-1.5 py-0.5 font-mono text-[10px] text-[#04150a]"
+                    >
+                      {planoDeAcaoCount}
+                    </span>
+                  )}
+                </a>
+              )}
+              {variant === 'admin' && (
+                <>
+                  <a
+                    href="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                  >
+                    Admin
+                  </a>
+                  <a
+                    href="/admin/playbooks"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                  >
+                    Playbooks
+                  </a>
+                  <a
+                    href="/admin/consultoria"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                  >
+                    Consultoria
+                  </a>
+                </>
+              )}
+              {variant === 'analista' && (
+                <a
+                  href="/analista"
                   onClick={() => setMenuOpen(false)}
                   className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
-                  Admin
+                  Carteira
                 </a>
               )}
               <div className="mt-1 border-t border-line pt-2">

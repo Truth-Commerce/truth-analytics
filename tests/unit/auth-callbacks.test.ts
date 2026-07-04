@@ -19,3 +19,19 @@ describe('authConfig.callbacks.session', () => {
     expect(result.user.orgStatus).toBe('active');
   });
 });
+
+describe('authConfig.callbacks.authorized', () => {
+  it('rota /analista: analista entra, cliente é redirecionado, deslogado bloqueado', () => {
+    const url = new URL('http://localhost/analista');
+    const asRole = (role?: string) =>
+      authConfig.callbacks.authorized!({
+        auth: role ? ({ user: { role } } as never) : null,
+        request: { nextUrl: url } as never,
+      });
+    expect(asRole('analista')).toBe(true);
+    expect(asRole('admin_truth')).toBe(true);
+    const cliente = asRole('client');
+    expect(cliente).toBeInstanceOf(Response); // redirect /dashboard
+    expect(asRole(undefined)).toBe(false);
+  });
+});

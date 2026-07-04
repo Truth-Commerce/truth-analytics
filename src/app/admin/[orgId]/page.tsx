@@ -1,11 +1,13 @@
 import { notFound } from 'next/navigation';
 
+import { listAnalistas } from '@/modules/analista/analista.repository';
 import { requireAdmin } from '@/modules/auth/require-admin';
 import {
   getOrgConnectionHealth,
   getOrganizationById,
   listOrgReports,
 } from '@/modules/admin/admin.repository';
+import { getOrgAnalistaUser } from '@/modules/notifications/recipients';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { formatData, formatPeriodo } from '@/lib/format';
 import { STATUS_LABEL, reportStatusVariant, type ReportStatus } from '@/modules/reports/report.types';
@@ -14,6 +16,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { Tabs } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { AtribuirAnalista } from './atribuir-analista';
 import { ReportActions } from './report-actions';
 import { GenerateNow } from './generate-now';
 
@@ -29,10 +32,12 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
   const org = await getOrganizationById(params.orgId);
   if (!org) notFound();
 
-  const [relatorios, saude, produtos] = await Promise.all([
+  const [relatorios, saude, produtos, analistas, analistaAtual] = await Promise.all([
     listOrgReports(org.id),
     getOrgConnectionHealth(org.id),
     listTrackedProducts(org.id),
+    listAnalistas(),
+    getOrgAnalistaUser(org.id),
   ]);
 
   const saudeInfo = SAUDE_BADGE[saude?.saude ?? 'nenhuma'];
@@ -56,6 +61,17 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
         </div>
         <GenerateNow orgId={org.id} />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle as="h2" className="text-base">
+            Consultoria
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AtribuirAnalista orgId={org.id} analistas={analistas} analistaAtual={analistaAtual} />
+        </CardContent>
+      </Card>
 
       <Tabs
         defaultValue="relatorios"

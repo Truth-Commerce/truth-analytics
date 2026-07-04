@@ -969,7 +969,9 @@ export async function listTaskComments(taskId: string, orgId: string) {
 
 - [ ] **Step 3:** teste → **passa**; `npm run test` + `npm run typecheck` verdes. **Commit:** `feat(crm): comentários de task com escopo por org`.
 
----### Task 6: Notificações in-app — `notify()` genérico, rota de polling e e-mails novos
+---
+
+### Task 6: Notificações in-app — `notify()` genérico, rota de polling e e-mails novos
 
 **Files:** Create `src/modules/notifications/notification.repository.ts`, `src/actions/notifications.actions.ts`, `src/app/api/notifications/route.ts`; Modify `src/modules/notifications/recipients.ts`, `src/modules/notifications/templates.ts`, `src/modules/notifications/email.ts`; Test `tests/integration/notification-repository.test.ts`, `tests/unit/notification-templates.test.ts` (estender).
 

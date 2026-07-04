@@ -43,6 +43,13 @@
       "when": 1783123237787,
       "tag": "0005_f0_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783156422985,
+      "tag": "0006_furry_tiger_shark",
+      "breakpoints": true
     }
   ]
 }

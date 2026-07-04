@@ -13,6 +13,23 @@ const PLANO_LABELS: Record<Plano, string> = {
 };
 
 /**
+ * Escapa caracteres especiais de HTML para prevenir injeção (XSS) quando
+ * valores de origem do usuário (ex.: título de tarefa) são interpolados
+ * diretamente em templates de e-mail HTML.
+ *
+ * A ordem importa: `&` precisa ser escapado primeiro, senão os `&` gerados
+ * pelas substituições seguintes seriam escapados de novo (double-escaping).
+ */
+export function escapeHtml(s: string): string {
+  return s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+/**
  * Template: conta ativada (enviado ao cliente após ativação da organização).
  */
 export function accountActivatedTemplate(plano: Plano): EmailContent {
@@ -110,6 +127,98 @@ export function passwordResetTemplate(link: string): EmailContent {
 <p>O link expira em <strong>1 hora</strong> e só pode ser usado uma vez.</p>
 <p>Se você não pediu a redefinição, ignore este e-mail — sua senha permanece a mesma.</p>
 <p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+  return { subject, html, text };
+}
+
+/**
+ * Template: nova tarefa criada (enviado ao destinatário da tarefa).
+ */
+export function taskCriadaTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Nova tarefa atribuída a você — Truth Analytics';
+  const text = [
+    'Uma nova tarefa foi criada para você.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Uma nova tarefa foi criada para você.</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(titulo)}</p>
+<p><a href="${escapeHtml(url)}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Template: novo comentário em uma tarefa (enviado ao outro participante).
+ */
+export function taskComentarioTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Novo comentário em uma tarefa — Truth Analytics';
+  const text = [
+    'Há um novo comentário em uma tarefa que envolve você.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Há um novo comentário em uma tarefa que envolve você.</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(titulo)}</p>
+<p><a href="${escapeHtml(url)}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Template: tarefa devolvida (enviado a quem precisa retrabalhar a tarefa).
+ */
+export function taskDevolvidaTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Tarefa devolvida — Truth Analytics';
+  const text = [
+    'Uma tarefa foi devolvida e precisa da sua atenção.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Uma tarefa foi devolvida e precisa da sua atenção.</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(titulo)}</p>
+<p><a href="${escapeHtml(url)}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Template: tarefa aprovada (enviado a quem executou a tarefa).
+ */
+export function taskAprovadaTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Tarefa aprovada — Truth Analytics';
+  const text = [
+    'Sua tarefa foi aprovada.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Sua tarefa foi aprovada.</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(titulo)}</p>
+<p><a href="${escapeHtml(url)}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
   return { subject, html, text };
 }
 

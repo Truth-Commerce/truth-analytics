@@ -7,6 +7,10 @@ import {
   passwordResetTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
+  taskAprovadaTemplate,
+  taskComentarioTemplate,
+  taskCriadaTemplate,
+  taskDevolvidaTemplate,
 } from './templates';
 
 /**
@@ -94,5 +98,37 @@ export async function sendBlingConnectionFailedEmail(to: string): Promise<void> 
 export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
   const link = `${serverEnv.APP_URL}/redefinir-senha/${token}`;
   const content = passwordResetTemplate(link);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Notifica que uma nova tarefa foi criada. Nunca lança.
+ */
+export async function sendTaskCriadaEmail(to: string, titulo: string, url: string): Promise<void> {
+  const content = taskCriadaTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Notifica que há um novo comentário em uma tarefa. Nunca lança.
+ */
+export async function sendTaskComentarioEmail(to: string, titulo: string, url: string): Promise<void> {
+  const content = taskComentarioTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Notifica que uma tarefa foi devolvida. Nunca lança.
+ */
+export async function sendTaskDevolvidaEmail(to: string, titulo: string, url: string): Promise<void> {
+  const content = taskDevolvidaTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Notifica que uma tarefa foi aprovada. Nunca lança.
+ */
+export async function sendTaskAprovadaEmail(to: string, titulo: string, url: string): Promise<void> {
+  const content = taskAprovadaTemplate(titulo, url);
   await sendEmail({ to, ...content });
 }
