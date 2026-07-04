@@ -22,6 +22,7 @@ const schema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   EMAIL_FROM: z.string().optional(),
   ADMIN_ALERT_EMAIL: z.string().optional(),
+  SENTRY_DSN: z.string().url().optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

@@ -2,6 +2,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages';
 
 import { serverEnv } from '@/lib/env';
+import { logger } from '@/lib/logger';
 import { getAnthropic } from '@/modules/ai/claude';
 import { AnaliseIaSchema, type AnaliseIa, type Metricas } from '@/modules/pipeline/contracts';
 
@@ -94,7 +95,7 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
   }
 
   // Retry: append assistant response + correction request
-  console.warn('[analyzeWithIA] Primeira tentativa inválida — re-tentando. Erro:', parseError);
+  logger.warn('análise IA: primeira tentativa inválida, re-tentando', { parseError });
 
   // Quando a 1ª resposta não trouxe bloco de texto (ex.: só thinking), NÃO enviar
   // um turno assistant vazio (a API pode rejeitar content '') — basta um turno

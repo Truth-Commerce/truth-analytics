@@ -4,6 +4,7 @@ import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.
 import { mlPublicoProvider } from '@/modules/market/ml-publico';
 import { serpapiProvider } from '@/modules/market/serpapi';
 import type { MarketProvider } from '@/modules/market/market.types';
+import { logger } from '@/lib/logger';
 
 export type CollectMarketResult = { benchmarkParcial: boolean };
 
@@ -37,9 +38,10 @@ export async function collectMarket(
           totalSnapshots++;
         } catch (err) {
           benchmarkParcial = true;
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(
-            `[collect-market] provedor="${provider.fonte}" keyword="${keyword}" falhou: ${msg}`,
+          logger.warn(
+            'provedor de mercado falhou',
+            { orgId, reportId, fonte: provider.fonte, keyword },
+            err,
           );
         }
       }

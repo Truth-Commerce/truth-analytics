@@ -1,4 +1,5 @@
 import { serverEnv } from '@/lib/env';
+import { logger } from '@/lib/logger';
 import type { Plano } from '@/modules/auth/user.types';
 import {
   accountActivatedTemplate,
@@ -21,7 +22,7 @@ export async function sendEmail(input: {
   text: string;
 }): Promise<void> {
   if (!serverEnv.RESEND_API_KEY || !serverEnv.EMAIL_FROM) {
-    console.info('[email] (no-op) ' + input.subject);
+    logger.info('e-mail em modo no-op', { subject: input.subject });
     return;
   }
 
@@ -36,7 +37,7 @@ export async function sendEmail(input: {
       text: input.text,
     });
   } catch (err) {
-    console.warn('[email] falha ao enviar: ' + (err instanceof Error ? err.message : String(err)));
+    logger.warn('falha ao enviar e-mail', { subject: input.subject }, err);
   }
 }
 
