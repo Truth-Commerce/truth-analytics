@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Sora, Space_Mono } from 'next/font/google';
 import './globals.css';
 import { MotionProvider } from '@/components/motion-provider';
+import { ToastProvider } from '@/components/ui/Toast';
 
 const sora = Sora({
   subsets: ['latin'],
@@ -33,7 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR" className={`${sora.variable} ${inter.variable} ${spaceMono.variable}`}>
       <body className="font-sans">
-        <MotionProvider>{children}</MotionProvider>
+        <MotionProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </MotionProvider>
       </body>
     </html>
   );
