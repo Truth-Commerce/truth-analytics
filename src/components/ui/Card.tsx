@@ -3,6 +3,7 @@ import React from 'react';
 interface CardProps {
   className?: string;
   children?: React.ReactNode;
+  id?: string;
   'data-testid'?: string;
 }
 

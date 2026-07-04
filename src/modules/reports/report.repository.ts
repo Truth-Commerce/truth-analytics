@@ -77,6 +77,16 @@ export async function getLatestReport(orgId: string): Promise<ReportSummary | nu
   return row ? summaryRowToSummary(row) : null;
 }
 
+export async function getLatestDoneReport(orgId: string): Promise<ReportDetail | null> {
+  const [row] = await db
+    .select()
+    .from(reports)
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done')))
+    .orderBy(desc(reports.created_at))
+    .limit(1);
+  return row ? rowToDetail(row) : null;
+}
+
 export async function getReportById(
   reportId: string,
   orgId: string,
