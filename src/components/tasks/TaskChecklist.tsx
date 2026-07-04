@@ -8,23 +8,23 @@ export function TaskChecklist({
   orgId,
 }: {
   taskId: string;
-  itens: Array<{ texto: string; feito: boolean }>;
+  itens: Array<{ texto: string; feito: boolean; linha: number }>;
   orgId?: string;
 }) {
   if (itens.length === 0) return null;
 
   return (
     <ul data-testid="task-checklist" className="space-y-1.5">
-      {itens.map((item, index) => (
-        <li key={index}>
+      {itens.map((item) => (
+        <li key={item.linha}>
           <form action={toggleChecklistItemFormAction} className="flex items-start gap-2">
             <input type="hidden" name="taskId" value={taskId} />
-            <input type="hidden" name="index" value={index} />
+            <input type="hidden" name="index" value={item.linha} />
             {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
             <input
               type="checkbox"
               defaultChecked={item.feito}
-              data-testid={`task-checklist-item-${index}`}
+              data-testid={`task-checklist-item-${item.linha}`}
               onChange={(e) => e.currentTarget.form?.requestSubmit()}
               className="mt-1 h-4 w-4 shrink-0 rounded border-line bg-bg-elevated accent-brand"
             />

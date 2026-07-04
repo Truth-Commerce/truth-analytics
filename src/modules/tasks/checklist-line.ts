@@ -33,14 +33,21 @@ export function toggleChecklistLine(descricao: string, index: number): string {
 // markdown (`- [ ] item` / `- [x] item`), na ordem em que aparecem. Linhas
 // de texto livre (incluindo em branco) são ignoradas. Descrição sem itens
 // de checklist retorna lista vazia.
+//
+// `linha` é o índice da linha CRUA em `descricao.split('\n')` — não a
+// posição no array já filtrado. É esse índice que deve ser enviado de volta
+// a `toggleChecklistLine`, que opera sobre as linhas cruas da descrição; se
+// a descrição tiver texto livre antes do checklist, a posição no array
+// filtrado e o índice de linha divergem.
 // ---------------------------------------------------------------------------
-export function parseChecklist(descricao: string): Array<{ texto: string; feito: boolean }> {
+export function parseChecklist(descricao: string): Array<{ texto: string; feito: boolean; linha: number }> {
   return descricao
     .split('\n')
-    .filter((line) => line.startsWith(CHECKLIST_UNCHECKED) || line.startsWith(CHECKLIST_CHECKED))
-    .map((line) => {
+    .map((line, i) => ({ line, i }))
+    .filter(({ line }) => line.startsWith(CHECKLIST_UNCHECKED) || line.startsWith(CHECKLIST_CHECKED))
+    .map(({ line, i }) => {
       const feito = line.startsWith(CHECKLIST_CHECKED);
       const texto = line.slice(feito ? CHECKLIST_CHECKED.length : CHECKLIST_UNCHECKED.length);
-      return { texto, feito };
+      return { texto, feito, linha: i };
     });
 }

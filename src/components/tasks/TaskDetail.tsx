@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { formatBRL, formatData } from '@/lib/format';
-import { parseChecklist } from '@/modules/tasks/checklist-line';
+import { CHECKLIST_CHECKED, CHECKLIST_UNCHECKED, parseChecklist } from '@/modules/tasks/checklist-line';
 import type { TaskImpact } from '@/modules/tasks/task-impact';
 import {
   PRIORIDADE_TASK_LABEL,
@@ -59,15 +59,14 @@ function eventoLabel(a: { evento: string; de: string | null; para: string | null
 function descricaoLivre(descricao: string): string {
   return descricao
     .split('\n')
-    .filter((line) => !line.startsWith('- [ ] ') && !line.startsWith('- [x] '))
+    .filter((line) => !line.startsWith(CHECKLIST_UNCHECKED) && !line.startsWith(CHECKLIST_CHECKED))
     .join('\n')
     .trim();
 }
 
-function formatDeltaPct(deltaPct: number): string {
-  const arredondado = Math.round(deltaPct);
-  const sinal = arredondado > 0 ? '+' : '';
-  return `${sinal}${arredondado}%`;
+function formatDeltaPct(pctArredondado: number): string {
+  const sinal = pctArredondado > 0 ? '+' : '';
+  return `${sinal}${pctArredondado}%`;
 }
 
 export function TaskDetail({
@@ -149,14 +148,20 @@ export function TaskDetail({
             <CardTitle as="h2" className="text-sm">Impacto</CardTitle>
           </CardHeader>
           <CardContent>
-            <p data-testid="task-impacto" className="text-sm text-white/90">
-              Vendas no período do relatório de origem: {formatBRL(impact.totalOrigem)} → relatório mais recente:{' '}
-              {formatBRL(impact.totalAtual)} (
-              <span className={impact.deltaPct >= 0 ? 'text-success-fg' : 'text-danger-fg'}>
-                {formatDeltaPct(impact.deltaPct)}
-              </span>
-              )
-            </p>
+            {(() => {
+              // Cor baseada no MESMO valor arredondado exibido no texto — evita
+              // que um deltaPct pequeno e negativo (ex.: -0.4%) apareça como
+              // "0%" pintado de vermelho.
+              const pctArredondado = Math.round(impact.deltaPct);
+              const corDelta =
+                pctArredondado > 0 ? 'text-success-fg' : pctArredondado < 0 ? 'text-danger-fg' : 'text-dim';
+              return (
+                <p data-testid="task-impacto" className="text-sm text-white/90">
+                  Vendas no período do relatório de origem: {formatBRL(impact.totalOrigem)} → relatório mais recente:{' '}
+                  {formatBRL(impact.totalAtual)} (<span className={corDelta}>{formatDeltaPct(pctArredondado)}</span>)
+                </p>
+              );
+            })()}
           </CardContent>
         </Card>
       ) : null}
