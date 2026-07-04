@@ -23,6 +23,7 @@ const schema = z.object({
   EMAIL_FROM: z.string().optional(),
   ADMIN_ALERT_EMAIL: z.string().optional(),
   PIPELINE_SECRET: z.string().min(16).optional(),
+  CRON_SECRET: z.string().min(16).optional(),
   SENTRY_DSN: z.string().url().optional(),
 });
 
