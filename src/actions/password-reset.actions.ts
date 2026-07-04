@@ -5,11 +5,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { recordAttempt, isResetRateLimited } from '@/modules/auth/rate-limit';
-import {
-  consumeResetToken,
-  createPasswordResetToken,
-} from '@/modules/auth/password-reset.repository';
-import { sendPasswordResetEmail } from '@/modules/notifications/email';
+import { consumeResetToken } from '@/modules/auth/password-reset.repository';
+import { dispatchPasswordReset } from '@/modules/auth/password-reset.dispatch';
 
 export type ResetRequestState = { error?: string; ok?: boolean };
 export type ResetState = { error?: string };
@@ -39,10 +36,13 @@ export async function requestPasswordResetAction(
   }
 
   await recordAttempt({ escopo: 'reset', email: parsed.data.email, ip, success: true });
-  const token = await createPasswordResetToken(parsed.data.email);
-  if (token) {
-    await sendPasswordResetEmail(parsed.data.email, token);
-  }
+
+  // Fire-and-forget: criar token + enviar e-mail acontece FORA do caminho de
+  // resposta. Existente e inexistente retornam a MESMA resposta no mesmo tempo —
+  // sem oráculo de timing (o INSERT do token e o await de rede do e-mail só
+  // existiriam no caminho "existe"). Ver password-reset.dispatch.ts.
+  dispatchPasswordReset(parsed.data.email);
+
   return { ok: true };
 }
 
