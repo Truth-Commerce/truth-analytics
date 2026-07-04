@@ -8,9 +8,10 @@ import { Logo } from '@/components/ui/Logo';
 interface AppShellProps {
   children: React.ReactNode;
   variant?: 'client' | 'admin';
+  planoDeAcaoCount?: number;
 }
 
-export function AppShell({ children, variant = 'client' }: AppShellProps) {
+export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -41,6 +42,22 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
             >
               Conexões
             </a>
+            {variant === 'client' && (
+              <a
+                href="/dashboard/plano-de-acao"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+              >
+                Plano de Ação
+                {planoDeAcaoCount > 0 && (
+                  <span
+                    data-testid="nav-plano-badge"
+                    className="inline-flex items-center justify-center rounded-full bg-brand px-1.5 py-0.5 font-mono text-[10px] text-[#04150a]"
+                  >
+                    {planoDeAcaoCount}
+                  </span>
+                )}
+              </a>
+            )}
             {variant === 'admin' && (
               <a
                 href="/admin"
@@ -112,6 +129,23 @@ export function AppShell({ children, variant = 'client' }: AppShellProps) {
               >
                 Conexões
               </a>
+              {variant === 'client' && (
+                <a
+                  href="/dashboard/plano-de-acao"
+                  onClick={() => setMenuOpen(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Plano de Ação
+                  {planoDeAcaoCount > 0 && (
+                    <span
+                      data-testid="nav-plano-badge"
+                      className="inline-flex items-center justify-center rounded-full bg-brand px-1.5 py-0.5 font-mono text-[10px] text-[#04150a]"
+                    >
+                      {planoDeAcaoCount}
+                    </span>
+                  )}
+                </a>
+              )}
               {variant === 'admin' && (
                 <a
                   href="/admin"
