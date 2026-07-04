@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { signOutAction } from '@/actions/auth.actions';
 import { CommandPalette } from '@/components/command-palette';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Logo } from '@/components/ui/Logo';
 
 interface AppShellProps {
@@ -102,6 +103,11 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
             ⌘K
           </button>
 
+          {/* Notificações (desktop) */}
+          <div className="hidden sm:block">
+            <NotificationBell />
+          </div>
+
           {/* Desktop sign out */}
           <form action={signOutAction} className="hidden sm:block">
             <button
@@ -136,6 +142,9 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
         {/* Mobile menu drawer */}
         {menuOpen && (
           <div id="mobile-nav" className="border-t border-line bg-bg-surface/95 px-4 py-3 sm:hidden">
+            <div className="mb-2 flex justify-end">
+              <NotificationBell />
+            </div>
             <div className="flex flex-col gap-1">
               <a
                 href="/dashboard"
