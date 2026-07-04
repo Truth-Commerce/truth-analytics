@@ -12,7 +12,11 @@ import { connections } from '../src/db/schema';
 import { serverEnv } from '../src/lib/env';
 import { decryptSecret, encryptSecret, encryptionKeyIdOf } from '../src/modules/crypto/crypto';
 
-export async function reencryptConnections(): Promise<{ total: number; atualizadas: number }> {
+export async function reencryptConnections(): Promise<{
+  total: number;
+  atualizadas: number;
+  falhas: number;
+}> {
   const ativa = serverEnv.ENCRYPTION_KEY_ACTIVE;
   if (!serverEnv.ENCRYPTION_KEYS || !ativa) {
     throw new Error('Configure ENCRYPTION_KEYS e ENCRYPTION_KEY_ACTIVE antes de reencriptar.');
@@ -49,15 +53,24 @@ export async function reencryptConnections(): Promise<{ total: number; atualizad
     }
   }
 
-  const resultado = { total: rows.length, atualizadas };
-  console.log(JSON.stringify({ msg: 'reencrypt concluído', ...resultado, falhas }));
+  const resultado = { total: rows.length, atualizadas, falhas };
+  console.log(JSON.stringify({ msg: 'reencrypt concluído', ...resultado }));
   return resultado;
 }
 
-// Entrypoint CLI (não roda quando importado pelos testes)
+// Entrypoint CLI (não roda quando importado pelos testes).
+// Exit code sinaliza falhas ao runbook/automação: 0 só quando TODAS as linhas decifraram.
 if (process.argv[1]?.includes('reencrypt-connections')) {
   reencryptConnections()
-    .then(() => process.exit(0))
+    .then((r) => {
+      if (r.falhas > 0) {
+        console.error(
+          `ATENÇÃO: ${r.falhas} linha(s) não decifradas (ids no log acima). ` +
+            'NÃO remova a ENCRYPTION_KEY legada enquanto houver falhas — investigue antes de prosseguir com a rotação.',
+        );
+      }
+      process.exit(r.falhas > 0 ? 1 : 0);
+    })
     .catch((err) => {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(1);

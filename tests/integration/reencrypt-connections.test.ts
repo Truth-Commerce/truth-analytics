@@ -28,6 +28,18 @@ import { connections, organizations } from '@/db/schema';
 import { decryptSecret, encryptionKeyIdOf } from '@/modules/crypto/crypto';
 import { reencryptConnections } from '../../scripts/reencrypt-connections';
 
+// O banco de teste é COMPARTILHADO entre arquivos rodando em paralelo: outros testes
+// inserem `connections` cifradas com a ENCRYPTION_KEY real (indecifráveis sob o chaveiro
+// mockado deste arquivo), então o contador GLOBAL `falhas` não é deterministicamente 0.
+// A asserção correta e à prova de corrida é: `falhas` bate com as linhas logadas como
+// ignoradas, e NENHUMA delas é nossa (nossas linhas decifráveis contribuem 0 falhas).
+function idsIgnorados(spy: ReturnType<typeof vi.spyOn>): string[] {
+  return spy.mock.calls
+    .map((c) => String(c[0]))
+    .filter((s) => s.includes('linha ignorada'))
+    .map((s) => (JSON.parse(s) as { id: string }).id);
+}
+
 describe.skipIf(!process.env.DATABASE_URL_TEST)('reencrypt-connections', () => {
   let orgId: string;
 
@@ -52,16 +64,23 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('reencrypt-connections', () => {
     const ct = Buffer.concat([cipher.update('token-legado', 'utf8'), cipher.final()]);
     const legado = [iv.toString('base64'), cipher.getAuthTag().toString('base64'), ct.toString('base64')].join('.');
 
-    await db.insert(connections).values({
-      org_id: orgId,
-      provider: 'bling',
-      access_token: legado,
-      refresh_token: legado,
-      status: 'ok',
-    });
+    const [conn] = await db
+      .insert(connections)
+      .values({
+        org_id: orgId,
+        provider: 'bling',
+        access_token: legado,
+        refresh_token: legado,
+        status: 'ok',
+      })
+      .returning({ id: connections.id });
 
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const r1 = await reencryptConnections();
     expect(r1.atualizadas).toBeGreaterThanOrEqual(1);
+    // Nossa linha (decifrável) contribui 0 falhas; o contador bate com o log.
+    expect(idsIgnorados(warnSpy)).not.toContain(conn.id);
+    expect(r1.falhas).toBe(idsIgnorados(warnSpy).length);
 
     const [row] = await db
       .select({ access_token: connections.access_token })
@@ -70,6 +89,7 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('reencrypt-connections', () => {
     expect(encryptionKeyIdOf(row.access_token!)).toBe('k2');
     expect(decryptSecret(row.access_token!)).toBe('token-legado');
 
+    warnSpy.mockClear();
     const r2 = await reencryptConnections();
     // nossa linha já está em k2 — não é re-atualizada
     const [row2] = await db
@@ -78,5 +98,40 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('reencrypt-connections', () => {
       .where(eq(connections.org_id, orgId));
     expect(row2.access_token).toBe(row.access_token);
     expect(r2.total).toBeGreaterThanOrEqual(1);
+    expect(idsIgnorados(warnSpy)).not.toContain(conn.id);
+    expect(r2.falhas).toBe(idsIgnorados(warnSpy).length);
+    warnSpy.mockRestore();
+  });
+
+  it('linha indecifrável entra em falhas e NÃO é tocada (gate do exit code)', async () => {
+    // Payload inválido inserido direto no banco (não decifra com nenhuma chave).
+    const invalido = 'payload-invalido-sem-formato';
+    const [conn] = await db
+      .insert(connections)
+      .values({
+        org_id: orgId,
+        provider: 'invalido',
+        access_token: invalido,
+        refresh_token: invalido,
+        status: 'erro',
+      })
+      .returning({ id: connections.id });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = await reencryptConnections();
+    // `falhas` é o valor que o entrypoint CLI usa para o exit code (falhas>0 → exit 1).
+    expect(r.falhas).toBeGreaterThanOrEqual(1);
+    expect(idsIgnorados(warnSpy)).toContain(conn.id);
+    warnSpy.mockRestore();
+
+    const [row] = await db
+      .select({ access_token: connections.access_token, refresh_token: connections.refresh_token })
+      .from(connections)
+      .where(eq(connections.provider, 'invalido'));
+    expect(row.access_token).toBe(invalido);
+    expect(row.refresh_token).toBe(invalido);
+
+    // Limpa a linha inválida aqui para não poluir re-execuções deste arquivo.
+    await db.delete(connections).where(eq(connections.provider, 'invalido'));
   });
 });
