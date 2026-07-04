@@ -1,14 +1,20 @@
 'use server';
 
+import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
+import { db } from '@/db/client';
+import { reports } from '@/db/schema';
 import { logger } from '@/lib/logger';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { requireSession } from '@/modules/auth/require-session';
 import type { UserAccess } from '@/modules/auth/user.types';
+import { CHECKLIST_UNCHECKED, toggleChecklistLine } from '@/modules/tasks/checklist-line';
+import { FONTES_ANALISE } from '@/modules/tasks/report-to-task';
+import { createTasksFromReport } from '@/modules/tasks/report-to-task.repository';
 import { recordTaskActivity } from '@/modules/tasks/task-activity.repository';
 import { addTaskComment } from '@/modules/tasks/task-comment.repository';
 import { getTemplateById } from '@/modules/tasks/task-template.repository';
@@ -26,6 +32,7 @@ import {
   notifyTaskCriada,
   notifyTaskDevolvida,
   notifyTaskEmRevisao,
+  notifyTasksDoRelatorio,
 } from '@/modules/tasks/task-notifications';
 import { proximoStatusAoConcluir } from '@/modules/tasks/task-transitions';
 import {
@@ -91,30 +98,6 @@ function warnContexto(acao: string, error: string): void {
 function revalidateTaskRoutes(orgId: string): void {
   revalidatePath('/dashboard/plano-de-acao');
   revalidatePath(`/analista/${orgId}`);
-}
-
-// ---------------------------------------------------------------------------
-// toggleChecklistLine — helper puro, exportado para unit test.
-// Reescreve a linha `index` de uma descrição em markdown-checklist
-// (`- [ ] item` / `- [x] item`). Index fora do range, ou linha que não é um
-// item de checklist, deixa a string intacta.
-// ---------------------------------------------------------------------------
-const CHECKLIST_UNCHECKED = '- [ ] ';
-const CHECKLIST_CHECKED = '- [x] ';
-
-export function toggleChecklistLine(descricao: string, index: number): string {
-  const lines = descricao.split('\n');
-  if (index < 0 || index >= lines.length) return descricao;
-
-  const line = lines[index]!;
-  if (line.startsWith(CHECKLIST_UNCHECKED)) {
-    lines[index] = CHECKLIST_CHECKED + line.slice(CHECKLIST_UNCHECKED.length);
-  } else if (line.startsWith(CHECKLIST_CHECKED)) {
-    lines[index] = CHECKLIST_UNCHECKED + line.slice(CHECKLIST_CHECKED.length);
-  } else {
-    return descricao; // não é uma linha de checklist — intacta
-  }
-  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -557,4 +540,90 @@ export async function toggleChecklistItemFormAction(formData: FormData): Promise
   }
 
   revalidateTaskRoutes(orgId);
+}
+
+// ---------------------------------------------------------------------------
+// createTasksFromReportAction (stateful) — converte achados da análise IA
+// (gargalos/sugestões/ideias) em tasks, com dedup e escopo por report.
+//
+// DIVERGÊNCIA DOCUMENTADA: não usa `resolveTaskContext` (que, para
+// analista/admin, exige `orgId` no form) — o form desta UI só conhece
+// `reportId` (a página de relatório do cliente não expõe orgId). Para
+// cliente, o orgId é sempre `access.orgId` da sessão; para analista/admin, o
+// orgId é derivado do PRÓPRIO report (carregado por id, sem filtro de org) e
+// validado via `assertOrgAccess` antes de qualquer escrita — o mesmo padrão de
+// autorização, adaptado à origem do dado.
+// ---------------------------------------------------------------------------
+const createTasksFromReportItemSchema = z.object({
+  fonte: z.enum(FONTES_ANALISE),
+  indice: z.number().int().min(0),
+});
+const createTasksFromReportSchema = z.object({
+  reportId: z.string().min(1),
+  itens: z.array(createTasksFromReportItemSchema).max(50),
+});
+
+export async function createTasksFromReportAction(
+  _prev: TaskActionState & { criadas?: number },
+  formData: FormData,
+): Promise<TaskActionState & { criadas?: number }> {
+  const access = await requireSession();
+  if (access.role === 'client' && access.orgStatus !== 'active') redirect('/aguardando');
+
+  let itensRaw: unknown;
+  try {
+    itensRaw = JSON.parse(String(formData.get('itens') ?? '[]'));
+  } catch {
+    return { error: 'Dados inválidos. Tente novamente.' };
+  }
+  const parsed = createTasksFromReportSchema.safeParse({
+    reportId: formData.get('reportId'),
+    itens: itensRaw,
+  });
+  if (!parsed.success) return { error: 'Dados inválidos. Tente novamente.' };
+  const { reportId, itens } = parsed.data;
+
+  let orgId: string;
+  let ator: TaskAtor;
+  if (access.role === 'client') {
+    orgId = access.orgId; // cliente NUNCA escolhe a org — sempre a da própria sessão
+    ator = 'cliente';
+  } else {
+    const [rep] = await db
+      .select({ org_id: reports.org_id })
+      .from(reports)
+      .where(eq(reports.id, reportId))
+      .limit(1);
+    if (!rep) return { error: 'Relatório não encontrado.' };
+    try {
+      await assertOrgAccess(access, rep.org_id); // analista: só carteira; admin: tudo
+    } catch (e) {
+      if (e instanceof Error && e.message === 'acesso_negado') {
+        return { error: 'Você não tem acesso a este cliente.' };
+      }
+      throw e;
+    }
+    orgId = rep.org_id;
+    ator = access.role === 'admin_truth' ? 'admin' : 'analista';
+  }
+
+  const criadas = await createTasksFromReport({ reportId, orgId, itens, actorUserId: access.id });
+
+  if (criadas > 0) {
+    await recordAudit({
+      orgId,
+      userId: access.id,
+      acao: 'task.criadas_de_relatorio',
+      detalhes: { reportId, criadas },
+    });
+    // Cliente convertendo os próprios achados não se auto-notifica.
+    if (ator !== 'cliente') {
+      await notifyTasksDoRelatorio(orgId, reportId, criadas);
+    }
+    revalidatePath('/dashboard/plano-de-acao');
+    revalidatePath(`/dashboard/relatorios/${reportId}`);
+    revalidatePath(`/analista/${orgId}`);
+  }
+
+  return { ok: true, criadas };
 }

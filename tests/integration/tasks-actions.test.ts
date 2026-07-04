@@ -1,15 +1,13 @@
 import { inArray, like } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// `tasks.actions.ts` importa (via require-session → session → @/modules/auth/auth)
-// a instância NextAuth(), que exige 'next/server' — indisponível/quebrado no
-// ambiente node do vitest (mesmo padrão de tests/unit/auth-actions-zod.test.ts).
-// Este arquivo só exercita o helper puro `toggleChecklistLine` e os gatilhos de
-// notificação (que não passam por sessão), então o mock abaixo evita a
-// inicialização do NextAuth sem afetar nada que os testes realmente cobrem.
-vi.mock('@/modules/auth/auth', () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
-
-import { toggleChecklistLine } from '@/actions/tasks.actions';
+// Task 8: `toggleChecklistLine` foi extraído para `@/modules/tasks/checklist-line`
+// (módulo puro, sem 'use server') — este arquivo não importa mais
+// `@/actions/tasks.actions` (que exigiria a instância NextAuth() via
+// require-session → session → @/modules/auth/auth, indisponível/quebrada no
+// ambiente node do vitest). Este arquivo só exercita o helper puro
+// `toggleChecklistLine` e os gatilhos de notificação (que não passam por sessão).
+import { toggleChecklistLine } from '@/modules/tasks/checklist-line';
 import { db } from '@/db/client';
 import { organizations, users } from '@/db/schema';
 

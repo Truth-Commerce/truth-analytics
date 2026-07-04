@@ -108,6 +108,24 @@ export async function notifyTaskDevolvida(orgId: string, taskId: string, titulo:
 }
 
 /**
+ * N tasks criadas de uma vez a partir dos achados da análise IA de um
+ * relatório (Task 8) → 1 notificação agregada ao cliente (nunca ao autor —
+ * quem dispara este gatilho é sempre analista/admin, o cliente nunca se
+ * auto-notifica ao converter os próprios achados). Sem e-mail dedicado.
+ */
+export async function notifyTasksDoRelatorio(orgId: string, reportId: string, criadas: number): Promise<void> {
+  const texto = `${criadas} nova(s) task(s) do seu relatório`;
+  await dispatch({
+    taskId: reportId,
+    tipo: 'tasks_do_relatorio',
+    tituloNotificacao: texto,
+    corpo: texto,
+    href: '/dashboard/plano-de-acao',
+    getDestinatario: () => getOrgPrimaryUser(orgId),
+  });
+}
+
+/**
  * Novo comentário em uma task → notifica o outro lado da conversa:
  * autor cliente → analista da org; autor analista/admin → cliente da org.
  */
