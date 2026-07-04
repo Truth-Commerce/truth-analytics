@@ -52,6 +52,9 @@ export async function signUpAction(
     await recordAudit({ orgId, userId, acao: 'org.criada', detalhes: { via: 'sign-up' } });
   } catch (err) {
     if (err instanceof Error && err.message === 'email_em_uso') {
+      // Anti-enumeração: sondas de e-mail existente também contam para o
+      // rate-limit de signup por IP (5/h), sem mudar a mensagem exibida.
+      await recordAttempt({ escopo: 'signup', email: parsed.data.email, ip, success: false });
       return { error: 'Já existe uma conta com este e-mail.' };
     }
     throw err;

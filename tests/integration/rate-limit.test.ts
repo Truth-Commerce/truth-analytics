@@ -47,6 +47,26 @@ describe.skipIf(!url)('rate-limit de login', () => {
   });
 });
 
+describe.skipIf(!url)('rate-limit de login com ip=null', () => {
+  const emailNullIp = `nullip-${Date.now()}@ta-test-admin.example.com`;
+  const sql3 = postgres(url ?? '', { prepare: false });
+  const tdb3 = drizzle(sql3);
+
+  afterAll(async () => {
+    await tdb3.delete(loginAttempts).where(eq(loginAttempts.email, emailNullIp));
+    await sql3.end();
+  });
+
+  it('ip=null: bloqueia aos 5 por e-mail (comportamento antigo preservado)', async () => {
+    for (let i = 0; i < 4; i++) {
+      await recordLoginAttempt({ email: emailNullIp, ip: null, success: false });
+    }
+    expect(await isLoginRateLimited(emailNullIp, null)).toBe(false);
+    await recordLoginAttempt({ email: emailNullIp, ip: null, success: false });
+    expect(await isLoginRateLimited(emailNullIp, null)).toBe(true);
+  });
+});
+
 describe.skipIf(!url)('rate-limit por e-mail (defesa contra rotação de XFF)', () => {
   const emailXff = `xff-${RUN}@ta-test-admin.example.com`;
   // Conexão própria para não depender do sql/tdb do describe anterior (que fecha após afterAll)

@@ -20,7 +20,9 @@ vi.mock('@/modules/auth/user.repository', () => ({
 vi.mock('@/modules/audit/audit.repository', () => ({ recordAudit: vi.fn() }));
 
 import { signIn } from '@/modules/auth/auth';
-import { signInAction } from '@/actions/auth.actions';
+import { recordAttempt } from '@/modules/auth/rate-limit';
+import { createOrgWithUser } from '@/modules/auth/user.repository';
+import { signInAction, signUpAction } from '@/actions/auth.actions';
 
 function form(entries: Record<string, string>): FormData {
   const fd = new FormData();
@@ -38,6 +40,21 @@ describe('signInAction com Zod', () => {
   it('senha vazia → erro sem chamar signIn', async () => {
     const res = await signInAction({}, form({ email: 'a@b.com', senha: '' }));
     expect(res.error).toBe('Informe a senha.');
+    expect(signIn).not.toHaveBeenCalled();
+  });
+});
+
+describe('signUpAction anti-enumeração', () => {
+  it('e-mail em uso → grava tentativa (success: false) e mantém a mensagem', async () => {
+    vi.mocked(createOrgWithUser).mockRejectedValueOnce(new Error('email_em_uso'));
+    const res = await signUpAction(
+      {},
+      form({ orgName: 'Empresa Teste', email: 'ja-existe@teste.dev', senha: 'x'.repeat(8) }),
+    );
+    expect(res.error).toBe('Já existe uma conta com este e-mail.');
+    expect(recordAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ escopo: 'signup', email: 'ja-existe@teste.dev', success: false }),
+    );
     expect(signIn).not.toHaveBeenCalled();
   });
 });

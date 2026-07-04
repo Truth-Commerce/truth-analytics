@@ -85,12 +85,16 @@ export async function isLoginRateLimited(
   email: string,
   ip: string | null,
 ): Promise<boolean> {
-  if (ip) {
-    const perIp = await countRecent({
-      escopo: 'login', email, ip, apenasFalhas: true, windowMinutes: WINDOW_MINUTES,
-    });
-    if (perIp >= MAX_FAILURES) return true;
-  }
+  // Com IP: 5 falhas por e-mail+IP. Sem IP: 5 falhas por e-mail (comportamento
+  // antigo preservado — sem regressão de threshold quando x-forwarded-for falta).
+  const perIp = await countRecent({
+    escopo: 'login',
+    email,
+    ...(ip ? { ip } : {}),
+    apenasFalhas: true,
+    windowMinutes: WINDOW_MINUTES,
+  });
+  if (perIp >= MAX_FAILURES) return true;
   // Defesa contra rotação de X-Forwarded-For: contador por e-mail (todos os IPs).
   const perEmail = await countRecent({
     escopo: 'login', email, apenasFalhas: true, windowMinutes: WINDOW_MINUTES,

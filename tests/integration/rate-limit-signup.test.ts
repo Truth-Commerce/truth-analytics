@@ -35,4 +35,15 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('rate-limit de signup', () => {
   it('IP null nunca é limitado (fail-open explícito)', async () => {
     expect(await isSignupRateLimited(null)).toBe(false);
   });
+
+  it('sondas de e-mail existente (success:false) também contam para o limite', async () => {
+    const ipSonda = `10.98.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+    expect(await isSignupRateLimited(ipSonda)).toBe(false);
+    for (let i = 0; i < 5; i++) {
+      const email = `t_sonda_${randomUUID().slice(0, 8)}@teste.dev`;
+      emails.push(email);
+      await recordAttempt({ escopo: 'signup', email, ip: ipSonda, success: false });
+    }
+    expect(await isSignupRateLimited(ipSonda)).toBe(true);
+  });
 });
