@@ -3,11 +3,19 @@ import { notFound } from 'next/navigation';
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getReportById } from '@/modules/reports/report.repository';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
+import { friendlyReportError } from '@/modules/reports/report-errors';
+import { PRIORIDADE_LABEL, recomendacaoCards } from '@/modules/reports/report-view-model';
 import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Stat } from '@/components/ui/Stat';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
+import { Alert } from '@/components/ui/Alert';
+import { Reveal } from './reveal';
+import { Toc } from './toc';
+import { EvolucaoChart } from './evolucao-chart';
+
+const PRIORIDADE_BADGE = { alta: 'danger', media: 'warn', baixa: 'neutral' } as const;
 
 export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
   const access = await requireActiveOrg();
@@ -15,273 +23,262 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
 
   if (!rel) notFound();
 
+  const cards = rel.analiseIa ? recomendacaoCards(rel.analiseIa) : [];
+
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
-      <div className="flex items-center gap-3">
-        <a href="/dashboard" className="text-sm text-muted hover:text-white transition-colors">
-          ← Voltar
-        </a>
-      </div>
+    <main className="mx-auto max-w-6xl p-6 md:p-8">
+      <a href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
+        ← Voltar
+      </a>
 
-      <div className="flex flex-wrap items-start gap-3">
-        <h1 className="font-heading text-2xl font-bold text-white">Relatório</h1>
-        <span data-testid="report-status">
-          <Badge variant={reportStatusVariant(rel.status)}>
-            {STATUS_LABEL[rel.status]}
-          </Badge>
-        </span>
-      </div>
-
-      <p className="text-sm text-muted">{formatPeriodo(rel.periodoInicio, rel.periodoFim)}</p>
-      <p className="text-xs text-dim">{formatData(rel.createdAt)}</p>
+      {/* Hero editorial */}
+      <header className="relative mt-4 overflow-hidden rounded-2xl border border-line bg-bg-surface p-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(ellipse 70% 90% at 20% 0%, rgba(7,221,43,0.08) 0%, transparent 60%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-brand">
+              Análise Truth
+            </p>
+            <h1 className="mt-1 font-heading text-3xl font-bold text-white">Relatório</h1>
+            <p className="mt-2 font-mono text-sm text-muted">
+              {formatPeriodo(rel.periodoInicio, rel.periodoFim)}
+            </p>
+            <p className="mt-0.5 text-xs text-dim">Gerado em {formatData(rel.createdAt)}</p>
+          </div>
+          <span data-testid="report-status">
+            <Badge variant={reportStatusVariant(rel.status)}>{STATUS_LABEL[rel.status]}</Badge>
+          </span>
+        </div>
+      </header>
 
       {rel.status === 'done' && rel.metricas ? (
-        <>
-          <section data-testid="metricas" className="space-y-6">
-            <h2 className="font-heading text-xl font-semibold text-white">Métricas</h2>
+        <div className="mt-6 flex gap-8">
+          <Toc
+            items={[
+              { href: '#metricas', label: 'Métricas' },
+              ...(rel.analiseIa
+                ? [
+                    { href: '#resumo', label: 'Resumo executivo' },
+                    { href: '#recomendacoes', label: 'Recomendações' },
+                    { href: '#precos', label: 'Preços sugeridos' },
+                  ]
+                : []),
+            ]}
+          />
 
-            {/* Ticket médio como Stat */}
-            <Card className="inline-flex">
-              <Stat
-                label="Ticket médio"
-                value={formatBRL(rel.metricas.ticketMedio)}
-              />
-            </Card>
+          <div className="min-w-0 flex-1 space-y-10">
+            <Reveal id="metricas" data-testid="metricas" className="space-y-6 scroll-mt-24">
+              <h2 className="font-heading text-xl font-semibold text-white">Métricas</h2>
 
-            {rel.metricas.benchmarkParcial && (
-              <Badge variant="warn" className="flex w-fit gap-1.5">
-                Benchmark de mercado parcial — dados de concorrência incompletos.
-              </Badge>
-            )}
+              {/* Ticket médio como Stat */}
+              <Card className="inline-flex">
+                <Stat label="Ticket médio" value={formatBRL(rel.metricas.ticketMedio)} />
+              </Card>
 
-            {/* Vendas por canal */}
-            <Card>
-              <CardHeader>
-                <CardTitle as="h3" className="text-sm">Vendas por canal</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <THead>
-                    <TR>
-                      <TH>Canal</TH>
-                      <TH className="text-right">Total</TH>
-                      <TH className="text-right">Pedidos</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {rel.metricas.vendasPorCanal.map((v, i) => (
-                      <TR key={i}>
-                        <TD>{v.canal}</TD>
-                        <TD numeric>{formatBRL(v.total)}</TD>
-                        <TD numeric>{v.pedidos}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </CardContent>
-            </Card>
+              {rel.metricas.benchmarkParcial && (
+                <Badge variant="warn" className="flex w-fit gap-1.5">
+                  Benchmark de mercado parcial — dados de concorrência incompletos.
+                </Badge>
+              )}
 
-            {/* Evolução */}
-            <Card>
-              <CardHeader>
-                <CardTitle as="h3" className="text-sm">Evolução</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <THead>
-                    <TR>
-                      <TH>Data</TH>
-                      <TH className="text-right">Total</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {rel.metricas.evolucao.map((e, i) => (
-                      <TR key={i}>
-                        <TD className="font-mono text-sm">{e.data}</TD>
-                        <TD numeric>{formatBRL(e.total)}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            {/* Top produtos */}
-            <Card>
-              <CardHeader>
-                <CardTitle as="h3" className="text-sm">Top produtos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <THead>
-                    <TR>
-                      <TH>Nome</TH>
-                      <TH>SKU</TH>
-                      <TH className="text-right">Qtd.</TH>
-                      <TH className="text-right">Receita</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {rel.metricas.topProdutos.map((p, i) => (
-                      <TR key={i}>
-                        <TD>{p.nome}</TD>
-                        <TD className="font-mono text-sm">{p.sku}</TD>
-                        <TD numeric>{p.quantidade}</TD>
-                        <TD numeric>{formatBRL(p.receita)}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            {/* Posição de preço */}
-            <Card>
-              <CardHeader>
-                <CardTitle as="h3" className="text-sm">Posição de preço</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <THead>
-                    <TR>
-                      <TH>SKU</TH>
-                      <TH>Nome</TH>
-                      <TH className="text-right">Nosso preço</TH>
-                      <TH className="text-right">Mercado (mediana)</TH>
-                      <TH>Fonte</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {rel.metricas.posicaoPreco.map((pp, i) => (
-                      <TR key={i}>
-                        <TD className="font-mono text-sm">{pp.sku}</TD>
-                        <TD>{pp.nome}</TD>
-                        <TD numeric>{formatBRL(pp.nossoPreco)}</TD>
-                        <TD numeric>{formatBRL(pp.precoMercadoMediano)}</TD>
-                        <TD>{pp.fonte}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </section>
-
-          {rel.analiseIa ? (
-            <section className="space-y-4">
-              <h2 className="font-heading text-xl font-semibold text-white">Análise da IA</h2>
-
-              {/* Resumo executivo */}
+              {/* Evolução agora como chart + tabela */}
               <Card>
                 <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Resumo executivo</CardTitle>
+                  <CardTitle as="h3" className="text-sm">Evolução</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p data-testid="resumo-executivo" className="text-white/90 leading-relaxed">
-                    {rel.analiseIa.resumoExecutivo}
-                  </p>
+                  <EvolucaoChart
+                    data={rel.metricas.evolucao.map((e) => ({ x: e.data, y: e.total }))}
+                  />
+                  <Table>
+                    <THead>
+                      <TR>
+                        <TH>Data</TH>
+                        <TH className="text-right">Total</TH>
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {rel.metricas.evolucao.map((e, i) => (
+                        <TR key={i}>
+                          <TD className="font-mono text-sm">{e.data}</TD>
+                          <TD numeric>{formatBRL(e.total)}</TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
                 </CardContent>
               </Card>
 
-              {rel.analiseIa.gargalos.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle as="h3" className="text-sm">Gargalos</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-1.5 text-sm text-white/80">
-                      {rel.analiseIa.gargalos.map((g, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="mt-0.5 text-brand">•</span>
-                          {g}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
-              {rel.analiseIa.sugestoesMelhoria.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle as="h3" className="text-sm">Sugestões de melhoria</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-1.5 text-sm text-white/80">
-                      {rel.analiseIa.sugestoesMelhoria.map((s, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="mt-0.5 text-brand">•</span>
-                          {s}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
-              {rel.analiseIa.ideiasVenda.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle as="h3" className="text-sm">Ideias de venda</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-1.5 text-sm text-white/80">
-                      {rel.analiseIa.ideiasVenda.map((iv, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="mt-0.5 text-brand">•</span>
-                          {iv}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
-              {rel.analiseIa.recomendacoesPreco.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle as="h3" className="text-sm">Recomendações de preço</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <THead>
-                        <TR>
-                          <TH>SKU</TH>
-                          <TH>Nome</TH>
-                          <TH className="text-right">Preço sugerido</TH>
-                          <TH>Justificativa</TH>
+              {/* Vendas por canal */}
+              <Card>
+                <CardHeader>
+                  <CardTitle as="h3" className="text-sm">Vendas por canal</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <THead>
+                      <TR>
+                        <TH>Canal</TH>
+                        <TH className="text-right">Total</TH>
+                        <TH className="text-right">Pedidos</TH>
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {rel.metricas.vendasPorCanal.map((v, i) => (
+                        <TR key={i}>
+                          <TD>{v.canal}</TD>
+                          <TD numeric>{formatBRL(v.total)}</TD>
+                          <TD numeric>{v.pedidos}</TD>
                         </TR>
-                      </THead>
-                      <TBody>
-                        {rel.analiseIa.recomendacoesPreco.map((r, i) => (
-                          <TR key={i}>
-                            <TD className="font-mono text-sm">{r.sku}</TD>
-                            <TD>{r.nome}</TD>
-                            <TD numeric>{formatBRL(r.precoSugerido)}</TD>
-                            <TD className="text-sm text-muted">{r.justificativa}</TD>
-                          </TR>
-                        ))}
-                      </TBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              )}
-            </section>
-          ) : null}
-        </>
-      ) : rel.status === 'failed' ? (
-        <Card className="border-red-500/30 bg-red-500/5">
-          <CardContent>
-            <p className="font-medium text-red-400">Relatório falhou.</p>
-            {rel.erro ? (
-              <p data-testid="report-erro" className="mt-1 text-sm text-red-300">
-                {rel.erro}
-              </p>
+                      ))}
+                    </TBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Top produtos */}
+              <Card>
+                <CardHeader>
+                  <CardTitle as="h3" className="text-sm">Top produtos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <THead>
+                      <TR>
+                        <TH>Nome</TH>
+                        <TH>SKU</TH>
+                        <TH className="text-right">Qtd.</TH>
+                        <TH className="text-right">Receita</TH>
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {rel.metricas.topProdutos.map((p, i) => (
+                        <TR key={i}>
+                          <TD>{p.nome}</TD>
+                          <TD className="font-mono text-sm">{p.sku}</TD>
+                          <TD numeric>{p.quantidade}</TD>
+                          <TD numeric>{formatBRL(p.receita)}</TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Posição de preço */}
+              <Card>
+                <CardHeader>
+                  <CardTitle as="h3" className="text-sm">Posição de preço</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <THead>
+                      <TR>
+                        <TH>SKU</TH>
+                        <TH>Nome</TH>
+                        <TH className="text-right">Nosso preço</TH>
+                        <TH className="text-right">Mercado (mediana)</TH>
+                        <TH>Fonte</TH>
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {rel.metricas.posicaoPreco.map((pp, i) => (
+                        <TR key={i}>
+                          <TD className="font-mono text-sm">{pp.sku}</TD>
+                          <TD>{pp.nome}</TD>
+                          <TD numeric>{formatBRL(pp.nossoPreco)}</TD>
+                          <TD numeric>{formatBRL(pp.precoMercadoMediano)}</TD>
+                          <TD>{pp.fonte}</TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </Reveal>
+
+            {rel.analiseIa ? (
+              <>
+                <Reveal id="resumo" className="space-y-4 scroll-mt-24">
+                  <h2 className="font-heading text-xl font-semibold text-white">Análise da IA</h2>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle as="h3" className="text-sm">Resumo executivo</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p data-testid="resumo-executivo" className="leading-relaxed text-white/90">
+                        {rel.analiseIa.resumoExecutivo}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </Reveal>
+
+                {cards.length > 0 ? (
+                  <Reveal id="recomendacoes" className="space-y-4 scroll-mt-24">
+                    <h2 className="font-heading text-xl font-semibold text-white">Recomendações</h2>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {cards.map((c, i) => (
+                        <Card key={i} className="flex flex-col gap-2">
+                          <Badge variant={PRIORIDADE_BADGE[c.prioridade]} className="w-fit">
+                            Prioridade {PRIORIDADE_LABEL[c.prioridade]}
+                          </Badge>
+                          <p className="text-sm leading-relaxed text-white/80">{c.texto}</p>
+                        </Card>
+                      ))}
+                    </div>
+                  </Reveal>
+                ) : null}
+
+                {rel.analiseIa.recomendacoesPreco.length > 0 ? (
+                  <Reveal id="precos" className="space-y-4 scroll-mt-24">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle as="h3" className="text-sm">Recomendações de preço</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <THead>
+                            <TR>
+                              <TH>SKU</TH>
+                              <TH>Nome</TH>
+                              <TH className="text-right">Preço sugerido</TH>
+                              <TH>Justificativa</TH>
+                            </TR>
+                          </THead>
+                          <TBody>
+                            {rel.analiseIa.recomendacoesPreco.map((r, i) => (
+                              <TR key={i}>
+                                <TD className="font-mono text-sm">{r.sku}</TD>
+                                <TD>{r.nome}</TD>
+                                <TD numeric>{formatBRL(r.precoSugerido)}</TD>
+                                <TD className="text-sm text-muted">{r.justificativa}</TD>
+                              </TR>
+                            ))}
+                          </TBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  </Reveal>
+                ) : null}
+              </>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+      ) : rel.status === 'failed' ? (
+        <div className="mt-6">
+          <Alert variant="danger" title="Relatório falhou.">
+            <p data-testid="report-erro">{friendlyReportError(rel.erro)}</p>
+          </Alert>
+        </div>
       ) : (
-        <p className="text-muted">Relatório em processamento.</p>
+        <p className="mt-6 text-muted">Relatório em processamento.</p>
       )}
     </main>
   );
