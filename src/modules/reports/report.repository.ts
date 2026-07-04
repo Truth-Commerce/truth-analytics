@@ -8,6 +8,36 @@ import type { ReportDetail, ReportStatus, ReportSummary } from './report.types';
 
 type ReportRow = typeof reports.$inferSelect;
 
+// Apenas as colunas de summary — evita puxar os jsonb pesados (metricas/analise_ia)
+// na listagem. Ordena por created_at desc (usa reports_org_created_idx).
+const summaryColumns = {
+  id: reports.id,
+  status: reports.status,
+  periodo_inicio: reports.periodo_inicio,
+  periodo_fim: reports.periodo_fim,
+  created_at: reports.created_at,
+};
+
+type SummaryRow = {
+  id: string;
+  status: string;
+  periodo_inicio: Date;
+  periodo_fim: Date;
+  created_at: Date;
+};
+
+function summaryRowToSummary(row: SummaryRow): ReportSummary {
+  return {
+    id: row.id,
+    status: row.status as ReportStatus,
+    periodoInicio: row.periodo_inicio,
+    periodoFim: row.periodo_fim,
+    createdAt: row.created_at,
+  };
+}
+
+const LIST_LIMIT = 50;
+
 function rowToSummary(row: ReportRow): ReportSummary {
   return {
     id: row.id,
@@ -29,21 +59,22 @@ function rowToDetail(row: ReportRow): ReportDetail {
 
 export async function listReports(orgId: string): Promise<ReportSummary[]> {
   const rows = await db
-    .select()
+    .select(summaryColumns)
     .from(reports)
     .where(eq(reports.org_id, orgId))
-    .orderBy(desc(reports.created_at));
-  return rows.map(rowToSummary);
+    .orderBy(desc(reports.created_at))
+    .limit(LIST_LIMIT);
+  return rows.map(summaryRowToSummary);
 }
 
 export async function getLatestReport(orgId: string): Promise<ReportSummary | null> {
   const [row] = await db
-    .select()
+    .select(summaryColumns)
     .from(reports)
     .where(eq(reports.org_id, orgId))
     .orderBy(desc(reports.created_at))
     .limit(1);
-  return row ? rowToSummary(row) : null;
+  return row ? summaryRowToSummary(row) : null;
 }
 
 export async function getReportById(

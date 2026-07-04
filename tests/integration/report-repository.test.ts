@@ -160,4 +160,24 @@ describe.skipIf(!url)('report.repository — integração', () => {
     const result = await getLatestReport(orgBId);
     expect(result).toBeNull();
   });
+
+  it('listReports limita a 50 e não carrega jsonb', async () => {
+    const { listReports } = await import('@/modules/reports/report.repository');
+    // 55 reports done (status done não conflita com o lock parcial queued|running)
+    await tdb.insert(reports).values(
+      Array.from({ length: 55 }, () => ({
+        org_id: orgId,
+        status: 'done',
+        metricas: { pesado: 'x'.repeat(1000) },
+        periodo_inicio: PERIODO.inicio,
+        periodo_fim: PERIODO.fim,
+      })),
+    );
+    const lista = await listReports(orgId);
+    expect(lista).toHaveLength(50);
+    // summary não expõe métricas — shape estrito
+    expect(Object.keys(lista[0]!).sort()).toEqual(
+      ['createdAt', 'id', 'periodoFim', 'periodoInicio', 'status'].sort(),
+    );
+  });
 });
