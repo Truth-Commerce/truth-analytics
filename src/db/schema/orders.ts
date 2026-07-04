@@ -1,4 +1,5 @@
 import {
+  index,
   jsonb,
   numeric,
   pgTable,
@@ -29,6 +30,7 @@ export const orders = pgTable(
   },
   (t) => ({
     org_bling_uq: unique('orders_org_bling_uq').on(t.org_id, t.bling_order_id),
+    org_data_idx: index('orders_org_data_idx').on(t.org_id, t.data),
   }),
 );
 

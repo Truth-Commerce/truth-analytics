@@ -1,9 +1,11 @@
+import { sql } from 'drizzle-orm';
 import {
   index,
   jsonb,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -20,6 +22,7 @@ export const reports = pgTable(
     periodo_inicio: timestamp('periodo_inicio', { withTimezone: true, mode: 'date' }).notNull(),
     periodo_fim: timestamp('periodo_fim', { withTimezone: true, mode: 'date' }).notNull(),
     status: varchar('status', { length: 16 }).notNull().default('queued'),
+    etapa: varchar('etapa', { length: 32 }),
     metricas: jsonb('metricas'),
     analise_ia: jsonb('analise_ia'),
     erro: text('erro'),
@@ -33,6 +36,10 @@ export const reports = pgTable(
   },
   (t) => ({
     org_created_idx: index('reports_org_created_idx').on(t.org_id, t.created_at),
+    // Lock de idempotência: no máximo 1 report ativo (queued|running) por org.
+    org_ativo_uq: uniqueIndex('reports_org_ativo_uq')
+      .on(t.org_id)
+      .where(sql`status IN ('queued', 'running')`),
   }),
 );
 
