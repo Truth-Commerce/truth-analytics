@@ -3,6 +3,7 @@ import { z } from 'zod';
 const schema = z.object({
   POSTGRES_URL: z.string().min(1, 'POSTGRES_URL é obrigatória'),
   POSTGRES_URL_DIRECT: z.string().min(1).optional(),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(20).optional(),
   AUTH_SECRET: z.string().min(1, 'AUTH_SECRET é obrigatória'),
   APP_URL: z.string().url().default('http://localhost:3000'),
   ENCRYPTION_KEY: z
