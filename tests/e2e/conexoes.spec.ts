@@ -63,8 +63,9 @@ test('Desconectar Bling: botão aparece quando conectado e desconecta ao clicar'
   await expect(page.getByTestId('bling-status')).toHaveText('Conectado ✓');
   await expect(page.getByTestId('disconnect-bling')).toBeVisible();
 
-  // Click disconnect
+  // Click disconnect + confirma no dialog
   await page.click('[data-testid="disconnect-bling"]');
+  await page.click('[data-testid="confirm-dialog-confirm"]');
 
   // Should flip to not connected
   await expect(page.getByTestId('bling-status')).toHaveText('Não conectado');
@@ -86,6 +87,10 @@ test('remove produto monitorado da lista', async ({ page }) => {
   // remove o produto
   const li = page.locator('li', { hasText: 'Tênis Running Pro' });
   await li.getByRole('button', { name: 'Remover' }).click();
+  await page.click('[data-testid="confirm-dialog-confirm"]');
+  // aguarda o dialog fechar — seu título "Remover Tênis Running Pro?" colide
+  // com o matcher de texto abaixo enquanto a saída anima
+  await expect(page.getByTestId('confirm-dialog-confirm')).toBeHidden();
 
   // produto não deve mais aparecer
   await expect(page.getByText('Tênis Running Pro')).not.toBeVisible();

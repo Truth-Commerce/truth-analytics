@@ -42,7 +42,7 @@ export default async function ConexoesPage() {
       </Card>
 
       {/* Produtos monitorados */}
-      <Card>
+      <Card id="produtos-monitorados">
         <CardHeader>
           <CardTitle as="h2" className="text-base">Produtos monitorados</CardTitle>
         </CardHeader>

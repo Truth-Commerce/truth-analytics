@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { useFormState } from 'react-dom';
 
 import {
@@ -11,6 +12,7 @@ import {
 } from '@/actions/admin.actions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Select';
 
 const initial: AdminActionState = {};
@@ -47,6 +49,8 @@ export function ClientRow({ orgId, name, status, plano }: Props) {
   const [suspState, suspend] = useFormState(suspendClientAction, initial);
   const [reactState, reactivate] = useFormState(reactivateClientAction, initial);
   const [planoState, changePlano] = useFormState(setPlanoAction, initial);
+  const [confirmSuspend, setConfirmSuspend] = useState(false);
+  const suspendFormRef = useRef<HTMLFormElement>(null);
   const err = actState.error || suspState.error || reactState.error || planoState.error;
 
   return (
@@ -76,12 +80,23 @@ export function ClientRow({ orgId, name, status, plano }: Props) {
                   Trocar plano
                 </Button>
               </form>
-              <form action={suspend}>
+              <form action={suspend} ref={suspendFormRef}>
                 <input type="hidden" name="orgId" value={orgId} />
-                <Button type="submit" variant="danger" size="sm">
+                <Button type="button" variant="danger" size="sm" onClick={() => setConfirmSuspend(true)}>
                   Suspender
                 </Button>
               </form>
+              <ConfirmDialog
+                open={confirmSuspend}
+                title={`Suspender ${name}?`}
+                description="O cliente perde o acesso ao painel até ser reativado."
+                confirmLabel="Suspender"
+                onConfirm={() => {
+                  setConfirmSuspend(false);
+                  suspendFormRef.current?.requestSubmit();
+                }}
+                onCancel={() => setConfirmSuspend(false)}
+              />
             </>
           ) : null}
           {status === 'suspended' ? (

@@ -13,6 +13,8 @@ import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { GenerateReport } from './generate-report';
 import { StatCards } from './stat-cards';
@@ -169,7 +171,15 @@ export default async function DashboardPage() {
             </Table>
           </Card>
         ) : (
-          <p className="text-muted">Nenhum relatório ainda.</p>
+          <EmptyState
+            title="Nenhum relatório ainda."
+            description="Conecte o Bling, adicione produtos e gere sua primeira análise por IA."
+            action={
+              <Button as="a" href="#gerar-relatorio" variant="primary" size="sm">
+                Gerar primeira análise
+              </Button>
+            }
+          />
         )}
       </section>
     </main>
