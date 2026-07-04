@@ -10,7 +10,8 @@ type KeyRing = { keys: Record<string, Buffer>; active: string };
 
 function keyRing(): KeyRing | null {
   if (!serverEnv.ENCRYPTION_KEYS || !serverEnv.ENCRYPTION_KEY_ACTIVE) return null;
-  const keys: Record<string, Buffer> = {};
+  // Object.create(null): sem protótipo → 'constructor'/'__proto__' nunca resolvem chave herdada.
+  const keys: Record<string, Buffer> = Object.create(null) as Record<string, Buffer>;
   for (const [keyId, b64] of Object.entries(serverEnv.ENCRYPTION_KEYS)) {
     keys[keyId] = Buffer.from(b64, 'base64');
   }
@@ -62,7 +63,9 @@ export function decryptSecret(payload: string): string {
       const parts = payload.split(':');
       if (parts.length !== 5) throw new Error('formato');
       const [, keyId, ivB64, tagB64, ctB64] = parts;
-      const key = keyRing()?.keys[keyId!];
+      const ring = keyRing();
+      // Object.hasOwn: só chaves próprias do chaveiro — nada herdado do protótipo.
+      const key = ring && Object.hasOwn(ring.keys, keyId!) ? ring.keys[keyId!] : undefined;
       if (!key) throw new Error('chave_desconhecida');
       return decipherWith(key, ivB64!, tagB64!, ctB64!);
     }

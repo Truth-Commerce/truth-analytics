@@ -66,6 +66,42 @@ describe('parseServerEnv', () => {
     ).toThrow('ENCRYPTION_KEY_ACTIVE não existe em ENCRYPTION_KEYS');
   });
 
+  it('rejeita "__proto__" como keyId em ENCRYPTION_KEYS', () => {
+    expect(() =>
+      parseServerEnv({
+        POSTGRES_URL: 'postgres://x',
+        AUTH_SECRET: 'secret',
+        APP_URL: 'http://localhost:3000',
+        ENCRYPTION_KEYS: JSON.stringify({ ['__proto__']: KEY_32 }),
+        ENCRYPTION_KEY_ACTIVE: '__proto__',
+      } as unknown as NodeJS.ProcessEnv),
+    ).toThrow('keyId inválido');
+  });
+
+  it('rejeita ENCRYPTION_KEYS sem ENCRYPTION_KEY_ACTIVE (sem fallback silencioso)', () => {
+    expect(() =>
+      parseServerEnv({
+        POSTGRES_URL: 'postgres://x',
+        AUTH_SECRET: 'secret',
+        APP_URL: 'http://localhost:3000',
+        ENCRYPTION_KEY: KEY_32,
+        ENCRYPTION_KEYS: JSON.stringify({ k1: KEY_32 }),
+      } as unknown as NodeJS.ProcessEnv),
+    ).toThrow('ENCRYPTION_KEYS configurada sem ENCRYPTION_KEY_ACTIVE');
+  });
+
+  it('rejeita ENCRYPTION_KEY_ACTIVE sem ENCRYPTION_KEYS', () => {
+    expect(() =>
+      parseServerEnv({
+        POSTGRES_URL: 'postgres://x',
+        AUTH_SECRET: 'secret',
+        APP_URL: 'http://localhost:3000',
+        ENCRYPTION_KEY: KEY_32,
+        ENCRYPTION_KEY_ACTIVE: 'k1',
+      } as unknown as NodeJS.ProcessEnv),
+    ).toThrow('ENCRYPTION_KEY_ACTIVE configurada sem ENCRYPTION_KEYS');
+  });
+
   it('rejeita chave de 16 bytes em ENCRYPTION_KEYS', () => {
     expect(() =>
       parseServerEnv({

@@ -107,6 +107,31 @@ describe('crypto versionada (v1)', () => {
     expect(() => decryptSecret(adulterado)).toThrow('decrypt_failed');
   });
 
+  it('keyId "constructor" (herdado do protótipo) → decrypt_failed', async () => {
+    envMock.ENCRYPTION_KEYS = { k1: KEY_A };
+    envMock.ENCRYPTION_KEY_ACTIVE = 'k1';
+    const { encryptSecret, decryptSecret } = await import('@/modules/crypto/crypto');
+    const [, , iv, tag, ct] = encryptSecret('segredo').split(':');
+    const malicioso = ['v1', 'constructor', iv, tag, ct].join(':');
+    expect(() => decryptSecret(malicioso)).toThrow('decrypt_failed');
+  });
+
+  it('keyId vazio (v1::...) → decrypt_failed', async () => {
+    envMock.ENCRYPTION_KEYS = { k1: KEY_A };
+    envMock.ENCRYPTION_KEY_ACTIVE = 'k1';
+    const { encryptSecret, decryptSecret } = await import('@/modules/crypto/crypto');
+    const [, , iv, tag, ct] = encryptSecret('segredo').split(':');
+    expect(() => decryptSecret(['v1', '', iv, tag, ct].join(':'))).toThrow('decrypt_failed');
+  });
+
+  it('keyId contendo ":" (mais de 5 partes) → decrypt_failed', async () => {
+    envMock.ENCRYPTION_KEYS = { k1: KEY_A };
+    envMock.ENCRYPTION_KEY_ACTIVE = 'k1';
+    const { encryptSecret, decryptSecret } = await import('@/modules/crypto/crypto');
+    const [, , iv, tag, ct] = encryptSecret('segredo').split(':');
+    expect(() => decryptSecret(['v1', 'a:b', iv, tag, ct].join(':'))).toThrow('decrypt_failed');
+  });
+
   it('ct adulterado em payload v1 → decrypt_failed', async () => {
     envMock.ENCRYPTION_KEYS = { k1: KEY_A };
     envMock.ENCRYPTION_KEY_ACTIVE = 'k1';

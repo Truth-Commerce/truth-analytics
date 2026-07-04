@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 const KEY_ID_RE = /^[a-z0-9_-]{1,16}$/;
+// Nomes que colidem com o protótipo de Object — vetados como keyId (prototype pollution).
+const KEY_ID_DENYLIST = new Set(['__proto__', 'constructor', 'prototype']);
 
 const schema = z
   .object({
@@ -28,7 +30,7 @@ const schema = z
         return z.NEVER;
       }
       for (const [keyId, b64] of Object.entries(obj)) {
-        if (!KEY_ID_RE.test(keyId)) {
+        if (!KEY_ID_RE.test(keyId) || KEY_ID_DENYLIST.has(keyId)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `keyId inválido em ENCRYPTION_KEYS: ${keyId}`,
@@ -62,6 +64,22 @@ const schema = z
   SENTRY_DSN: z.string().url().optional(),
   })
   .superRefine((env, ctx) => {
+    // KEYS e ACTIVE andam juntas: metade configurada é misconfiguração explícita
+    // (evita degradar silenciosamente para o caminho legado durante uma rotação).
+    if (env.ENCRYPTION_KEYS && !env.ENCRYPTION_KEY_ACTIVE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'ENCRYPTION_KEYS configurada sem ENCRYPTION_KEY_ACTIVE — defina o keyId ativo',
+      });
+      return;
+    }
+    if (env.ENCRYPTION_KEY_ACTIVE && !env.ENCRYPTION_KEYS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'ENCRYPTION_KEY_ACTIVE configurada sem ENCRYPTION_KEYS — defina o chaveiro',
+      });
+      return;
+    }
     const temVersionada = Boolean(env.ENCRYPTION_KEYS && env.ENCRYPTION_KEY_ACTIVE);
     if (!temVersionada && !env.ENCRYPTION_KEY) {
       ctx.addIssue({
@@ -70,9 +88,8 @@ const schema = z
       });
     }
     if (
-      env.ENCRYPTION_KEYS &&
-      env.ENCRYPTION_KEY_ACTIVE &&
-      !(env.ENCRYPTION_KEY_ACTIVE in env.ENCRYPTION_KEYS)
+      temVersionada &&
+      !Object.hasOwn(env.ENCRYPTION_KEYS as Record<string, string>, env.ENCRYPTION_KEY_ACTIVE as string)
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
