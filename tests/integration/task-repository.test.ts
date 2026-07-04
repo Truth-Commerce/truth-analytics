@@ -16,9 +16,13 @@ describe.skipIf(!url)('task.repository — integração', () => {
   let orgAId = '';
   let orgBId = '';
   let orgCId = '';
+  let orgDId = '';
+  let orgEId = '';
   let userAId = '';
   let userBId = '';
   let userCId = '';
+  let userDId = '';
+  let userEId = '';
 
   // estado construído sequencialmente pelos testes de A (ordem/moveTask)
   let taskA1Id = '';
@@ -65,7 +69,7 @@ describe.skipIf(!url)('task.repository — integração', () => {
   });
 
   afterAll(async () => {
-    const orgIds = [orgAId, orgBId, orgCId].filter(Boolean);
+    const orgIds = [orgAId, orgBId, orgCId, orgDId, orgEId].filter(Boolean);
     if (orgIds.length) {
       const taskRows = await tdb.select({ id: tasks.id }).from(tasks).where(inArray(tasks.org_id, orgIds));
       const taskIds = taskRows.map((r) => r.id);
@@ -315,7 +319,7 @@ describe.skipIf(!url)('task.repository — integração', () => {
     expect(activityRow).toBeUndefined();
   });
 
-  it('countTasksAbertas e listTaskTitulosByReport respeitam escopo e filtros', async () => {
+  it('listTaskTitulosByReport respeita escopo e filtro por report; countTasksAbertas(org vazia) é 0', async () => {
     const { createTask, moveTask, countTasksAbertas, listTaskTitulosByReport } = await import(
       '@/modules/tasks/task.repository'
     );
@@ -359,10 +363,7 @@ describe.skipIf(!url)('task.repository — integração', () => {
     await moveTask({ taskId: closedTaskId, orgId: orgCId, ator: 'analista', actorUserId: userCId, para: 'em_revisao' });
     await moveTask({ taskId: closedTaskId, orgId: orgCId, ator: 'analista', actorUserId: userCId, para: 'concluida' });
 
-    // 3 abertas em orgC: "Tarefa C1 (editada)" (deixada em backlog pelo teste de updateTask)
-    // + openTaskId + outroOpenTaskId. closedTaskId (concluída) não conta.
-    expect(await countTasksAbertas(orgCId)).toBe(3);
-    // org sem nenhuma task aberta
+    // org sem nenhuma task (nunca recebe createTask com orgId: orgBId) — determinístico, independe de ordem
     expect(await countTasksAbertas(orgBId)).toBe(0);
 
     const titulos = await listTaskTitulosByReport(reportId, orgCId);
@@ -374,5 +375,182 @@ describe.skipIf(!url)('task.repository — integração', () => {
 
     void openTaskId;
     void outroOpenTaskId;
+  });
+
+  it('countTasksAbertas conta apenas backlog/todo/em_andamento em org isolada (não depende de outros testes)', async () => {
+    const { createTask, moveTask, countTasksAbertas } = await import('@/modules/tasks/task.repository');
+
+    const [orgD] = await tdb
+      .insert(organizations)
+      .values({ name: `${PREFIX}D-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    orgDId = orgD!.id;
+
+    const [userD] = await tdb
+      .insert(users)
+      .values({ org_id: orgDId, email: `${PREFIX}d-${RUN}@example.com`, senha_hash: 'hash', role: 'analista' })
+      .returning({ id: users.id });
+    userDId = userD!.id;
+
+    // 3 tasks abertas: uma parada em cada status "aberto" (backlog, todo, em_andamento)
+    await createTask({
+      orgId: orgDId,
+      titulo: 'D backlog',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userDId,
+    });
+
+    const todoTaskId = await createTask({
+      orgId: orgDId,
+      titulo: 'D todo',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userDId,
+    });
+    await moveTask({ taskId: todoTaskId, orgId: orgDId, ator: 'analista', actorUserId: userDId, para: 'todo' });
+
+    const andamentoTaskId = await createTask({
+      orgId: orgDId,
+      titulo: 'D em_andamento',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userDId,
+    });
+    await moveTask({ taskId: andamentoTaskId, orgId: orgDId, ator: 'analista', actorUserId: userDId, para: 'todo' });
+    await moveTask({
+      taskId: andamentoTaskId,
+      orgId: orgDId,
+      ator: 'analista',
+      actorUserId: userDId,
+      para: 'em_andamento',
+    });
+
+    // 1 task concluída — não deve entrar na contagem de "abertas"
+    const concluidaTaskId = await createTask({
+      orgId: orgDId,
+      titulo: 'D concluida',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userDId,
+    });
+    await moveTask({ taskId: concluidaTaskId, orgId: orgDId, ator: 'analista', actorUserId: userDId, para: 'todo' });
+    await moveTask({
+      taskId: concluidaTaskId,
+      orgId: orgDId,
+      ator: 'analista',
+      actorUserId: userDId,
+      para: 'em_andamento',
+    });
+    await moveTask({
+      taskId: concluidaTaskId,
+      orgId: orgDId,
+      ator: 'analista',
+      actorUserId: userDId,
+      para: 'em_revisao',
+    });
+    await moveTask({
+      taskId: concluidaTaskId,
+      orgId: orgDId,
+      ator: 'analista',
+      actorUserId: userDId,
+      para: 'concluida',
+    });
+
+    expect(await countTasksAbertas(orgDId)).toBe(3);
+  });
+
+  it('countTasksByStatus retorna a contagem por status, incluindo status com 0 tasks', async () => {
+    const { createTask, moveTask, countTasksByStatus } = await import('@/modules/tasks/task.repository');
+
+    const [orgE] = await tdb
+      .insert(organizations)
+      .values({ name: `${PREFIX}E-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    orgEId = orgE!.id;
+
+    const [userE] = await tdb
+      .insert(users)
+      .values({ org_id: orgEId, email: `${PREFIX}e-${RUN}@example.com`, senha_hash: 'hash', role: 'analista' })
+      .returning({ id: users.id });
+    userEId = userE!.id;
+
+    // 2 tasks ficam em backlog (sem mover)
+    await createTask({
+      orgId: orgEId,
+      titulo: 'E backlog 1',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userEId,
+    });
+    await createTask({
+      orgId: orgEId,
+      titulo: 'E backlog 2',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userEId,
+    });
+
+    // nenhuma task fica parada em "todo" (propositalmente 0, cobrindo status sem tasks)
+
+    // 1 task chega a em_andamento (passa por todo, mas não fica parada lá)
+    const andamentoId = await createTask({
+      orgId: orgEId,
+      titulo: 'E andamento',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userEId,
+    });
+    await moveTask({ taskId: andamentoId, orgId: orgEId, ator: 'analista', actorUserId: userEId, para: 'todo' });
+    await moveTask({
+      taskId: andamentoId,
+      orgId: orgEId,
+      ator: 'analista',
+      actorUserId: userEId,
+      para: 'em_andamento',
+    });
+
+    // 1 task chega a em_revisao
+    const revisaoId = await createTask({
+      orgId: orgEId,
+      titulo: 'E revisao',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userEId,
+    });
+    await moveTask({ taskId: revisaoId, orgId: orgEId, ator: 'analista', actorUserId: userEId, para: 'todo' });
+    await moveTask({ taskId: revisaoId, orgId: orgEId, ator: 'analista', actorUserId: userEId, para: 'em_andamento' });
+    await moveTask({ taskId: revisaoId, orgId: orgEId, ator: 'analista', actorUserId: userEId, para: 'em_revisao' });
+
+    // 1 task chega a concluida
+    const concluidaId = await createTask({
+      orgId: orgEId,
+      titulo: 'E concluida',
+      tipo: 'catalogo',
+      prioridade: 'media',
+      criadoPor: 'analista',
+      actorUserId: userEId,
+    });
+    await moveTask({ taskId: concluidaId, orgId: orgEId, ator: 'analista', actorUserId: userEId, para: 'todo' });
+    await moveTask({
+      taskId: concluidaId,
+      orgId: orgEId,
+      ator: 'analista',
+      actorUserId: userEId,
+      para: 'em_andamento',
+    });
+    await moveTask({ taskId: concluidaId, orgId: orgEId, ator: 'analista', actorUserId: userEId, para: 'em_revisao' });
+    await moveTask({ taskId: concluidaId, orgId: orgEId, ator: 'analista', actorUserId: userEId, para: 'concluida' });
+
+    const counts = await countTasksByStatus(orgEId);
+    expect(counts).toEqual({ backlog: 2, todo: 0, em_andamento: 1, em_revisao: 1, concluida: 1 });
   });
 });
