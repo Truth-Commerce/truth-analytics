@@ -27,3 +27,20 @@ export function toggleChecklistLine(descricao: string, index: number): string {
   }
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// parseChecklist — extrai os itens de checklist de uma descrição em
+// markdown (`- [ ] item` / `- [x] item`), na ordem em que aparecem. Linhas
+// de texto livre (incluindo em branco) são ignoradas. Descrição sem itens
+// de checklist retorna lista vazia.
+// ---------------------------------------------------------------------------
+export function parseChecklist(descricao: string): Array<{ texto: string; feito: boolean }> {
+  return descricao
+    .split('\n')
+    .filter((line) => line.startsWith(CHECKLIST_UNCHECKED) || line.startsWith(CHECKLIST_CHECKED))
+    .map((line) => {
+      const feito = line.startsWith(CHECKLIST_CHECKED);
+      const texto = line.slice(feito ? CHECKLIST_CHECKED.length : CHECKLIST_UNCHECKED.length);
+      return { texto, feito };
+    });
+}

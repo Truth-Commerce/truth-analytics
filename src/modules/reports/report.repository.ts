@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gt, ne } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
@@ -82,6 +82,33 @@ export async function getLatestDoneReport(orgId: string): Promise<ReportDetail |
     .select()
     .from(reports)
     .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done')))
+    .orderBy(desc(reports.created_at))
+    .limit(1);
+  return row ? rowToDetail(row) : null;
+}
+
+/**
+ * Report `done` mais recente da org, POSTERIOR a `afterCreatedAt` e diferente
+ * de `excludeId` — usado por `getTaskImpact` (Task 10) para achar o
+ * "relatório mais recente" contra o qual medir o impacto de uma task, a
+ * partir do relatório de origem que a gerou.
+ */
+export async function getLatestDoneReportAfter(
+  orgId: string,
+  afterCreatedAt: Date,
+  excludeId: string,
+): Promise<ReportDetail | null> {
+  const [row] = await db
+    .select()
+    .from(reports)
+    .where(
+      and(
+        eq(reports.org_id, orgId),
+        eq(reports.status, 'done'),
+        gt(reports.created_at, afterCreatedAt),
+        ne(reports.id, excludeId),
+      ),
+    )
     .orderBy(desc(reports.created_at))
     .limit(1);
   return row ? rowToDetail(row) : null;
