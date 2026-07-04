@@ -114,6 +114,98 @@ export function passwordResetTemplate(link: string): EmailContent {
 }
 
 /**
+ * Template: nova tarefa criada (enviado ao destinatário da tarefa).
+ */
+export function taskCriadaTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Nova tarefa atribuída a você — Truth Analytics';
+  const text = [
+    'Uma nova tarefa foi criada para você.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Uma nova tarefa foi criada para você.</p>
+<p><strong>Tarefa:</strong> ${titulo}</p>
+<p><a href="${url}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Template: novo comentário em uma tarefa (enviado ao outro participante).
+ */
+export function taskComentarioTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Novo comentário em uma tarefa — Truth Analytics';
+  const text = [
+    'Há um novo comentário em uma tarefa que envolve você.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Há um novo comentário em uma tarefa que envolve você.</p>
+<p><strong>Tarefa:</strong> ${titulo}</p>
+<p><a href="${url}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Template: tarefa devolvida (enviado a quem precisa retrabalhar a tarefa).
+ */
+export function taskDevolvidaTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Tarefa devolvida — Truth Analytics';
+  const text = [
+    'Uma tarefa foi devolvida e precisa da sua atenção.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Uma tarefa foi devolvida e precisa da sua atenção.</p>
+<p><strong>Tarefa:</strong> ${titulo}</p>
+<p><a href="${url}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Template: tarefa aprovada (enviado a quem executou a tarefa).
+ */
+export function taskAprovadaTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Tarefa aprovada — Truth Analytics';
+  const text = [
+    'Sua tarefa foi aprovada.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Sua tarefa foi aprovada.</p>
+<p><strong>Tarefa:</strong> ${titulo}</p>
+<p><a href="${url}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
  * Template: conexão Bling expirou (enviado ao cliente).
  */
 export function blingConnectionFailedTemplate(appUrl: string): EmailContent {

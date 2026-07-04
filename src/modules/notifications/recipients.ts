@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { users } from '@/db/schema';
+import { organizations, users } from '@/db/schema';
 import { serverEnv } from '@/lib/env';
 
 /**
@@ -25,4 +25,35 @@ export async function getOrgPrimaryEmail(orgId: string): Promise<string | null> 
  */
 export function getAdminAlertEmail(): string | null {
   return serverEnv.ADMIN_ALERT_EMAIL ?? serverEnv.EMAIL_FROM ?? null;
+}
+
+/**
+ * Retorna o usuário cliente primário de uma organização (id + e-mail).
+ * Prefere usuários com role 'client'; MVP = 1 usuário por org.
+ * Retorna null se a org não tiver nenhum usuário com esse role.
+ */
+export async function getOrgPrimaryUser(orgId: string): Promise<{ id: string; email: string } | null> {
+  const [row] = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(and(eq(users.org_id, orgId), eq(users.role, 'client')))
+    .limit(1);
+
+  return row ?? null;
+}
+
+/**
+ * Retorna o analista responsável por uma organização (id + e-mail), via
+ * `organizations.analista_id → users`. Retorna null se a org não existir ou
+ * não tiver analista atribuído.
+ */
+export async function getOrgAnalistaUser(orgId: string): Promise<{ id: string; email: string } | null> {
+  const [row] = await db
+    .select({ id: users.id, email: users.email })
+    .from(organizations)
+    .innerJoin(users, eq(users.id, organizations.analista_id))
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  return row ?? null;
 }
