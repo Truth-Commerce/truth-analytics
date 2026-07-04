@@ -31,7 +31,7 @@ function statusVariant(status: string): 'success' | 'warn' | 'danger' | 'neutral
 
 function PlanoSelect() {
   return (
-    <Select name="plano" defaultValue="" className="w-auto py-1.5 text-sm">
+    <Select name="plano" defaultValue="" className="!w-auto !py-1.5 text-sm">
       <option value="" disabled>
         Plano…
       </option>
