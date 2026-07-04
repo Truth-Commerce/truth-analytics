@@ -2,12 +2,19 @@ import type { NextAuthConfig } from 'next-auth';
 
 import type { OrgStatus, UserRole } from '@/modules/auth/user.types';
 
-type SharedAuthConfig = Pick<NextAuthConfig, 'pages' | 'session' | 'callbacks' | 'providers'>;
+type SharedAuthConfig = Pick<
+  NextAuthConfig,
+  'pages' | 'session' | 'callbacks' | 'providers' | 'trustHost'
+>;
 
 const clientRoutes = ['/dashboard', '/conexoes'];
 const adminRoutes = ['/admin'];
 
 export const authConfig = {
+  // Betas recentes da v5 exigem host confiável fora da Vercel. Na Vercel o host
+  // já é confiável automaticamente; `trustHost: true` mantém `npm run dev` e o
+  // servidor do Playwright (localhost:3100) funcionando sem depender de AUTH_TRUST_HOST.
+  trustHost: true,
   pages: { signIn: '/sign-in', error: '/sign-in' },
   session: { strategy: 'jwt' },
   providers: [],
