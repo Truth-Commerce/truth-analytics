@@ -1,7 +1,7 @@
-import { and, desc, eq, exists, not } from 'drizzle-orm';
+import { and, count, desc, eq, exists, ilike, not } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { organizations, users } from '@/db/schema';
+import { connections, organizations, reports, users } from '@/db/schema';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import type { OrgStatus, Plano } from '@/modules/auth/user.types';
 
@@ -124,6 +124,139 @@ export async function reactivateOrganization(input: {
     userId: input.actorUserId,
     acao: 'org.reativada',
   });
+}
+
+// ─── Admin operacional (Task 10) — leitura cross-org (só admin) ──────────────
+
+export type ConexaoSaude = 'ok' | 'expirado' | 'erro' | 'nenhuma';
+
+function saudeFromRow(status: string | null, accessToken: string | null): ConexaoSaude {
+  if (status === null) return 'nenhuma';
+  if (status === 'ok' && accessToken !== null) return 'ok';
+  if (status === 'expirado') return 'expirado';
+  return 'erro';
+}
+
+export async function listClientOrganizationsPage(params: {
+  q?: string;
+  page: number;
+  pageSize: number;
+}): Promise<{ items: (ClientOrganization & { conexao: ConexaoSaude })[]; total: number }> {
+  const filtroNome = params.q ? ilike(organizations.name, `%${params.q}%`) : undefined;
+  const where = filtroNome
+    ? and(eq(isInternalOrg(), false), filtroNome)
+    : eq(isInternalOrg(), false);
+
+  const [{ n }] = await db.select({ n: count() }).from(organizations).where(where);
+
+  const rows = await db
+    .select({
+      org: organizations,
+      connStatus: connections.status,
+      connToken: connections.access_token,
+    })
+    .from(organizations)
+    .leftJoin(
+      connections,
+      and(eq(connections.org_id, organizations.id), eq(connections.provider, 'bling')),
+    )
+    .where(where)
+    .orderBy(desc(organizations.created_at))
+    .limit(params.pageSize)
+    .offset((params.page - 1) * params.pageSize);
+
+  return {
+    total: n,
+    items: rows.map((r) => ({
+      ...rowToClient(r.org),
+      conexao: saudeFromRow(r.connStatus, r.connToken),
+    })),
+  };
+}
+
+export type OrgReportRow = {
+  id: string;
+  status: string;
+  etapa: string | null;
+  periodoInicio: Date;
+  periodoFim: Date;
+  createdAt: Date;
+  erro: string | null;
+};
+
+export async function listOrgReports(orgId: string, limit = 20): Promise<OrgReportRow[]> {
+  const rows = await db
+    .select({
+      id: reports.id,
+      status: reports.status,
+      etapa: reports.etapa,
+      periodo_inicio: reports.periodo_inicio,
+      periodo_fim: reports.periodo_fim,
+      created_at: reports.created_at,
+      erro: reports.erro,
+    })
+    .from(reports)
+    .where(eq(reports.org_id, orgId))
+    .orderBy(desc(reports.created_at))
+    .limit(limit);
+  return rows.map((r) => ({
+    id: r.id,
+    status: r.status,
+    etapa: r.etapa,
+    periodoInicio: r.periodo_inicio,
+    periodoFim: r.periodo_fim,
+    createdAt: r.created_at,
+    erro: r.erro,
+  }));
+}
+
+export async function getOrgConnectionHealth(orgId: string): Promise<{
+  provider: string;
+  saude: ConexaoSaude;
+  expiraEm: Date | null;
+  lastSyncAt: Date | null;
+} | null> {
+  const [row] = await db
+    .select({
+      provider: connections.provider,
+      status: connections.status,
+      access_token: connections.access_token,
+      expira_em: connections.expira_em,
+      last_sync_at: connections.last_sync_at,
+    })
+    .from(connections)
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'bling')))
+    .limit(1);
+  if (!row) return null;
+  return {
+    provider: row.provider,
+    saude: saudeFromRow(row.status, row.access_token),
+    expiraEm: row.expira_em,
+    lastSyncAt: row.last_sync_at,
+  };
+}
+
+/**
+ * Re-enfileira um report — UPDATE restrito a status='failed' (só admin).
+ * Retorna a org do report re-enfileirado, ou null se não estava failed.
+ */
+export async function requeueFailedReport(input: {
+  reportId: string;
+  actorUserId: string;
+}): Promise<{ orgId: string } | null> {
+  const updated = await db
+    .update(reports)
+    .set({ status: 'queued', etapa: null, erro: null })
+    .where(and(eq(reports.id, input.reportId), eq(reports.status, 'failed')))
+    .returning({ org_id: reports.org_id });
+  if (updated.length === 0) return null;
+  await recordAudit({
+    orgId: updated[0].org_id,
+    userId: input.actorUserId,
+    acao: 'report.reprocessado',
+    detalhes: { reportId: input.reportId },
+  });
+  return { orgId: updated[0].org_id };
 }
 
 export async function setPlano(input: {

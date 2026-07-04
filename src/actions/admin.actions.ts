@@ -2,14 +2,22 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { logger } from '@/lib/logger';
 import { requireAdmin } from '@/modules/auth/require-admin';
 import {
   activateOrganization,
+  getOrgConnectionHealth,
+  getOrganizationById,
   isValidPlano,
   reactivateOrganization,
+  requeueFailedReport,
   setPlano,
   suspendOrganization,
 } from '@/modules/admin/admin.repository';
+import { periodoDoPlano } from '@/modules/admin/periodo-plano';
+import { recordAudit } from '@/modules/audit/audit.repository';
+import { dispatchPipelineRun } from '@/modules/pipeline/dispatch';
+import { createQueuedReport, markReportFailed } from '@/modules/reports/report.repository';
 import { sendAccountActivatedEmail } from '@/modules/notifications/email';
 import { getOrgPrimaryEmail } from '@/modules/notifications/recipients';
 
@@ -84,6 +92,80 @@ export async function reactivateClientAction(
     throw e;
   }
   revalidatePath('/admin');
+  return { ok: true };
+}
+
+/**
+ * Reprocessa (re-enfileira + dispara) um relatório com falha. Só admin.
+ * O UPDATE em requeueFailedReport é restrito a status='failed'.
+ */
+export async function adminReprocessReportAction(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const admin = await requireAdmin();
+  const reportId = String(formData.get('reportId') ?? '');
+  if (!reportId) return { error: 'Relatório inválido.' };
+
+  const res = await requeueFailedReport({ reportId, actorUserId: admin.id });
+  if (!res) return { error: 'Só relatórios com falha podem ser reprocessados.' };
+
+  try {
+    await dispatchPipelineRun(reportId);
+  } catch (e) {
+    await markReportFailed(reportId, 'dispatch_falhou');
+    logger.error('dispatch do reprocesso falhou', { orgId: res.orgId, reportId }, e);
+    return { error: 'Não foi possível disparar o pipeline. Tente novamente.' };
+  }
+  revalidatePath(`/admin/${res.orgId}`);
+  return { ok: true };
+}
+
+/**
+ * Disparo manual do admin: gera um relatório para o cliente agora.
+ * Exige org active + plano + Bling ok. Ignora o gate de ciclo (é disparo manual). Só admin.
+ */
+export async function adminGenerateReportAction(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const admin = await requireAdmin();
+  const orgId = String(formData.get('orgId') ?? '');
+  if (!orgId) return { error: 'Cliente inválido.' };
+
+  const org = await getOrganizationById(orgId);
+  if (!org || org.status !== 'active') return { error: 'Organização não está ativa.' };
+  if (!isValidPlano(org.plano)) return { error: 'Organização sem plano definido.' };
+
+  const health = await getOrgConnectionHealth(orgId);
+  if (health?.saude !== 'ok') return { error: 'Bling não está conectado para este cliente.' };
+
+  const { inicio, fim } = periodoDoPlano(org.plano, new Date());
+  let reportId: string;
+  try {
+    reportId = await createQueuedReport(orgId, { inicio, fim });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'relatorio_em_andamento') {
+      return { error: 'Já existe um relatório em andamento para este cliente.' };
+    }
+    throw e;
+  }
+
+  await recordAudit({
+    orgId,
+    userId: admin.id,
+    acao: 'report.disparado_admin',
+    detalhes: { reportId },
+  });
+
+  try {
+    await dispatchPipelineRun(reportId);
+  } catch (e) {
+    await markReportFailed(reportId, 'dispatch_falhou');
+    logger.error('dispatch do disparo manual falhou', { orgId, reportId }, e);
+    return { error: 'Relatório enfileirado, mas o disparo falhou. Reprocesse na lista.' };
+  }
+  revalidatePath(`/admin/${orgId}`);
   return { ok: true };
 }
 

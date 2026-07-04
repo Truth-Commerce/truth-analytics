@@ -6,6 +6,8 @@ import { generateReportAction, type GenerateState } from '@/actions/reports.acti
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 
+import { GenerationProgress } from './generation-progress';
+
 const initial: GenerateState = {};
 
 const ERROR_LABELS: Record<string, string> = {
@@ -64,12 +66,12 @@ export function GenerateReport({
         ) : null}
       </form>
       {state.error ? (
-        <p className="mt-3 text-sm text-red-400">{errorLabel(state.error)}</p>
+        <p role="alert" className="mt-3 text-sm text-danger-fg">
+          {errorLabel(state.error)}
+        </p>
       ) : null}
       {state.reportId && !state.error ? (
-        <p className="mt-3 text-sm text-brand" data-testid="report-queued">
-          Relatório em processamento. Avisaremos por e-mail quando estiver pronto.
-        </p>
+        <GenerationProgress key={state.reportId} reportId={state.reportId} />
       ) : null}
     </div>
   );
