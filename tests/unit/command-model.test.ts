@@ -22,4 +22,11 @@ describe('buildCommands', () => {
     const cmds = buildCommands('admin');
     expect(cmds.some((c) => c.id === 'nav-admin' && c.href === '/admin')).toBe(true);
   });
+
+  it('analista: só a navegação da carteira, sem ações nem links de admin/cliente', () => {
+    const cmds = buildCommands('analista');
+    expect(cmds).toEqual([
+      { id: 'nav-analista', label: 'Ir para a Carteira', group: 'Navegação', href: '/analista', keywords: 'clientes tasks kanban revisão' },
+    ]);
+  });
 });

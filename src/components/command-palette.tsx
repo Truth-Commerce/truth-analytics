@@ -6,7 +6,7 @@ import { Command } from 'cmdk';
 
 import { buildCommands } from './command-model';
 
-export function CommandPalette({ variant }: { variant: 'client' | 'admin' }) {
+export function CommandPalette({ variant }: { variant: 'client' | 'admin' | 'analista' }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const commands = useMemo(() => buildCommands(variant), [variant]);

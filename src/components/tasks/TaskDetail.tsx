@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { concluirTaskFormAction } from '@/actions/tasks.actions';
+import { aprovarTaskFormAction, concluirTaskFormAction } from '@/actions/tasks.actions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -19,6 +19,7 @@ import {
   type TaskStatus,
 } from '@/modules/tasks/task.types';
 
+import { DevolverTaskButton } from './DevolverTaskButton';
 import { TaskChecklist } from './TaskChecklist';
 import { TaskComments } from './TaskComments';
 
@@ -91,8 +92,9 @@ export function TaskDetail({
   const textoLivre = descricaoLivre(task.descricao);
 
   // Concluir é a única ação de movimentação disponível aqui para o cliente
-  // (aprovar/devolver são exclusivos do analista — Task 11).
+  // (aprovar/devolver são exclusivos do analista/admin — Task 11).
   const mostrarConcluir = ator === 'cliente' && task.status === 'em_andamento';
+  const mostrarAprovarDevolver = ator !== 'cliente' && task.status === 'em_revisao';
 
   return (
     <div className="space-y-6">
@@ -115,6 +117,19 @@ export function TaskDetail({
                 Concluir
               </Button>
             </form>
+          ) : null}
+
+          {mostrarAprovarDevolver && orgId ? (
+            <div className="flex items-center gap-2">
+              <form action={aprovarTaskFormAction}>
+                <input type="hidden" name="taskId" value={task.id} />
+                <input type="hidden" name="orgId" value={orgId} />
+                <Button type="submit" size="sm" data-testid="aprovar-task">
+                  Aprovar
+                </Button>
+              </form>
+              <DevolverTaskButton taskId={task.id} orgId={orgId} titulo={task.titulo} />
+            </div>
           ) : null}
         </div>
 

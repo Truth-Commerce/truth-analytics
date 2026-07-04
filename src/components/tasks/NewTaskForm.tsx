@@ -27,7 +27,10 @@ function SubmitButton() {
   );
 }
 
-export function NewTaskForm() {
+// `orgId` é usado pelo analista/admin (Task 11) — o resolveTaskContext da
+// Task 7 exige orgId no form para esses papéis (o cliente nunca o envia,
+// sempre usa a org da própria sessão).
+export function NewTaskForm({ orgId }: { orgId?: string } = {}) {
   const [state, action] = useFormState(createTaskAction, initial);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -41,6 +44,7 @@ export function NewTaskForm() {
 
   return (
     <form ref={formRef} action={action} data-testid="nova-task-form" className="grid gap-3 sm:grid-cols-2">
+      {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
       {state.error ? (
         <p role="alert" className="col-span-full text-sm text-danger-fg">
           {state.error}

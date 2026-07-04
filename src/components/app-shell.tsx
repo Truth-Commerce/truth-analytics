@@ -7,7 +7,7 @@ import { Logo } from '@/components/ui/Logo';
 
 interface AppShellProps {
   children: React.ReactNode;
-  variant?: 'client' | 'admin';
+  variant?: 'client' | 'admin' | 'analista';
   planoDeAcaoCount?: number;
 }
 
@@ -64,6 +64,14 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
                 className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 Admin
+              </a>
+            )}
+            {variant === 'analista' && (
+              <a
+                href="/analista"
+                className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+              >
+                Carteira
               </a>
             )}
           </div>
@@ -153,6 +161,15 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
                   className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   Admin
+                </a>
+              )}
+              {variant === 'analista' && (
+                <a
+                  href="/analista"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Carteira
                 </a>
               )}
               <div className="mt-1 border-t border-line pt-2">
