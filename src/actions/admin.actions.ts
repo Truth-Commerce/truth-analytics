@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { logger } from '@/lib/logger';
+import { setOrgAnalista } from '@/modules/analista/analista.repository';
 import { requireAdmin } from '@/modules/auth/require-admin';
 import {
   activateOrganization,
@@ -183,6 +184,27 @@ export async function setPlanoAction(
   } catch (e) {
     if (e instanceof Error && e.message === 'org_nao_modificavel') {
       return { error: 'Operação não permitida para esta organização.' };
+    }
+    throw e;
+  }
+  revalidatePath('/admin');
+  return { ok: true };
+}
+
+export async function setOrgAnalistaAction(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const admin = await requireAdmin();
+  const orgId = String(formData.get('orgId') ?? '');
+  const analistaUserIdRaw = String(formData.get('analistaUserId') ?? '');
+  if (!orgId) return { error: 'Cliente inválido.' };
+  const analistaUserId = analistaUserIdRaw === '' ? null : analistaUserIdRaw;
+  try {
+    await setOrgAnalista({ orgId, analistaUserId, actorUserId: admin.id });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'analista_invalido') {
+      return { error: 'Analista inválido.' };
     }
     throw e;
   }

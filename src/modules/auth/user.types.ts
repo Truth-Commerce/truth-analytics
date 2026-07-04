@@ -1,4 +1,4 @@
-export type UserRole = 'admin_truth' | 'client';
+export type UserRole = 'admin_truth' | 'analista' | 'client';
 export type OrgStatus = 'pending' | 'active' | 'suspended';
 export type Plano = 'weekly' | 'biweekly' | 'monthly';
 

@@ -9,6 +9,7 @@ type SharedAuthConfig = Pick<
 
 const clientRoutes = ['/dashboard', '/conexoes'];
 const adminRoutes = ['/admin'];
+const analistaRoutes = ['/analista'];
 
 export const authConfig = {
   // Betas recentes da v5 exigem host confiável fora da Vercel. Na Vercel o host
@@ -28,11 +29,21 @@ export const authConfig = {
       // `session.user.role`/`status` — isso quebraria o modelo de segurança.
       const isLoggedIn = Boolean(auth?.user);
       const isAdminRoute = adminRoutes.some((r) => nextUrl.pathname.startsWith(r));
+      const isAnalistaRoute = analistaRoutes.some((r) => nextUrl.pathname.startsWith(r));
       const isClientRoute = clientRoutes.some((r) => nextUrl.pathname.startsWith(r));
 
       if (isAdminRoute) {
         if (!isLoggedIn) return false;
         if (auth?.user?.role !== 'admin_truth') {
+          return Response.redirect(new URL('/dashboard', nextUrl));
+        }
+        return true;
+      }
+
+      if (isAnalistaRoute) {
+        if (!isLoggedIn) return false;
+        const role = auth?.user?.role;
+        if (role !== 'analista' && role !== 'admin_truth') {
           return Response.redirect(new URL('/dashboard', nextUrl));
         }
         return true;
