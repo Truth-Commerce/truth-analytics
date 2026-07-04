@@ -22,6 +22,7 @@ type Props = {
   name: string;
   status: 'pending' | 'active' | 'suspended';
   plano: string | null;
+  conexao: 'ok' | 'expirado' | 'erro' | 'nenhuma';
 };
 
 function statusVariant(status: string): 'success' | 'warn' | 'danger' | 'neutral' {
@@ -30,6 +31,16 @@ function statusVariant(status: string): 'success' | 'warn' | 'danger' | 'neutral
   if (status === 'pending') return 'warn';
   return 'neutral';
 }
+
+const CONEXAO_BADGE: Record<
+  Props['conexao'],
+  { variant: 'success' | 'warn' | 'danger' | 'neutral'; label: string }
+> = {
+  ok: { variant: 'success', label: 'Bling ok' },
+  expirado: { variant: 'warn', label: 'Expirada' },
+  erro: { variant: 'danger', label: 'Com erro' },
+  nenhuma: { variant: 'neutral', label: 'Sem conexão' },
+};
 
 function PlanoSelect() {
   return (
@@ -44,7 +55,7 @@ function PlanoSelect() {
   );
 }
 
-export function ClientRow({ orgId, name, status, plano }: Props) {
+export function ClientRow({ orgId, name, status, plano, conexao }: Props) {
   const [actState, activate] = useFormState(activateClientAction, initial);
   const [suspState, suspend] = useFormState(suspendClientAction, initial);
   const [reactState, reactivate] = useFormState(reactivateClientAction, initial);
@@ -55,11 +66,18 @@ export function ClientRow({ orgId, name, status, plano }: Props) {
 
   return (
     <tr className="border-b border-line/50 last:border-0" data-testid={`org-${orgId}`}>
-      <td className="px-4 py-3 text-white/90">{name}</td>
+      <td className="px-4 py-3 text-white/90">
+        <a href={`/admin/${orgId}`} className="hover:text-brand hover:underline">
+          {name}
+        </a>
+      </td>
       <td className="px-4 py-3" data-testid={`status-${orgId}`}>
         <Badge variant={statusVariant(status)}>{status}</Badge>
       </td>
       <td className="px-4 py-3 font-mono text-sm text-muted">{plano ?? '—'}</td>
+      <td className="px-4 py-3" data-testid={`conexao-${orgId}`}>
+        <Badge variant={CONEXAO_BADGE[conexao].variant}>{CONEXAO_BADGE[conexao].label}</Badge>
+      </td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           {status === 'pending' ? (
