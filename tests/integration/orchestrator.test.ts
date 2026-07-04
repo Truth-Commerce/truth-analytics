@@ -323,4 +323,35 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     expect(segunda.status).toBe('ignorado');
     expect(segunda.reportId).toBe(reportId);
   });
+
+  // -------------------------------------------------------------------------
+  // Transição guarda queued→running: report já finalizado não é reaberto
+  // -------------------------------------------------------------------------
+  it('generateReport de um report done retorna ignorado e NÃO reabre para running', async () => {
+    const { generateReport } = await import('@/modules/pipeline/orchestrator');
+    // Report já concluído (não-queued) — simula pipeline que já terminou
+    const [done] = await tdb
+      .insert(reports)
+      .values({
+        org_id: orgId,
+        status: 'done',
+        periodo_inicio: new Date('2026-06-01T00:00:00Z'),
+        periodo_fim: new Date('2026-06-30T23:59:59Z'),
+        metricas: { ticketMedio: 42 },
+        analise_ia: MOCK_ANALISE,
+      })
+      .returning({ id: reports.id });
+
+    const outcome = await generateReport(done.id);
+    expect(outcome.status).toBe('ignorado');
+    expect(outcome.reportId).toBe(done.id);
+
+    // Estado intocado: continua done, etapa não vira 'coletando_vendas'
+    const [linha] = await tdb
+      .select({ status: reports.status, etapa: reports.etapa })
+      .from(reports)
+      .where(eq(reports.id, done.id));
+    expect(linha.status).toBe('done');
+    expect(linha.etapa).toBeNull();
+  });
 });

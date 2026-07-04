@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
@@ -42,33 +42,28 @@ export type GenerateOutcome = {
  *    trava NÃO setada. Nunca relança.
  */
 export async function generateReport(reportId: string): Promise<GenerateOutcome> {
+  // Transição queued→running atômica (compare-and-set): só assume o report se ele
+  // AINDA estiver 'queued'. Fecha a corrida de dispatch concorrente / re-POST em um
+  // único UPDATE — sem read-then-write. RETURNING nos dá org_id + período de uma vez.
   const [reportRow] = await db
-    .select({
-      id: reports.id,
+    .update(reports)
+    .set({ status: 'running', etapa: 'coletando_vendas' })
+    .where(and(eq(reports.id, reportId), eq(reports.status, 'queued')))
+    .returning({
       org_id: reports.org_id,
-      status: reports.status,
       periodo_inicio: reports.periodo_inicio,
       periodo_fim: reports.periodo_fim,
-    })
-    .from(reports)
-    .where(eq(reports.id, reportId))
-    .limit(1);
+    });
 
   if (!reportRow) {
-    throw new Error('report_nao_encontrado');
-  }
-  if (reportRow.status !== 'queued') {
+    // 0 linhas: report inexistente OU já não estava 'queued' (outro worker assumiu /
+    // já terminou). Ambos os casos honram a idempotência de re-POST → 'ignorado'.
     return { reportId, status: 'ignorado' };
   }
 
   const orgId = reportRow.org_id;
   const periodo = { inicio: reportRow.periodo_inicio, fim: reportRow.periodo_fim };
   const log = createLogger({ orgId, reportId });
-
-  await db
-    .update(reports)
-    .set({ status: 'running', etapa: 'coletando_vendas' })
-    .where(eq(reports.id, reportId));
 
   try {
     const org = await getOrganizationById(orgId);

@@ -113,6 +113,22 @@ export async function createQueuedReport(
   }
 }
 
-export async function markReportFailed(reportId: string, erro: string): Promise<void> {
-  await db.update(reports).set({ status: 'failed', erro }).where(eq(reports.id, reportId));
+/**
+ * Marca o report como failed SOMENTE se ainda estiver 'queued' (compare-and-set).
+ *
+ * Usado no caminho de falha do dispatch da action: se o self-POST /api/pipeline/run
+ * já foi aceito (202) e o pipeline avançou o report para running/done em background,
+ * um fetch que rejeite depois NÃO pode reverter o report para failed. O predicado
+ * `status = 'queued'` fecha esse TOCTOU: 0 linhas afetadas → o pipeline já assumiu,
+ * deixamos como está.
+ *
+ * @returns true se o report foi marcado failed; false se já havia avançado.
+ */
+export async function markReportFailed(reportId: string, erro: string): Promise<boolean> {
+  const rows = await db
+    .update(reports)
+    .set({ status: 'failed', erro })
+    .where(and(eq(reports.id, reportId), eq(reports.status, 'queued')))
+    .returning({ id: reports.id });
+  return rows.length > 0;
 }

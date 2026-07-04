@@ -180,4 +180,59 @@ describe.skipIf(!url)('report.repository — integração', () => {
       ['createdAt', 'id', 'periodoFim', 'periodoInicio', 'status'].sort(),
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // markReportFailed — compare-and-set (fecha o TOCTOU do dispatch)
+  // ---------------------------------------------------------------------------
+  it('markReportFailed NÃO reverte um report que já avançou (running) — 0 linhas', async () => {
+    const { markReportFailed } = await import('@/modules/reports/report.repository');
+    // Report já em running (pipeline assumiu em background) na org de isolamento
+    const [running] = await tdb
+      .insert(reports)
+      .values({
+        org_id: orgBId,
+        status: 'running',
+        etapa: 'analisando_ia',
+        periodo_inicio: PERIODO.inicio,
+        periodo_fim: PERIODO.fim,
+      })
+      .returning({ id: reports.id });
+
+    const marcou = await markReportFailed(running.id, 'dispatch_falhou');
+    expect(marcou).toBe(false);
+
+    // Estado preservado: continua running, sem erro sobrescrito
+    const [linha] = await tdb
+      .select({ status: reports.status, erro: reports.erro })
+      .from(reports)
+      .where(eq(reports.id, running.id));
+    expect(linha.status).toBe('running');
+    expect(linha.erro).toBeNull();
+
+    // Limpa (running é "ativo" no índice parcial) para não bloquear o próximo insert
+    await tdb.delete(reports).where(eq(reports.id, running.id));
+  });
+
+  it('markReportFailed marca failed quando ainda está queued — 1 linha', async () => {
+    const { markReportFailed } = await import('@/modules/reports/report.repository');
+    const [queued] = await tdb
+      .insert(reports)
+      .values({
+        org_id: orgBId,
+        status: 'queued',
+        periodo_inicio: PERIODO.inicio,
+        periodo_fim: PERIODO.fim,
+      })
+      .returning({ id: reports.id });
+
+    const marcou = await markReportFailed(queued.id, 'dispatch_falhou');
+    expect(marcou).toBe(true);
+
+    const [linha] = await tdb
+      .select({ status: reports.status, erro: reports.erro })
+      .from(reports)
+      .where(eq(reports.id, queued.id));
+    expect(linha.status).toBe('failed');
+    expect(linha.erro).toBe('dispatch_falhou');
+  });
 });
