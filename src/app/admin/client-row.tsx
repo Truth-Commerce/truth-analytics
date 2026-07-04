@@ -11,6 +11,7 @@ import {
 } from '@/actions/admin.actions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
 
 const initial: AdminActionState = {};
 
@@ -30,18 +31,14 @@ function statusVariant(status: string): 'success' | 'warn' | 'danger' | 'neutral
 
 function PlanoSelect() {
   return (
-    <select
-      name="plano"
-      defaultValue=""
-      className="bg-bg-elevated border border-line rounded-lg px-3 py-1.5 text-sm text-white outline-none transition-colors focus:border-brand"
-    >
+    <Select name="plano" defaultValue="" className="w-auto py-1.5 text-sm">
       <option value="" disabled>
         Plano…
       </option>
       <option value="weekly">Semanal</option>
       <option value="biweekly">Quinzenal</option>
       <option value="monthly">Mensal</option>
-    </select>
+    </Select>
   );
 }
 

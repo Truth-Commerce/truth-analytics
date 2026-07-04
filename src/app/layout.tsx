@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Sora, Space_Mono } from 'next/font/google';
 import './globals.css';
+import { MotionProvider } from '@/components/motion-provider';
 
 const sora = Sora({
   subsets: ['latin'],
@@ -31,7 +32,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${sora.variable} ${inter.variable} ${spaceMono.variable}`}>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        <MotionProvider>{children}</MotionProvider>
+      </body>
     </html>
   );
 }
