@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { connections, organizations } from '@/db/schema';
@@ -31,6 +31,6 @@ export async function listOrgsElegiveisParaGeracao(
         ),
       ),
     )
-    .orderBy(organizations.proximo_relatorio_liberado_em);
+    .orderBy(sql`${organizations.proximo_relatorio_liberado_em} asc nulls first`);
   return rows.filter((r) => r.name !== null);
 }
