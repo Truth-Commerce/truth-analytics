@@ -1,5 +1,34 @@
 import { z } from 'zod';
 
+export const TruthScoreSchema = z
+  .object({
+    score: z.number().int().min(0).max(100),
+    totalPeriodo: z.number(),
+    totalPeriodoAnterior: z.number().nullable(),
+    fatores: z
+      .object({
+        crescimento: z
+          .object({ pontos: z.number(), max: z.number(), variacaoPercentual: z.number().nullable() })
+          .strict(),
+        posicaoPreco: z
+          .object({ pontos: z.number(), max: z.number(), itensAvaliados: z.number() })
+          .strict(),
+        diversificacao: z
+          .object({ pontos: z.number(), max: z.number(), canaisComVenda: z.number() })
+          .strict(),
+        regularidade: z
+          .object({ pontos: z.number(), max: z.number(), diasComVenda: z.number(), diasPeriodo: z.number() })
+          .strict(),
+        cobertura: z
+          .object({ pontos: z.number(), max: z.number(), produtosComBenchmark: z.number(), produtosAvaliados: z.number() })
+          .strict(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type TruthScore = z.infer<typeof TruthScoreSchema>;
+
 export const MetricasSchema = z
   .object({
     vendasPorCanal: z
@@ -46,6 +75,7 @@ export const MetricasSchema = z
           .strict(),
       ),
     benchmarkParcial: z.boolean(),
+    truth_score: TruthScoreSchema.optional(),
   })
   .strict();
 
