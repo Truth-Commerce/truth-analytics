@@ -1,4 +1,13 @@
-import { type AnyPgColumn, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  type AnyPgColumn,
+  boolean,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
 import { users } from './users';
 
@@ -13,6 +22,8 @@ export const organizations = pgTable('organizations', {
     withTimezone: true,
     mode: 'date',
   }),
+  geracao_automatica: boolean('geracao_automatica').notNull().default(true),
+  meta_mensal: numeric('meta_mensal', { precision: 12, scale: 2 }),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' })
     .defaultNow()
     .notNull(),
