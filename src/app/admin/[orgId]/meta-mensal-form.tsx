@@ -5,6 +5,7 @@ import { useFormState } from 'react-dom';
 import { setMetaMensalAction, type AdminActionState } from '@/actions/admin.actions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { formatBRL } from '@/lib/format';
 
 const initial: AdminActionState = {};
 
@@ -22,7 +23,7 @@ export function MetaMensalForm({ orgId, metaAtual }: Props) {
       <span className="text-sm text-muted">
         Meta atual:{' '}
         <span className="font-mono text-white/90">
-          {metaAtual !== null ? `R$ ${metaAtual.toFixed(2).replace('.', ',')}` : 'não definida'}
+          {metaAtual !== null ? formatBRL(metaAtual) : 'não definida'}
         </span>
       </span>
       <Input
