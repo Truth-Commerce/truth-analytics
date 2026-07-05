@@ -19,10 +19,15 @@ const ANALISE_JSON_SCHEMA: Record<string, unknown> = _rawSchema as Record<string
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(benchmarkParcial: boolean): string {
+function buildSystemPrompt(benchmarkParcial: boolean, truthScore?: number): string {
   const aviso = benchmarkParcial
     ? `\n\nATENÇÃO: O benchmark de mercado está INCOMPLETO (benchmarkParcial=true). NÃO infira nem invente conclusões sobre concorrentes, participação de mercado ou posição relativa a partir de dados ausentes. Em recomendações de preço, deixe claro explicitamente que a base comparativa é limitada e evite afirmações categóricas sobre competitividade.`
     : '';
+
+  const scoreTexto =
+    truthScore === undefined
+      ? ''
+      : `\n\nAs métricas incluem um "truth_score" (${truthScore}/100) — índice de saúde da operação composto por: crescimento vs período anterior, posição de preço vs mercado, diversificação de canais, regularidade de vendas e cobertura de benchmark (detalhes no campo "fatores"). No resumoExecutivo, comente o score e cite os fatores mais fracos; conecte gargalos e sugestoesMelhoria aos fatores que mais penalizaram o score.`;
 
   return `Você é um analista sênior de e-commerce e marketplaces brasileiro. A partir das métricas fornecidas pelo usuário, produza uma análise estratégica completa em português do Brasil com os seguintes componentes:
 
@@ -32,7 +37,7 @@ function buildSystemPrompt(benchmarkParcial: boolean): string {
 4. **ideiasVenda**: ideias de campanhas, bundles, estratégias de cross-sell ou up-sell adequadas ao perfil dos produtos.
 5. **recomendacoesPreco**: para cada produto com posição de preço disponível, sugira um preço otimizado com justificativa clara baseada nos dados.
 
-Use o nicho informado para contextualizar suas recomendações. Seja direto, prático e orientado a dados.${aviso}
+Use o nicho informado para contextualizar suas recomendações. Seja direto, prático e orientado a dados.${aviso}${scoreTexto}
 
 Responda EXCLUSIVAMENTE com um objeto JSON válido conforme o schema fornecido. Não inclua texto fora do JSON.`;
 }
@@ -58,7 +63,7 @@ function extractTextBlock(content: unknown[]): string | null {
  * Em caso de falha de parse/validação, faz UMA re-tentativa. Após duas falhas → lança 'analise_ia_invalida'.
  */
 export async function analyzeWithIA(metricas: Metricas, nicho: string | null): Promise<AnaliseIa> {
-  const system = buildSystemPrompt(metricas.benchmarkParcial);
+  const system = buildSystemPrompt(metricas.benchmarkParcial, metricas.truth_score?.score);
   const userText = buildUserMessage(metricas, nicho);
 
   // Bloco de métricas marcado p/ prompt caching: o retry reaproveita o prefixo

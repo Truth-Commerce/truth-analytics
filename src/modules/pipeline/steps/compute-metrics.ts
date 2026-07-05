@@ -1,12 +1,13 @@
-import { and, between, eq } from 'drizzle-orm';
+import { and, between, eq, ne } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { marketSnapshots, orders, trackedProducts } from '@/db/schema';
+import { marketSnapshots, orders, reports, trackedProducts } from '@/db/schema';
 import type { MarketSnapshotRecord } from '@/db/schema/market-snapshots';
 import type { OrderRecord } from '@/db/schema/orders';
 import type { TrackedProductRecord } from '@/db/schema/tracked-products';
 import type { MarketResult } from '@/modules/market/market.types';
 import { MetricasSchema, type Metricas } from '@/modules/pipeline/contracts';
+import { computeTruthScore } from './truth-score';
 import type { RawOrderItem } from '@/modules/providers/types';
 import type { Periodo } from '@/modules/providers/types';
 
@@ -253,13 +254,48 @@ export async function computeMetrics(
       ? benchmarkParcialOverride
       : rawSnapshots.length === 0;
 
+  // Truth Score — total do período anterior (mesma duração, imediatamente antes)
+  const duracaoMs = periodo.fim.getTime() - periodo.inicio.getTime();
+  const inicioAnterior = new Date(periodo.inicio.getTime() - duracaoMs);
+  const [temDoneAnterior] = await db
+    .select({ id: reports.id })
+    .from(reports)
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done'), ne(reports.id, reportId)))
+    .limit(1);
+
+  let totalPeriodoAnterior: number | null = null;
+  if (temDoneAnterior) {
+    const anteriores = await db
+      .select({ valor_total: orders.valor_total })
+      .from(orders)
+      .where(
+        and(eq(orders.org_id, orgId), between(orders.data, inicioAnterior, periodo.inicio)),
+      );
+    totalPeriodoAnterior =
+      Math.round(anteriores.reduce((acc, o) => acc + Number(o.valor_total), 0) * 100) / 100;
+  }
+  const diasPeriodo = Math.max(1, Math.round(duracaoMs / 86_400_000));
+
   // Compose metrics
+  const vendas = vendasPorCanal(orderRows);
+  const evolucaoDias = evolucao(orderRows);
+  const posicao = posicaoPreco(productRows, snapshotRows, orderRows);
+  const totalPeriodo = Math.round(orderRows.reduce((acc, o) => acc + o.valor_total, 0) * 100) / 100;
+
   const metricas: Metricas = {
-    vendasPorCanal: vendasPorCanal(orderRows),
-    evolucao: evolucao(orderRows),
+    vendasPorCanal: vendas,
+    evolucao: evolucaoDias,
     ticketMedio: ticketMedio(orderRows),
     topProdutos: topProdutos(orderRows),
-    posicaoPreco: posicaoPreco(productRows, snapshotRows, orderRows),
+    posicaoPreco: posicao,
+    truth_score: computeTruthScore({
+      totalPeriodo,
+      totalPeriodoAnterior,
+      vendasPorCanal: vendas,
+      evolucao: evolucaoDias,
+      posicaoPreco: posicao,
+      diasPeriodo,
+    }),
     benchmarkParcial,
   };
 
