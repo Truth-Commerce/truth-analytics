@@ -10,6 +10,7 @@ import { dashboardStats, insightsFromAnalise } from '@/modules/reports/dashboard
 import { getConnection } from '@/modules/connections/connection.repository';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { listAlertasAbertos } from '@/modules/alerts/alert.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -23,11 +24,12 @@ import { InsightsMarquee } from './insights-marquee';
 import { DashboardCharts } from './dashboard-charts';
 import { OnboardingChecklist } from './onboarding-checklist';
 import { TruthScoreCard } from './truth-score-card';
+import { AlertasSection } from './alertas-section';
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
 
-  const [latest, reports, conn, org, latestDone, produtos, donesRecentes] = await Promise.all([
+  const [latest, reports, conn, org, latestDone, produtos, donesRecentes, alertas] = await Promise.all([
     getLatestReport(access.orgId),
     listReports(access.orgId),
     getConnection(access.orgId),
@@ -35,6 +37,7 @@ export default async function DashboardPage() {
     getLatestDoneReport(access.orgId),
     listTrackedProducts(access.orgId),
     getUltimosDoneDetalhados(access.orgId, 2),
+    listAlertasAbertos(access.orgId),
   ]);
 
   const blingOk = !!conn?.connected;
@@ -99,6 +102,9 @@ export default async function DashboardPage() {
 
       {/* Truth Score hero — some quando não há relatório done com score */}
       <TruthScoreCard atual={donesRecentes[0] ?? null} anterior={donesRecentes[1] ?? null} />
+
+      {/* Alertas abertos — some quando não há alertas */}
+      <AlertasSection alertas={alertas} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Gerar relatório (âncora do ⌘K) */}
