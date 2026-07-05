@@ -1,5 +1,7 @@
 {
   "crons": [
-    { "path": "/api/cron/watchdog", "schedule": "*/10 * * * *" }
+    { "path": "/api/cron/watchdog", "schedule": "*/10 * * * *" },
+    { "path": "/api/cron/gerar-relatorios", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/verificar-alertas", "schedule": "30 9 * * *" }
   ]
 }
