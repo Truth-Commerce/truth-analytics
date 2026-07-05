@@ -2,6 +2,7 @@ import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import {
   getLatestDoneReport,
   getLatestReport,
+  getUltimosDoneDetalhados,
   listReports,
 } from '@/modules/reports/report.repository';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
@@ -21,17 +22,19 @@ import { StatCards } from './stat-cards';
 import { InsightsMarquee } from './insights-marquee';
 import { DashboardCharts } from './dashboard-charts';
 import { OnboardingChecklist } from './onboarding-checklist';
+import { TruthScoreCard } from './truth-score-card';
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
 
-  const [latest, reports, conn, org, latestDone, produtos] = await Promise.all([
+  const [latest, reports, conn, org, latestDone, produtos, donesRecentes] = await Promise.all([
     getLatestReport(access.orgId),
     listReports(access.orgId),
     getConnection(access.orgId),
     getOrganizationById(access.orgId),
     getLatestDoneReport(access.orgId),
     listTrackedProducts(access.orgId),
+    getUltimosDoneDetalhados(access.orgId, 2),
   ]);
 
   const blingOk = !!conn?.connected;
@@ -93,6 +96,9 @@ export default async function DashboardPage() {
           canais={latestDone.metricas.vendasPorCanal.map((v) => ({ label: v.canal, value: v.total }))}
         />
       ) : null}
+
+      {/* Truth Score hero — some quando não há relatório done com score */}
+      <TruthScoreCard atual={donesRecentes[0] ?? null} anterior={donesRecentes[1] ?? null} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Gerar relatório (âncora do ⌘K) */}
