@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import { organizations } from '@/db/schema';
+import { orders, organizations } from '@/db/schema';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -23,6 +23,7 @@ describe.skipIf(!url)('organization-settings.repository — integração', () =>
 
   afterAll(async () => {
     try {
+      await tdb.delete(orders).where(eq(orders.org_id, orgId));
       await tdb.delete(organizations).where(eq(organizations.id, orgId));
     } finally {
       await sql.end();
@@ -50,5 +51,51 @@ describe.skipIf(!url)('organization-settings.repository — integração', () =>
       '@/modules/organizations/organization-settings.repository'
     );
     expect(await getOrgSettings('00000000-0000-0000-0000-000000000000')).toBeNull();
+  });
+
+  it('setMetaMensal(orgId, 15000) → getOrgSettings reflete metaMensal:15000; setMetaMensal(orgId, null) → volta a null', async () => {
+    const { getOrgSettings, setMetaMensal } = await import(
+      '@/modules/organizations/organization-settings.repository'
+    );
+    await setMetaMensal(orgId, 15000);
+    expect((await getOrgSettings(orgId))?.metaMensal).toBe(15000);
+
+    await setMetaMensal(orgId, null);
+    expect((await getOrgSettings(orgId))?.metaMensal).toBeNull();
+  });
+
+  it('getTotalVendasMesCorrente soma apenas as orders do mês corrente', async () => {
+    const { getTotalVendasMesCorrente } = await import(
+      '@/modules/organizations/organization-settings.repository'
+    );
+    const agora = new Date();
+    const inicioMesCorrente = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1));
+    const mesAnterior = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() - 1, 15));
+
+    await tdb.insert(orders).values([
+      {
+        org_id: orgId,
+        bling_order_id: `meta-test-1-${RUN}`,
+        canal: 'teste',
+        data: inicioMesCorrente,
+        valor_total: '100.50',
+      },
+      {
+        org_id: orgId,
+        bling_order_id: `meta-test-2-${RUN}`,
+        canal: 'teste',
+        data: inicioMesCorrente,
+        valor_total: '200',
+      },
+      {
+        org_id: orgId,
+        bling_order_id: `meta-test-3-${RUN}`,
+        canal: 'teste',
+        data: mesAnterior,
+        valor_total: '999',
+      },
+    ]);
+
+    expect(await getTotalVendasMesCorrente(orgId, agora)).toBe(300.5);
   });
 });

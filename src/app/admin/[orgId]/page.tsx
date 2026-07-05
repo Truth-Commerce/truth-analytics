@@ -8,6 +8,7 @@ import {
   listOrgReports,
 } from '@/modules/admin/admin.repository';
 import { getOrgAnalistaUser } from '@/modules/notifications/recipients';
+import { getOrgSettings } from '@/modules/organizations/organization-settings.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { formatData, formatPeriodo } from '@/lib/format';
 import { STATUS_LABEL, reportStatusVariant, type ReportStatus } from '@/modules/reports/report.types';
@@ -17,6 +18,7 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { Tabs } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { AtribuirAnalista } from './atribuir-analista';
+import { MetaMensalForm } from './meta-mensal-form';
 import { ReportActions } from './report-actions';
 import { GenerateNow } from './generate-now';
 
@@ -32,12 +34,13 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
   const org = await getOrganizationById(params.orgId);
   if (!org) notFound();
 
-  const [relatorios, saude, produtos, analistas, analistaAtual] = await Promise.all([
+  const [relatorios, saude, produtos, analistas, analistaAtual, settings] = await Promise.all([
     listOrgReports(org.id),
     getOrgConnectionHealth(org.id),
     listTrackedProducts(org.id),
     listAnalistas(),
     getOrgAnalistaUser(org.id),
+    getOrgSettings(org.id),
   ]);
 
   const saudeInfo = SAUDE_BADGE[saude?.saude ?? 'nenhuma'];
@@ -70,6 +73,17 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
         </CardHeader>
         <CardContent>
           <AtribuirAnalista orgId={org.id} analistas={analistas} analistaAtual={analistaAtual} />
+        </CardContent>
+      </Card>
+
+      <Card data-testid="meta-mensal-card">
+        <CardHeader>
+          <CardTitle as="h2" className="text-base">
+            Meta mensal
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MetaMensalForm orgId={org.id} metaAtual={settings?.metaMensal ?? null} />
         </CardContent>
       </Card>
 
