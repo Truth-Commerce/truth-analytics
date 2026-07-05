@@ -164,7 +164,16 @@ export default async function DashboardPage() {
 
       {/* Histórico */}
       <section data-testid="reports-list">
-        <h2 className="mb-3 font-heading text-base font-semibold text-white">Histórico</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-heading text-base font-semibold text-white">Histórico</h2>
+          <a
+            data-testid="comparar-periodos-link"
+            href="/dashboard/relatorios/comparar"
+            className="text-sm text-brand hover:underline"
+          >
+            Comparar períodos →
+          </a>
+        </div>
         {reports.length > 0 ? (
           <Card className="!p-0">
             <Table>

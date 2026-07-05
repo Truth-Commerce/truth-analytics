@@ -57,15 +57,26 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
           </div>
           <div className="flex items-center gap-3">
             {rel.status === 'done' && rel.metricas ? (
-              <Button
-                as="a"
-                href={`/api/reports/${rel.id}/pdf`}
-                variant="secondary"
-                size="sm"
-                data-testid="export-pdf"
-              >
-                Exportar PDF
-              </Button>
+              <>
+                <Button
+                  as="a"
+                  href={`/dashboard/relatorios/comparar?a=${rel.id}`}
+                  variant="secondary"
+                  size="sm"
+                  data-testid="comparar-link"
+                >
+                  Comparar
+                </Button>
+                <Button
+                  as="a"
+                  href={`/api/reports/${rel.id}/pdf`}
+                  variant="secondary"
+                  size="sm"
+                  data-testid="export-pdf"
+                >
+                  Exportar PDF
+                </Button>
+              </>
             ) : null}
             <span data-testid="report-status">
               <Badge variant={reportStatusVariant(rel.status)}>{STATUS_LABEL[rel.status]}</Badge>
