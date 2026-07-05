@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   accountActivatedTemplate,
+  alertaTemplate,
   blingConnectionFailedTemplate,
   escapeHtml,
   pipelineFailedTemplate,
@@ -282,6 +283,35 @@ describe('notification templates (puro)', () => {
       expect(result.html).toContain('&quot;quotes&quot;');
       expect(result.html).toContain('&#39;apostrophes&#39;');
       expect(result.text).toContain(titulo);
+    });
+  });
+
+  describe('alertaTemplate', () => {
+    it('retorna subject, html e text não-vazios', () => {
+      const result = alertaTemplate('Queda de vendas de 60%', 'Corpo do alerta', 'http://app');
+      expect(result.subject.length).toBeGreaterThan(0);
+      expect(result.html.length).toBeGreaterThan(0);
+      expect(result.text.length).toBeGreaterThan(0);
+    });
+
+    it('subject contém o título do alerta e menciona Truth Analytics', () => {
+      const result = alertaTemplate('Queda de vendas de 60%', 'Corpo do alerta', 'http://app');
+      expect(result.subject).toContain('Queda de vendas de 60%');
+      expect(result.subject).toContain('Truth Analytics');
+    });
+
+    it('text contém o corpo do alerta e o link do painel', () => {
+      const result = alertaTemplate('Título X', 'Detalhe importante do alerta', 'http://app');
+      expect(result.text).toContain('Detalhe importante do alerta');
+      expect(result.text).toContain('http://app/dashboard');
+    });
+
+    it('escapa HTML injetado no título e no corpo (evita XSS)', () => {
+      const result = alertaTemplate('<script>alert(1)</script>', '<img src=x>', 'http://app');
+      expect(result.html).not.toContain('<script>');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;script&gt;');
+      expect(result.html).toContain('&lt;img');
     });
   });
 });
