@@ -79,13 +79,51 @@ function extractTextBlock(content: unknown[]): string | null {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Usage somado das tentativas da chamada Claude — persistido em reports.ia_usage. */
+export type IaUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  tentativas: number;
+};
+
+type UsageLike = {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+};
+
+function acumularUsage(acc: IaUsage, usage: UsageLike | undefined | null): void {
+  acc.input_tokens += usage?.input_tokens ?? 0;
+  acc.output_tokens += usage?.output_tokens ?? 0;
+  acc.cache_read_input_tokens += usage?.cache_read_input_tokens ?? 0;
+  acc.cache_creation_input_tokens += usage?.cache_creation_input_tokens ?? 0;
+  acc.tentativas += 1;
+}
+
 /**
  * Analisa as métricas usando Claude com saídas estruturadas (JSON Schema via output_config).
  * Em caso de falha de parse/validação, faz UMA re-tentativa. Após duas falhas → lança 'analise_ia_invalida'.
+ *
+ * Retorna `{ analise, usage }` — `usage` soma os tokens de TODAS as tentativas
+ * (persistido em `reports.ia_usage` p/ governança de custo da IA).
  */
-export async function analyzeWithIA(metricas: Metricas, nicho: string | null): Promise<AnaliseIa> {
+export async function analyzeWithIA(
+  metricas: Metricas,
+  nicho: string | null,
+): Promise<{ analise: AnaliseIa; usage: IaUsage }> {
   const system = buildSystemPrompt(metricas);
   const userText = buildUserMessage(metricas, nicho);
+
+  const usage: IaUsage = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    tentativas: 0,
+  };
 
   // Bloco de métricas marcado p/ prompt caching: o retry reaproveita o prefixo
   // inteiro (system + métricas) do cache e paga só o delta da correção.
@@ -121,13 +159,14 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
 
   // First attempt
   const response = await getAnthropic().messages.create(callParams);
+  acumularUsage(usage, response.usage as UsageLike);
   const text1 = extractTextBlock(response.content as unknown[]);
 
   let parseError: string | null = null;
   if (text1 !== null) {
     try {
       const parsed = JSON.parse(text1);
-      return AnaliseIaSchema.parse(parsed);
+      return { analise: AnaliseIaSchema.parse(parsed), usage };
     } catch (err) {
       parseError = err instanceof Error ? err.message : String(err);
     }
@@ -164,12 +203,13 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
     ...callParams,
     messages: retryMessages,
   });
+  acumularUsage(usage, response2.usage as UsageLike);
 
   const text2 = extractTextBlock(response2.content as unknown[]);
   if (text2 !== null) {
     try {
       const parsed2 = JSON.parse(text2);
-      return AnaliseIaSchema.parse(parsed2);
+      return { analise: AnaliseIaSchema.parse(parsed2), usage };
     } catch {
       // fall through
     }

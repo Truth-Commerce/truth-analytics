@@ -5,6 +5,7 @@ import {
   accountActivatedTemplate,
   alertaTemplate,
   alertasDigestTemplate,
+  autoGeracaoPausadaTemplate,
   blingConnectionFailedTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
@@ -82,6 +83,18 @@ export async function sendPipelineFailedEmail(
   erro: string,
 ): Promise<void> {
   const content = pipelineFailedTemplate(orgId, reportId, erro);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Avisa o admin interno que a auto-geração de uma org foi pausada. Nunca lança.
+ */
+export async function sendAutoGeracaoPausadaEmail(
+  to: string,
+  orgName: string,
+  orgId: string,
+): Promise<void> {
+  const content = autoGeracaoPausadaTemplate(orgName, orgId);
   await sendEmail({ to, ...content });
 }
 

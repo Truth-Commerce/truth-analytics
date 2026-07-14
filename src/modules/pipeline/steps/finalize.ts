@@ -5,6 +5,7 @@ import { organizations, reports } from '@/db/schema';
 import type { Plano } from '@/modules/auth/user.types';
 import { sendReportReadyEmail } from '@/modules/notifications/email';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
+import type { IaUsage } from '@/modules/pipeline/steps/analyze-ia';
 import { proximoRelatorioEm } from '@/modules/pipeline/plan-lock';
 
 export type FinalizeInput = {
@@ -15,6 +16,8 @@ export type FinalizeInput = {
   plano: Plano;
   /** E-mail primário do cliente da org. Se null/undefined, e-mail de "pronto" é pulado. */
   clientEmail?: string | null;
+  /** Usage da chamada Claude (tokens) — persistido em reports.ia_usage; null p/ retrocompat. */
+  iaUsage?: IaUsage | null;
 };
 
 /**
@@ -27,7 +30,7 @@ export type FinalizeInput = {
  * step mantém proximo_relatorio_liberado_em inalterado.
  */
 export async function finalize(input: FinalizeInput): Promise<void> {
-  const { reportId, orgId, metricas, analise, plano, clientEmail } = input;
+  const { reportId, orgId, metricas, analise, plano, clientEmail, iaUsage } = input;
 
   // 1+2. Concluir o relatório E setar a trava do ciclo atomicamente: ou ambos
   // persistem, ou nenhum — evita relatório 'done' com trava não setada (que
@@ -40,6 +43,7 @@ export async function finalize(input: FinalizeInput): Promise<void> {
         etapa: null,
         metricas,
         analise_ia: analise,
+        ia_usage: iaUsage ?? null,
         erro: null,
       })
       .where(and(eq(reports.id, reportId), eq(reports.org_id, orgId)));

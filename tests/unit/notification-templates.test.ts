@@ -340,3 +340,13 @@ describe('alertasDigestTemplate', () => {
     expect(tres.html).toContain('<li>');
   });
 });
+
+describe('autoGeracaoPausadaTemplate', () => {
+  it('inclui nome e id da org, escapando HTML', async () => {
+    const { autoGeracaoPausadaTemplate } = await import('@/modules/notifications/templates');
+    const t = autoGeracaoPausadaTemplate('Loja <X>', 'org-123');
+    expect(t.subject).toContain('Geração automática pausada');
+    expect(t.html).toContain('&lt;X&gt;');
+    expect(t.text).toContain('org-123');
+  });
+});

@@ -124,7 +124,16 @@ describe('analyzeWithIA', () => {
 
     const result = await analyzeWithIA(validMetricas, 'eletronicos');
 
-    expect(result).toEqual(validAnalise);
+    expect(result.analise).toEqual(validAnalise);
+
+    // usage da 1ª tentativa persistível (fakeMessage: input 100 / output 200)
+    expect(result.usage).toEqual({
+      input_tokens: 100,
+      output_tokens: 200,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+      tentativas: 1,
+    });
 
     // Verify create was called exactly once
     expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -215,8 +224,12 @@ describe('analyzeWithIA', () => {
 
     const result = await analyzeWithIA(validMetricas, null);
 
-    expect(result).toEqual(validAnalise);
+    expect(result.analise).toEqual(validAnalise);
     expect(mockCreate).toHaveBeenCalledTimes(2);
+
+    // usage somado das 2 tentativas (input 100 + 100 = 200; 2 tentativas)
+    expect(result.usage.input_tokens).toBe(200);
+    expect(result.usage.tentativas).toBe(2);
 
     // Second call must include the correction user message
     const secondCallMessages: { role: string; content: string }[] =
@@ -290,7 +303,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(msg);
 
     const result = await analyzeWithIA(validMetricas, null);
-    expect(result.resumoExecutivo).toBe(validAnalise.resumoExecutivo);
+    expect(result.analise.resumoExecutivo).toBe(validAnalise.resumoExecutivo);
   });
 
   // -----------------------------------------------------------------------
@@ -316,7 +329,7 @@ describe('analyzeWithIA', () => {
 
     const result = await analyzeWithIA(validMetricas, null);
 
-    expect(result).toEqual(validAnalise);
+    expect(result.analise).toEqual(validAnalise);
     expect(mockCreate).toHaveBeenCalledTimes(2);
 
     // A 2ª chamada NÃO deve conter um turno assistant (evita content '' rejeitado pela API):

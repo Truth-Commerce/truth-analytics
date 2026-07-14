@@ -3,10 +3,17 @@ import { NextResponse } from 'next/server';
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
+import { sendAutoGeracaoPausadaEmail } from '@/modules/notifications/email';
+import { getAdminAlertEmail } from '@/modules/notifications/recipients';
 import { enqueueReport } from '@/modules/pipeline/enqueue';
-import { listOrgsElegiveisParaGeracao } from '@/modules/scheduler/scheduler.repository';
+import { setGeracaoAutomatica } from '@/modules/organizations/organization-settings.repository';
+import {
+  listOrgsComFalhasConsecutivas,
+  listOrgsElegiveisParaGeracao,
+} from '@/modules/scheduler/scheduler.repository';
 import {
   ESPACAMENTO_ENTRE_ORGS_MS,
+  FALHAS_CONSECUTIVAS_PAUSA,
   LOTE_MAXIMO_POR_EXECUCAO,
 } from '@/modules/scheduler/scheduler.service';
 
@@ -34,6 +41,25 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'nao_autorizado' }, { status: 401 });
   }
 
+  // G0 (backoff): 3 relatórios failed consecutivos → desliga a auto-geração e
+  // avisa o admin (best-effort). Roda ANTES da listagem — a org pausada some
+  // da elegibilidade nesta mesma execução.
+  let pausadas = 0;
+  try {
+    const quebradas = await listOrgsComFalhasConsecutivas(FALHAS_CONSECUTIVAS_PAUSA);
+    for (const org of quebradas) {
+      await setGeracaoAutomatica(org.id, false);
+      pausadas++;
+      logger.warn('cron.gerar_relatorios.auto_pausada', { orgId: org.id });
+      const adminEmail = getAdminAlertEmail();
+      if (adminEmail) await sendAutoGeracaoPausadaEmail(adminEmail, org.name, org.id);
+    }
+  } catch (err) {
+    logger.error('cron.gerar_relatorios.pausa_falhou', {
+      erro: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const agora = new Date();
   const elegiveis = (await listOrgsElegiveisParaGeracao(agora)).slice(0, LOTE_MAXIMO_POR_EXECUCAO);
   const resultados: { orgId: string; ok: boolean; detalhe: string }[] = [];
@@ -55,5 +81,5 @@ export async function GET(req: Request): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ elegiveis: elegiveis.length, resultados });
+  return NextResponse.json({ elegiveis: elegiveis.length, pausadas, resultados });
 }

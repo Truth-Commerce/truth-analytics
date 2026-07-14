@@ -68,6 +68,14 @@ const MOCK_ANALISE: AnaliseIa = {
   ],
 };
 
+const MOCK_IA_USAGE = {
+  input_tokens: 100,
+  output_tokens: 200,
+  cache_read_input_tokens: 0,
+  cache_creation_input_tokens: 0,
+  tentativas: 1,
+};
+
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
@@ -146,7 +154,9 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     // Mock analyzeWithIA (evita chamada real ao Claude — sem ANTHROPIC_API_KEY necessária)
     const analyzeMod = await import('@/modules/pipeline/steps/analyze-ia');
-    const analyzeSpyHappy = vi.spyOn(analyzeMod, 'analyzeWithIA').mockResolvedValueOnce(MOCK_ANALISE);
+    const analyzeSpyHappy = vi
+      .spyOn(analyzeMod, 'analyzeWithIA')
+      .mockResolvedValueOnce({ analise: MOCK_ANALISE, usage: MOCK_IA_USAGE });
 
     // Mock e-mail (no-op spies)
     const emailMod = await import('@/modules/notifications/email');
@@ -184,6 +194,13 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     // Analise IA: vinda do mock
     const analise = reportRow.analise_ia as AnaliseIa;
     expect(analise.resumoExecutivo).toBe(MOCK_ANALISE.resumoExecutivo);
+
+    // ia_usage persistido no caminho de sucesso
+    const [rowUsage] = await tdb
+      .select({ ia_usage: reports.ia_usage })
+      .from(reports)
+      .where(eq(reports.id, result.reportId));
+    expect(rowUsage!.ia_usage).toEqual(MOCK_IA_USAGE);
 
     // Trava do plano: proximo_relatorio_liberado_em ≈ agora + 7d (weekly)
     const [orgRow] = await tdb
@@ -234,7 +251,9 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     // Mock analyzeWithIA (não deve ser chamado)
     const analyzeMod = await import('@/modules/pipeline/steps/analyze-ia');
-    const analyzeSpyFail = vi.spyOn(analyzeMod, 'analyzeWithIA').mockResolvedValue(MOCK_ANALISE);
+    const analyzeSpyFail = vi
+      .spyOn(analyzeMod, 'analyzeWithIA')
+      .mockResolvedValue({ analise: MOCK_ANALISE, usage: MOCK_IA_USAGE });
 
     // Mock e-mail
     const emailMod = await import('@/modules/notifications/email');

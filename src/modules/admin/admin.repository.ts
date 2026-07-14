@@ -182,6 +182,7 @@ export type OrgReportRow = {
   periodoFim: Date;
   createdAt: Date;
   erro: string | null;
+  iaUsage: { input_tokens: number; output_tokens: number } | null;
 };
 
 export async function listOrgReports(orgId: string, limit = 20): Promise<OrgReportRow[]> {
@@ -194,6 +195,7 @@ export async function listOrgReports(orgId: string, limit = 20): Promise<OrgRepo
       periodo_fim: reports.periodo_fim,
       created_at: reports.created_at,
       erro: reports.erro,
+      ia_usage: reports.ia_usage,
     })
     .from(reports)
     .where(eq(reports.org_id, orgId))
@@ -207,6 +209,12 @@ export async function listOrgReports(orgId: string, limit = 20): Promise<OrgRepo
     periodoFim: r.periodo_fim,
     createdAt: r.created_at,
     erro: r.erro,
+    iaUsage: r.ia_usage
+      ? {
+          input_tokens: Number((r.ia_usage as Record<string, unknown>).input_tokens ?? 0),
+          output_tokens: Number((r.ia_usage as Record<string, unknown>).output_tokens ?? 0),
+        }
+      : null,
   }));
 }
 

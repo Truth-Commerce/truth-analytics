@@ -282,6 +282,28 @@ ${alertas.map((a) => `<li><strong>${escapeHtml(a.titulo)}</strong><br>${escapeHt
 }
 
 /**
+ * Template: geração automática pausada após falhas consecutivas (admin interno).
+ */
+export function autoGeracaoPausadaTemplate(orgName: string, orgId: string): EmailContent {
+  const subject = '[Truth Analytics] Geração automática pausada após falhas consecutivas';
+  const text = [
+    'A geração automática de relatórios de um cliente foi pausada após 3 falhas consecutivas.',
+    '',
+    `Cliente: ${orgName}`,
+    `Org ID: ${orgId}`,
+    '',
+    'Investigue os erros no painel admin. Após corrigir a causa, o cliente pode religar em Conexões → Preferências (ou reprocessar o último relatório).',
+    '',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>A geração automática de relatórios de <strong>${escapeHtml(orgName)}</strong> foi pausada após 3 falhas consecutivas.</p>
+<p><strong>Org ID:</strong> ${escapeHtml(orgId)}</p>
+<p>Investigue os erros no painel admin. Após corrigir a causa, o cliente pode religar em Conexões → Preferências (ou reprocessar o último relatório).</p>`;
+
+  return { subject, html, text };
+}
+
+/**
  * Template: conexão Bling expirou (enviado ao cliente).
  */
 export function blingConnectionFailedTemplate(appUrl: string): EmailContent {

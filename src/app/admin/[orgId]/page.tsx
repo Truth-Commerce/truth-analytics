@@ -106,6 +106,7 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
                         <TH>Período</TH>
                         <TH>Criado</TH>
                         <TH>Erro</TH>
+                        <TH>IA (tokens)</TH>
                         <TH>
                           <span className="sr-only">Ações</span>
                         </TH>
@@ -127,6 +128,11 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
                             <span className="block max-w-56 truncate" title={r.erro ?? undefined}>
                               {r.erro ?? '—'}
                             </span>
+                          </TD>
+                          <TD className="font-mono text-xs text-muted">
+                            {r.iaUsage
+                              ? `${r.iaUsage.input_tokens.toLocaleString('pt-BR')} → ${r.iaUsage.output_tokens.toLocaleString('pt-BR')}`
+                              : '—'}
                           </TD>
                           <TD>{r.status === 'failed' ? <ReportActions reportId={r.id} /> : null}</TD>
                         </TR>
