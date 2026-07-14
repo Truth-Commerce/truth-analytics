@@ -55,11 +55,17 @@ export default async function DashboardPage() {
 
   const blingOk = !!conn?.connected;
   const gate = org ? podeGerar(org) : { ok: false as const, motivo: 'org_nao_encontrada' };
-  const canGenerate = blingOk && gate.ok;
+  // G0/Task 9: relatório em andamento (inclusive gerado pelo cron/admin) →
+  // remonta o stepper do server e trava o botão.
+  const emAndamentoReportId =
+    latest && (latest.status === 'queued' || latest.status === 'running') ? latest.id : null;
+  const canGenerate = blingOk && gate.ok && !emAndamentoReportId;
 
   let motivo: string | undefined;
   if (!canGenerate) {
-    if (!org) {
+    if (emAndamentoReportId) {
+      motivo = 'Um relatório está sendo gerado agora.';
+    } else if (!org) {
       motivo = 'Organização não encontrada. Recarregue a página.';
     } else if (!blingOk) {
       motivo = 'Conecte o Bling em Conexões.';
@@ -139,7 +145,11 @@ export default async function DashboardPage() {
             <CardTitle as="h2" className="text-base">Gerar relatório</CardTitle>
           </CardHeader>
           <CardContent>
-            <GenerateReport disabled={!canGenerate} motivo={motivo} />
+            <GenerateReport
+              disabled={!canGenerate}
+              motivo={motivo}
+              emAndamentoReportId={emAndamentoReportId}
+            />
           </CardContent>
         </Card>
 
