@@ -1,10 +1,14 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages';
 
+import type { DataComercial } from '@/lib/calendario-comercial';
 import { serverEnv } from '@/lib/env';
+import { formatBRL, formatDataUtc } from '@/lib/format';
 import { logger } from '@/lib/logger';
 import { getAnthropic } from '@/modules/ai/claude';
+import type { Plano } from '@/modules/auth/user.types';
 import { AnaliseIaSchema, type AnaliseIa, type Metricas } from '@/modules/pipeline/contracts';
+import type { Periodo } from '@/modules/providers/types';
 
 // Build the JSON schema once at module load — pure, no I/O.
 const _rawSchema = zodToJsonSchema(AnaliseIaSchema, { $refStrategy: 'none' });
@@ -71,31 +75,118 @@ function avisoBenchmark(metricas: Metricas): string {
   return '';
 }
 
-function buildSystemPrompt(metricas: Metricas): string {
+const PLANO_LABEL: Record<Plano, string> = {
+  weekly: 'Semanal (análise a cada 7 dias)',
+  biweekly: 'Quinzenal (análise a cada 14 dias)',
+  monthly: 'Mensal (análise a cada 30 dias)',
+};
+
+/** Contexto rico do prompt v2 — memória (relatório anterior), meta e calendário. */
+export type AnalysisContext = {
+  orgName: string;
+  nicho: string | null;
+  plano: Plano;
+  periodo: Periodo;
+  metaMensal: number | null;
+  totalMesCorrente: number;
+  relatorioAnterior: {
+    periodo: Periodo;
+    resumoExecutivo: string;
+    recomendacoes: string[];
+    totalPeriodo: number | null;
+  } | null;
+  datasComerciais: DataComercial[];
+};
+
+/**
+ * Pura — monta system + user do prompt v2 (testável sem tocar a API).
+ *
+ * Integração G0: reusa a função `avisoBenchmark(metricas)` de 3 casos (sem
+ * benchmark / parcial / fonte única) — não a versão inline simplificada — e o
+ * texto do truth_score. Datas de PERÍODO e do calendário são dias-calendário em
+ * UTC-midnight, então usam `formatDataUtc` (não `formatData`/America-Sao_Paulo,
+ * que deslocaria o dia; ver src/lib/format.ts).
+ */
+export function buildAnalysisMessages(
+  metricas: Metricas,
+  contexto: AnalysisContext,
+): { system: string; user: string } {
   const aviso = avisoBenchmark(metricas);
   const truthScore = metricas.truth_score?.score;
 
   const scoreTexto =
     truthScore === undefined
       ? ''
-      : `\n\nAs métricas incluem um "truth_score" (${truthScore}/100) — índice de saúde da operação composto por: crescimento vs período anterior, posição de preço vs mercado, diversificação de canais, regularidade de vendas e cobertura de benchmark (detalhes no campo "fatores"). No resumoExecutivo, comente o score e cite os fatores mais fracos; conecte gargalos e sugestoesMelhoria aos fatores que mais penalizaram o score.`;
+      : `\n\nAs métricas incluem um "truth_score" (${truthScore}/100) — índice de saúde da operação composto por: crescimento vs período anterior, posição de preço vs mercado, diversificação de canais, regularidade de vendas e cobertura de benchmark (detalhes no campo "fatores"). No resumoExecutivo, comente o score e conecte os achados aos fatores que mais penalizaram o score.`;
 
-  return `Você é um analista sênior de e-commerce e marketplaces brasileiro. A partir das métricas fornecidas pelo usuário, produza uma análise estratégica completa em português do Brasil com os seguintes componentes:
+  const system = `Você é um consultor sênior de marketplaces da Truth Commerce escrevendo para um LOJISTA LEIGO — dono de e-commerce brasileiro sem formação técnica.
 
-1. **resumoExecutivo**: síntese dos resultados do período (pontos fortes e fracos).
-2. **gargalos**: lista dos principais obstáculos ao crescimento identificados nas métricas.
-3. **sugestoesMelhoria**: ações concretas e priorizadas para melhorar os resultados.
-4. **ideiasVenda**: ideias de campanhas, bundles, estratégias de cross-sell ou up-sell adequadas ao perfil dos produtos.
-5. **recomendacoesPreco**: para cada produto com posição de preço disponível, sugira um preço otimizado com justificativa clara baseada nos dados.
+TOM E LINGUAGEM:
+- Português do Brasil, frases curtas, zero jargão (nada de "KPI", "MoM", "benchmark" sem explicar).
+- Valores em reais SEMPRE com separador de milhar (ex.: R$ 10.880,00).
+- Fale COM o lojista ("suas vendas", "seu frete"), nunca sobre ele.
 
-Use o nicho informado para contextualizar suas recomendações. Seja direto, prático e orientado a dados.${aviso}${scoreTexto}
+REGRAS DE QUALIDADE (obrigatórias):
+1. Todo achado cita pelo menos UM número das métricas e, quando fizer sentido, o SKU envolvido.
+2. Toda recomendação é uma AÇÃO executável: passos concretos em "comoFazer" (2 a 5 passos) + impacto estimado em R$/mês em "impactoEstimadoMensalBRL" COM a conta mostrada na descrição (ex.: "R$ 25 de frete × 48 pedidos = R$ 1.200/mês"). Se não der para estimar com os dados, use null — nunca invente.
+3. Priorize por dinheiro: "prioridade" e "impactoEstimadoMensalBRL" vêm nos achados estruturados.
+4. Limites: máximo 4 gargalos, máximo 4 sugestões de melhoria, máximo 3 ideias de venda, máximo 8 achados.
+5. Use o calendário comercial fornecido para ideias de venda com data (se houver datas próximas).
+6. Se houver relatório anterior, comece o resumoExecutivo comparando com ele.
+
+FORMATO DA RESPOSTA:
+- Preencha "achados" (estruturado, o principal) E TAMBÉM os campos legados: "gargalos" = títulos dos achados de prioridade alta; "sugestoesMelhoria" = títulos dos achados de prioridade média; "ideiasVenda" = títulos dos achados de prioridade baixa/oportunidades sazonais.
+- Preencha "destaques" com 3 KPIs curtos do período (label, valor formatado, direção up/down/flat).
+- Em "recomendacoesPreco", inclua "precoAtual" (o nosso preço atual das métricas) além do sugerido.${aviso}${scoreTexto}
 
 Responda EXCLUSIVAMENTE com um objeto JSON válido conforme o schema fornecido. Não inclua texto fora do JSON.`;
-}
 
-function buildUserMessage(metricas: Metricas, nicho: string | null): string {
-  const nichoTexto = nicho ? `Nicho de mercado: ${nicho}\n\n` : '';
-  return `${nichoTexto}Métricas do período:\n${JSON.stringify(metricas, null, 2)}`;
+  const metaTexto =
+    contexto.metaMensal !== null && contexto.metaMensal > 0
+      ? `Meta mensal: ${formatBRL(contexto.metaMensal)} — vendido no mês corrente até agora: ${formatBRL(contexto.totalMesCorrente)} (${Math.round((contexto.totalMesCorrente / contexto.metaMensal) * 100)}% da meta).`
+      : 'Sem meta mensal definida.';
+
+  const ant = contexto.relatorioAnterior;
+  const anteriorTexto = ant
+    ? [
+        `Período anterior: ${formatDataUtc(ant.periodo.inicio)} a ${formatDataUtc(ant.periodo.fim)}`,
+        ant.totalPeriodo !== null ? `Total vendido no período anterior: ${formatBRL(ant.totalPeriodo)}` : null,
+        `Resumo do relatório anterior: ${ant.resumoExecutivo}`,
+        ant.recomendacoes.length > 0
+          ? `Recomendações dadas no relatório anterior:\n${ant.recomendacoes.map((r) => `- ${r}`).join('\n')}`
+          : null,
+        'Avalie se as recomendações anteriores surtiram efeito e comente a evolução.',
+      ]
+        .filter((l): l is string => l !== null)
+        .join('\n')
+    : 'Este é o primeiro relatório desta loja — não há período anterior para comparar.';
+
+  const calendarioTexto =
+    contexto.datasComerciais.length > 0
+      ? contexto.datasComerciais
+          .map((d) => `- ${formatDataUtc(d.data)} — ${d.nome}: ${d.dica}`)
+          .join('\n')
+      : 'Nenhuma data comercial relevante nos próximos 60 dias.';
+
+  const user = `### Sobre a loja
+Loja: ${contexto.orgName}
+Nicho: ${contexto.nicho ?? 'não informado'}
+Plano de análise: ${PLANO_LABEL[contexto.plano]}
+Período analisado: ${formatDataUtc(contexto.periodo.inicio)} a ${formatDataUtc(contexto.periodo.fim)}
+
+### Meta do mês
+${metaTexto}
+
+### Relatório anterior
+${anteriorTexto}
+
+### Datas comerciais nos próximos 60 dias
+${calendarioTexto}
+
+### Métricas do período (JSON)
+${JSON.stringify(metricas, null, 2)}`;
+
+  return { system, user };
 }
 
 function extractTextBlock(content: unknown[]): string | null {
@@ -145,10 +236,9 @@ function logTentativa(tentativa: number, r: RespostaClaude): void {
  */
 export async function analyzeWithIA(
   metricas: Metricas,
-  nicho: string | null,
+  contexto: AnalysisContext,
 ): Promise<{ analise: AnaliseIa; usage: IaUsage }> {
-  const system = buildSystemPrompt(metricas);
-  const userText = buildUserMessage(metricas, nicho);
+  const { system, user: userText } = buildAnalysisMessages(metricas, contexto);
   const usage: IaUsage = {
     input_tokens: 0,
     output_tokens: 0,

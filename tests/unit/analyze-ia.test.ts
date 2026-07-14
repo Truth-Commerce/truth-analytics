@@ -24,6 +24,7 @@ vi.mock('@anthropic-ai/sdk', () => {
 
 import type { AnaliseIa } from '@/modules/pipeline/contracts';
 import type { Metricas } from '@/modules/pipeline/contracts';
+import type { AnalysisContext } from '@/modules/pipeline/steps/analyze-ia';
 import { serverEnv } from '@/lib/env';
 
 const validAnalise: AnaliseIa = {
@@ -53,6 +54,20 @@ const validMetricas: Metricas = {
     { sku: 'SKU-001', nome: 'Produto A', nossoPreco: 99.9, precoMercadoMediano: 97.5, fonte: 'ml_publico' },
   ],
   benchmarkParcial: false,
+};
+
+// Prompt v2 (Task 4): analyzeWithIA agora recebe AnalysisContext no lugar de `nicho`.
+// Fixture mínimo — o conteúdo não afeta as asserções de mecânica (retry/parse/usage);
+// o system continua checado via avisoBenchmark(metricas) e o user via as métricas em JSON.
+const CONTEXTO: AnalysisContext = {
+  orgName: 'Loja Teste',
+  nicho: 'eletronicos',
+  plano: 'monthly',
+  periodo: { inicio: new Date('2026-06-01T00:00:00Z'), fim: new Date('2026-06-30T23:59:59Z') },
+  metaMensal: null,
+  totalMesCorrente: 0,
+  relatorioAnterior: null,
+  datasComerciais: [],
 };
 
 /** Build a fake Anthropic Message with a thinking block followed by a text block */
@@ -129,7 +144,7 @@ describe('analyzeWithIA', () => {
   it('Case 1 — happy path: retorna AnaliseIa validada e usa output_config + modelo correto', async () => {
     mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
 
-    const result = await analyzeWithIA(validMetricas, 'eletronicos');
+    const result = await analyzeWithIA(validMetricas, CONTEXTO);
 
     expect(result.analise).toEqual(validAnalise);
 
@@ -167,7 +182,7 @@ describe('analyzeWithIA', () => {
   // -----------------------------------------------------------------------
   it('Case 1b — usa cache_control no system e no bloco de métricas', async () => {
     mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
-    await analyzeWithIA(validMetricas, 'moda');
+    await analyzeWithIA(validMetricas, CONTEXTO);
     const params = mockCreate.mock.calls[0][0];
 
     // system como array de blocos com cache_control ephemeral
@@ -197,7 +212,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(invalidAnalise)));
     streamDevolve(fakeMessage(JSON.stringify(validAnalise)));
 
-    await analyzeWithIA(validMetricas, 'moda');
+    await analyzeWithIA(validMetricas, CONTEXTO);
     const paramsRetry = mockStream.mock.calls[0][0];
     const turnos = paramsRetry.messages;
 
@@ -228,7 +243,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(invalidAnalise)));
     streamDevolve(fakeMessage(JSON.stringify(validAnalise)));
 
-    const result = await analyzeWithIA(validMetricas, null);
+    const result = await analyzeWithIA(validMetricas, CONTEXTO);
 
     expect(result.analise).toEqual(validAnalise);
     expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -254,7 +269,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(fakeMessage('Não é JSON válido'));
     streamDevolve(fakeMessage('Também não é JSON'));
 
-    await expect(analyzeWithIA(validMetricas, 'moda')).rejects.toThrow('analise_ia_invalida');
+    await expect(analyzeWithIA(validMetricas, CONTEXTO)).rejects.toThrow('analise_ia_invalida');
     expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(mockStream).toHaveBeenCalledTimes(1);
   });
@@ -266,7 +281,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(fakeMessage('Não é JSON válido'));
     streamDevolve(fakeMessage('Também não é JSON'));
 
-    await expect(analyzeWithIA(validMetricas, 'moda')).rejects.toThrow('analise_ia_invalida');
+    await expect(analyzeWithIA(validMetricas, CONTEXTO)).rejects.toThrow('analise_ia_invalida');
 
     const chamada = errorSpy.mock.calls.find((c) => c[0] === 'analise_ia.retentativa_invalida');
     expect(chamada).toBeDefined();
@@ -286,7 +301,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
 
     const metricasParciais: Metricas = { ...validMetricas, benchmarkParcial: true };
-    await analyzeWithIA(metricasParciais, null);
+    await analyzeWithIA(metricasParciais, CONTEXTO);
 
     const callArgs = mockCreate.mock.calls[0][0];
     expect(callArgs.system[0].text).toMatch(/benchmarkParcial=true/);
@@ -302,7 +317,7 @@ describe('analyzeWithIA', () => {
         { sku: 'SKU-001', nome: 'Produto A', nossoPreco: 99.9, precoMercadoMediano: 0, fonte: '' },
       ],
     };
-    await analyzeWithIA(semMercado, null);
+    await analyzeWithIA(semMercado, CONTEXTO);
     const sys = mockCreate.mock.calls[0][0].system[0].text;
     expect(sys).toMatch(/NENHUM benchmark/);
     expect(sys).toMatch(/recomendacoesPreco/);
@@ -312,7 +327,7 @@ describe('analyzeWithIA', () => {
 
   it('Case 4c — fonte única com benchmark completo: cita a fonte, sem hedging', async () => {
     mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
-    await analyzeWithIA(validMetricas, null); // benchmarkParcial=false, fonte única ml_publico
+    await analyzeWithIA(validMetricas, CONTEXTO); // benchmarkParcial=false, fonte única ml_publico
     const sys = mockCreate.mock.calls[0][0].system[0].text;
     expect(sys).toMatch(/única fonte \(ml_publico\)/);
     expect(sys).not.toMatch(/INCOMPLETO/);
@@ -329,7 +344,7 @@ describe('analyzeWithIA', () => {
 
     mockCreate.mockResolvedValueOnce(msg);
 
-    const result = await analyzeWithIA(validMetricas, null);
+    const result = await analyzeWithIA(validMetricas, CONTEXTO);
     expect(result.analise.resumoExecutivo).toBe(validAnalise.resumoExecutivo);
   });
 
@@ -341,7 +356,7 @@ describe('analyzeWithIA', () => {
       throw new Error('ia_nao_configurada');
     });
 
-    await expect(analyzeWithIA(validMetricas, null)).rejects.toThrow('ia_nao_configurada');
+    await expect(analyzeWithIA(validMetricas, CONTEXTO)).rejects.toThrow('ia_nao_configurada');
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -353,7 +368,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(fakeThinkingOnlyMessage());
     streamDevolve(fakeMessage(JSON.stringify(validAnalise)));
 
-    const result = await analyzeWithIA(validMetricas, null);
+    const result = await analyzeWithIA(validMetricas, CONTEXTO);
 
     expect(result.analise).toEqual(validAnalise);
     expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -379,7 +394,7 @@ describe('analyzeWithIA', () => {
   // -----------------------------------------------------------------------
   it('Case 8 — refusal na 1ª tentativa: lança analise_ia_recusada sem retry', async () => {
     mockCreate.mockResolvedValueOnce(fakeMessage('', 'refusal'));
-    await expect(analyzeWithIA(validMetricas, null)).rejects.toThrow('analise_ia_recusada');
+    await expect(analyzeWithIA(validMetricas, CONTEXTO)).rejects.toThrow('analise_ia_recusada');
     expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(mockStream).not.toHaveBeenCalled();
   });
@@ -391,7 +406,7 @@ describe('analyzeWithIA', () => {
     mockCreate.mockResolvedValueOnce(fakeMessage('{"truncado":', 'max_tokens'));
     streamDevolve(fakeMessage(JSON.stringify(validAnalise)));
 
-    const result = await analyzeWithIA(validMetricas, null);
+    const result = await analyzeWithIA(validMetricas, CONTEXTO);
     expect(result.analise).toEqual(validAnalise);
     expect(result.usage.tentativas).toBe(2);
 
@@ -408,7 +423,7 @@ describe('analyzeWithIA', () => {
   it('Case 10 — max_tokens nas DUAS tentativas: lança analise_ia_truncada', async () => {
     mockCreate.mockResolvedValueOnce(fakeMessage('{"truncado":', 'max_tokens'));
     streamDevolve(fakeMessage('{"ainda_truncado":', 'max_tokens'));
-    await expect(analyzeWithIA(validMetricas, null)).rejects.toThrow('analise_ia_truncada');
+    await expect(analyzeWithIA(validMetricas, CONTEXTO)).rejects.toThrow('analise_ia_truncada');
   });
 
   // -----------------------------------------------------------------------
@@ -417,6 +432,6 @@ describe('analyzeWithIA', () => {
   it('Case 11 — refusal na retentativa: lança analise_ia_recusada', async () => {
     mockCreate.mockResolvedValueOnce(fakeMessage('Não é JSON válido'));
     streamDevolve(fakeMessage('', 'refusal'));
-    await expect(analyzeWithIA(validMetricas, null)).rejects.toThrow('analise_ia_recusada');
+    await expect(analyzeWithIA(validMetricas, CONTEXTO)).rejects.toThrow('analise_ia_recusada');
   });
 });
