@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { connections } from '@/db/schema';
+import { connections, organizations } from '@/db/schema';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { decryptSecret, encryptSecret } from '@/modules/crypto/crypto';
 import { sendBlingConnectionFailedEmail } from '@/modules/notifications/email';
@@ -112,4 +112,36 @@ export async function disconnectBling(orgId: string): Promise<void> {
     .set({ access_token: null, refresh_token: null, status: 'erro' })
     .where(and(eq(connections.org_id, orgId), eq(connections.provider, PROVIDER)));
   await recordAudit({ orgId, acao: 'connection.bling.desconectada' });
+}
+
+/**
+ * Orgs `active` com conexão Bling saudável (status 'ok' e access_token
+ * presente) — universo do cron de sync incremental de pedidos.
+ */
+export async function listOrgsComBlingOk(): Promise<string[]> {
+  const rows = await db
+    .select({ orgId: connections.org_id })
+    .from(connections)
+    .innerJoin(organizations, eq(organizations.id, connections.org_id))
+    .where(
+      and(
+        eq(connections.provider, PROVIDER),
+        eq(connections.status, 'ok'),
+        isNotNull(connections.access_token),
+        eq(organizations.status, 'active'),
+      ),
+    );
+  return rows.map((r) => r.orgId);
+}
+
+/**
+ * Registra o instante da última sincronização de pedidos da org (frescor dos
+ * dados). Chamado por collectBlingOrders — pipeline e cron de sync passam
+ * pelo mesmo caminho.
+ */
+export async function touchLastSyncAt(orgId: string, quando: Date = new Date()): Promise<void> {
+  await db
+    .update(connections)
+    .set({ last_sync_at: quando })
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, PROVIDER)));
 }

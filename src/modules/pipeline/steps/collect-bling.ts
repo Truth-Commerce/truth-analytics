@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { orders } from '@/db/schema';
+import { touchLastSyncAt } from '@/modules/connections/connection.repository';
 import { blingProvider } from '@/modules/providers/bling/provider';
 import type { Periodo, RawOrder } from '@/modules/providers/types';
 
@@ -57,6 +58,14 @@ export async function collectBlingOrders(
     total += pagina.length;
     processados += await upsertOrdersPage(orgId, pagina);
   });
+
+  // Frescor: registra a última sincronização bem-sucedida (best-effort — um
+  // update de metadado nunca derruba uma coleta que já persistiu os pedidos).
+  try {
+    await touchLastSyncAt(orgId);
+  } catch {
+    // nunca quebra a coleta
+  }
 
   return { processados, total };
 }
