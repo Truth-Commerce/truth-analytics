@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { AnaliseIaSchema } from '@/modules/pipeline/contracts';
-import { itemToTaskInput, tituloFromItem, type FonteAnalise } from './report-to-task';
+import { achadoToTaskInput, itemToTaskInput, tituloFromItem, type FonteAnalise } from './report-to-task';
 import { createTask, listTaskTitulosByReport } from './task.repository';
 
 export async function createTasksFromReport(input: {
@@ -23,6 +23,17 @@ export async function createTasksFromReport(input: {
   const existentes = new Set(await listTaskTitulosByReport(input.reportId, input.orgId));
   let criadas = 0;
   for (const { fonte, indice } of input.itens) {
+    if (fonte === 'achados') {
+      const achado = parsed.data.achados?.[indice];
+      if (!achado) continue;
+      const titulo = tituloFromItem(achado.titulo);
+      if (existentes.has(titulo)) continue;
+      const t = achadoToTaskInput(achado, input.reportId);
+      await createTask({ orgId: input.orgId, ...t, actorUserId: input.actorUserId });
+      existentes.add(titulo);
+      criadas += 1;
+      continue;
+    }
     const texto = parsed.data[fonte]?.[indice];
     if (typeof texto !== 'string' || texto.length === 0) continue;
     const titulo = tituloFromItem(texto);

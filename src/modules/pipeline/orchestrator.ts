@@ -101,7 +101,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     } catch {
       // lookup falhou — e-mail pulado, pipeline continua
     }
-    await finalize({ reportId, orgId, metricas, analise, plano, clientEmail, iaUsage });
+    await finalize({ reportId, orgId, metricas, analise, plano, periodo, clientEmail, iaUsage });
 
     log.info('pipeline concluído');
     return { reportId, status: 'done' };

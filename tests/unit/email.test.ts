@@ -23,6 +23,19 @@ vi.mock('@/lib/env', () => ({
   },
 }));
 
+// Task 5: sendReportReadyEmail passou a receber dados ricos
+// (ReportReadyEmailData) em vez de um reportId solto — o reportId segue no link
+// do template, então as asserções de html/text continuam válidas.
+const dadosReport = (reportId: string) => ({
+  reportId,
+  periodoInicio: new Date('2026-06-01T00:00:00Z'),
+  periodoFim: new Date('2026-06-30T00:00:00Z'),
+  totalPeriodo: 10880,
+  deltaPct: 12.2,
+  score: 76,
+  primeiroGargalo: 'Frete caro',
+});
+
 // ---------------------------------------------------------------------------
 // Case A + C — configured: RESEND_API_KEY and EMAIL_FROM are set
 // ---------------------------------------------------------------------------
@@ -51,7 +64,7 @@ describe('email wrappers — configurado (com chaves)', () => {
   it('Case A — sendReportReadyEmail chama resend.emails.send com to/subject/from corretos', async () => {
     resendSendMock.mockResolvedValueOnce({ id: 'email-id-1' });
 
-    await sendReportReadyEmail('c@x.com', 'rep-1');
+    await sendReportReadyEmail('c@x.com', dadosReport('rep-1'));
 
     expect(resendSendMock).toHaveBeenCalledTimes(1);
     const call = resendSendMock.mock.calls[0][0];
@@ -99,7 +112,7 @@ describe('email wrappers — configurado (com chaves)', () => {
   it('Case C — send rejeita: wrapper NAO lanca (engole o erro)', async () => {
     resendSendMock.mockRejectedValueOnce(new Error('network timeout'));
 
-    await expect(sendReportReadyEmail('c@x.com', 'rep-2')).resolves.toBeUndefined();
+    await expect(sendReportReadyEmail('c@x.com', dadosReport('rep-2'))).resolves.toBeUndefined();
     expect(resendSendMock).toHaveBeenCalledTimes(1);
   });
 });
@@ -135,7 +148,7 @@ describe('email wrappers — sem chaves (no-op)', () => {
   });
 
   it('Case B — sem RESEND_API_KEY/EMAIL_FROM: NAO chama send, NAO lanca', async () => {
-    await expect(sendReportReadyEmail('c@x.com', 'rep-noop')).resolves.toBeUndefined();
+    await expect(sendReportReadyEmail('c@x.com', dadosReport('rep-noop'))).resolves.toBeUndefined();
     expect(resendSendMock).not.toHaveBeenCalled();
   });
 });

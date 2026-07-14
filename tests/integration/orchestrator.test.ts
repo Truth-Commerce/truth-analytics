@@ -229,7 +229,12 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     // E-mail de relatório pronto enviado ao cliente (clientEmail resolvido via getOrgPrimaryEmail)
     expect(readySpy).toHaveBeenCalledTimes(1);
-    expect(readySpy).toHaveBeenCalledWith(CLIENT_EMAIL, result.reportId);
+    // Task 5: o 2º argumento agora são os dados ricos (ReportReadyEmailData),
+    // não o reportId solto — o reportId segue dentro do objeto.
+    expect(readySpy).toHaveBeenCalledWith(
+      CLIENT_EMAIL,
+      expect.objectContaining({ reportId: result.reportId }),
+    );
 
     // E-mail de falha NÃO deve ter sido chamado
     expect(failedSpy).not.toHaveBeenCalled();

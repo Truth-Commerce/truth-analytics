@@ -53,16 +53,27 @@ export function accountActivatedTemplate(plano: Plano): EmailContent {
   return { subject, html, text };
 }
 
+/** Dados ricos do e-mail "relatório pronto" — montados no finalize (Task 5). */
+export type ReportReadyEmailData = {
+  reportId: string;
+  periodoInicio: Date;
+  periodoFim: Date;
+  totalPeriodo: number;
+  deltaPct: number | null;
+  score: number | null;
+  primeiroGargalo: string | null;
+};
+
 /**
  * Template: relatório pronto (enviado ao cliente após geração bem-sucedida).
+ * A copy v2 completa (destaques, gargalo nº 1, delta) vem na Task 11 — aqui só
+ * a nova assinatura + a estrutura de dados básica.
  */
-export function reportReadyTemplate(reportId: string, appUrl: string): EmailContent {
-  const url = `${appUrl}/dashboard/relatorios/${reportId}`;
+export function reportReadyTemplate(dados: ReportReadyEmailData, appUrl: string): EmailContent {
+  const url = `${appUrl}/dashboard/relatorios/${dados.reportId}`;
   const subject = 'Seu relatório está pronto — Truth Analytics';
   const text = [
     'Seu relatório de análise foi gerado com sucesso.',
-    '',
-    `Relatório ID: ${reportId}`,
     '',
     `Acesse em: ${url}`,
     '',
@@ -70,8 +81,7 @@ export function reportReadyTemplate(reportId: string, appUrl: string): EmailCont
     'Equipe Truth Analytics',
   ].join('\n');
   const html = `<p>Seu relatório de análise foi gerado com sucesso.</p>
-<p><strong>Relatório ID:</strong> ${reportId}</p>
-<p><a href="${url}">Clique aqui para visualizar o relatório</a></p>
+<p><a href="${escapeHtml(url)}">Clique aqui para visualizar o relatório</a></p>
 <p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
 
   return { subject, html, text };
