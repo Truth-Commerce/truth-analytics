@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { deltaReceitaPorSku, fonteLabel, posicaoPrecoView } from '@/modules/reports/report-view-model';
+import { corDeltaPreco, deltaReceitaPorSku, fonteLabel, posicaoPrecoView } from '@/modules/reports/report-view-model';
+
+describe('corDeltaPreco', () => {
+  it('acima do mercado (>0) = ruim (vermelho); abaixo ou igual = boa (verde)', () => {
+    expect(corDeltaPreco(10)).toBe('ruim');
+    expect(corDeltaPreco(0.1)).toBe('ruim');
+    expect(corDeltaPreco(0)).toBe('boa');
+    expect(corDeltaPreco(-5)).toBe('boa');
+  });
+});
 
 describe('fonteLabel', () => {
   it('mapeia fontes conhecidas, passa cruas as demais e — para vazio', () => {

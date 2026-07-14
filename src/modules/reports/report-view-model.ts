@@ -166,6 +166,17 @@ export function posicaoPrecoView(
   });
 }
 
+export type CorDelta = 'boa' | 'ruim';
+
+/**
+ * Semântica INVERTIDA do Δ de preço vs mercado: acima do mercado (>0) é RUIM
+ * (vermelho — estamos mais caros); abaixo ou igual é BOA (verde — competitivo).
+ * Mesma regra do DivergingBarChart (deltaPct > 0 → vermelho).
+ */
+export function corDeltaPreco(deltaPct: number): CorDelta {
+  return deltaPct > 0 ? 'ruim' : 'boa';
+}
+
 /** Δ% de receita por sku entre topProdutos atual e anterior (null = sem base). */
 export function deltaReceitaPorSku(
   atual: Metricas['topProdutos'],

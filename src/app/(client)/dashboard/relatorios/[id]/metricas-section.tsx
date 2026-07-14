@@ -3,18 +3,23 @@ import React from 'react';
 import { formatBRL, formatDataCurta } from '@/lib/format';
 import type { Metricas } from '@/modules/pipeline/contracts';
 import { compararMetricas } from '@/modules/reports/compare';
-import { deltaReceitaPorSku, posicaoPrecoView } from '@/modules/reports/report-view-model';
+import { corDeltaPreco, deltaReceitaPorSku, posicaoPrecoView } from '@/modules/reports/report-view-model';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Stat } from '@/components/ui/Stat';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
 import { CanalPorDiaV2, DiaSemanaV2, EvolucaoV2, ParetoV2, PrecoVsMercadoV2 } from './graficos-cliente';
 
-function DeltaPct({ valor }: { valor: number | null }) {
+/**
+ * Δ% com seta. Cor padrão: subir é bom (receita). Com `bomSeNegativo` (preço
+ * vs mercado) a cor inverte via corDeltaPreco: acima do mercado = vermelho.
+ */
+function DeltaPct({ valor, bomSeNegativo = false }: { valor: number | null; bomSeNegativo?: boolean }) {
   if (valor === null) return <span className="text-dim">—</span>;
   const positivo = valor >= 0;
+  const bom = bomSeNegativo ? corDeltaPreco(valor) === 'boa' : positivo;
   return (
-    <span className={`font-mono text-xs ${positivo ? 'text-brand' : 'text-red-400'}`}>
+    <span className={`font-mono text-xs ${bom ? 'text-brand' : 'text-red-400'}`}>
       {positivo ? '▲' : '▼'} {positivo ? '+' : ''}
       {valor.toLocaleString('pt-BR')}%
     </span>
@@ -297,7 +302,7 @@ export function MetricasSection({ metricas, anterior }: { metricas: Metricas; an
                     <TH>Produto</TH>
                     <TH className="text-right">Nosso preço</TH>
                     <TH className="text-right">Mercado (mediana)</TH>
-                    <TH className="text-right">Δ</TH>
+                    <TH className="text-right">Δ vs mercado</TH>
                     <TH>Faixa de mercado</TH>
                     <TH>Fonte</TH>
                   </TR>
@@ -316,7 +321,7 @@ export function MetricasSection({ metricas, anterior }: { metricas: Metricas; an
                         )}
                       </TD>
                       <TD numeric>{pp.precoMercadoMediano > 0 ? formatBRL(pp.precoMercadoMediano) : '—'}</TD>
-                      <TD className="text-right"><DeltaPct valor={pp.deltaPct} /></TD>
+                      <TD className="text-right"><DeltaPct valor={pp.deltaPct} bomSeNegativo /></TD>
                       <TD>
                         {pp.faixa ? (
                           <div className="flex items-center gap-2">
