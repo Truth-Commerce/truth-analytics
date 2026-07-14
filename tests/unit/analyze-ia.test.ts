@@ -253,6 +253,31 @@ describe('analyzeWithIA', () => {
     expect(callArgs.system[0].text).toMatch(/NÃO infira/);
   });
 
+  it('Case 4b — sem benchmark NENHUM: instrução positiva (mix/canais/regularidade, sem recomendacoesPreco)', async () => {
+    mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
+    const semMercado: Metricas = {
+      ...validMetricas,
+      benchmarkParcial: true,
+      posicaoPreco: [
+        { sku: 'SKU-001', nome: 'Produto A', nossoPreco: 99.9, precoMercadoMediano: 0, fonte: '' },
+      ],
+    };
+    await analyzeWithIA(semMercado, null);
+    const sys = mockCreate.mock.calls[0][0].system[0].text;
+    expect(sys).toMatch(/NENHUM benchmark/);
+    expect(sys).toMatch(/recomendacoesPreco/);
+    expect(sys).toMatch(/canais/);
+    expect(sys).not.toMatch(/benchmarkParcial=true/); // não é o aviso de parcial
+  });
+
+  it('Case 4c — fonte única com benchmark completo: cita a fonte, sem hedging', async () => {
+    mockCreate.mockResolvedValueOnce(fakeMessage(JSON.stringify(validAnalise)));
+    await analyzeWithIA(validMetricas, null); // benchmarkParcial=false, fonte única ml_publico
+    const sys = mockCreate.mock.calls[0][0].system[0].text;
+    expect(sys).toMatch(/única fonte \(ml_publico\)/);
+    expect(sys).not.toMatch(/INCOMPLETO/);
+  });
+
   // -----------------------------------------------------------------------
   // Case 5: Content array com thinking block primeiro — extrai o bloco texto corretamente
   // -----------------------------------------------------------------------

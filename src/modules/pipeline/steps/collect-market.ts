@@ -1,5 +1,6 @@
 import { db } from '@/db/client';
 import { marketSnapshots } from '@/db/schema';
+import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { pLimit } from '@/lib/p-limit';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
@@ -21,14 +22,25 @@ type SnapshotValues = {
 };
 
 /**
+ * Providers ATIVOS pela configuração: SERPAPI só entra se SERPAPI_KEY estiver
+ * presente (sem chave, o provider lança 'serpapi_nao_configurada' em toda
+ * keyword e benchmarkParcial ficava eternamente true — P0-7). Avaliado por
+ * chamada (não em module-load) p/ testes conseguirem mockar o env.
+ */
+export function providersAtivos(): MarketProvider[] {
+  return serverEnv.SERPAPI_KEY ? [serpapiProvider, mlPublicoProvider] : [mlPublicoProvider];
+}
+
+/**
  * Step 2: coleta de mercado paralelizada (limite 6) com bulk insert.
- * Degradação graciosa por job: falha de provedor/keyword marca benchmarkParcial
- * e segue — nunca derruba o pipeline.
+ * Degradação graciosa por job: benchmarkParcial=true só quando um provider ATIVO
+ * falha (ou zero snapshots no total) e segue — nunca derruba o pipeline. SERPAPI
+ * ausente não entra na lista de jobs, logo não pune o relatório.
  */
 export async function collectMarket(
   orgId: string,
   reportId: string,
-  providers: MarketProvider[] = [serpapiProvider, mlPublicoProvider],
+  providers: MarketProvider[] = providersAtivos(),
 ): Promise<CollectMarketResult> {
   const allProducts = await listTrackedProducts(orgId);
   const activeProducts = allProducts.filter((p) => p.ativo === true);

@@ -19,10 +19,31 @@ const ANALISE_JSON_SCHEMA: Record<string, unknown> = _rawSchema as Record<string
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(benchmarkParcial: boolean, truthScore?: number): string {
-  const aviso = benchmarkParcial
-    ? `\n\nATENÇÃO: O benchmark de mercado está INCOMPLETO (benchmarkParcial=true). NÃO infira nem invente conclusões sobre concorrentes, participação de mercado ou posição relativa a partir de dados ausentes. Em recomendações de preço, deixe claro explicitamente que a base comparativa é limitada e evite afirmações categóricas sobre competitividade.`
-    : '';
+/**
+ * Aviso de benchmark em 3 casos (G0):
+ * (a) sem benchmark NENHUM → instrução positiva (mix/canais/regularidade,
+ *     recomendacoesPreco vazio) — nada de hedging fantasma;
+ * (b) parcial (provider ATIVO falhou) → cautela explícita (texto preservado);
+ * (c) fonte única completa → analisar preço normalmente citando a fonte.
+ */
+function avisoBenchmark(metricas: Metricas): string {
+  const comMercado = metricas.posicaoPreco.filter((p) => p.precoMercadoMediano > 0);
+  if (comMercado.length === 0) {
+    return `\n\nATENÇÃO: NENHUM benchmark de mercado está disponível neste período. NÃO invente preços de concorrentes nem posição competitiva. Deixe "recomendacoesPreco" como lista vazia e concentre a análise no mix de produtos, nos canais de venda e na regularidade das vendas — há muito valor nesses dados.`;
+  }
+  if (metricas.benchmarkParcial) {
+    return `\n\nATENÇÃO: O benchmark de mercado está INCOMPLETO (benchmarkParcial=true). NÃO infira nem invente conclusões sobre concorrentes, participação de mercado ou posição relativa a partir de dados ausentes. Em recomendações de preço, deixe claro explicitamente que a base comparativa é limitada e evite afirmações categóricas sobre competitividade.`;
+  }
+  const fontes = [...new Set(comMercado.map((p) => p.fonte).filter((f) => f !== ''))];
+  if (fontes.length === 1) {
+    return `\n\nO benchmark de mercado vem de uma única fonte (${fontes[0]}). Analise preços normalmente e cite essa fonte nas recomendações de preço.`;
+  }
+  return '';
+}
+
+function buildSystemPrompt(metricas: Metricas): string {
+  const aviso = avisoBenchmark(metricas);
+  const truthScore = metricas.truth_score?.score;
 
   const scoreTexto =
     truthScore === undefined
@@ -63,7 +84,7 @@ function extractTextBlock(content: unknown[]): string | null {
  * Em caso de falha de parse/validação, faz UMA re-tentativa. Após duas falhas → lança 'analise_ia_invalida'.
  */
 export async function analyzeWithIA(metricas: Metricas, nicho: string | null): Promise<AnaliseIa> {
-  const system = buildSystemPrompt(metricas.benchmarkParcial, metricas.truth_score?.score);
+  const system = buildSystemPrompt(metricas);
   const userText = buildUserMessage(metricas, nicho);
 
   // Bloco de métricas marcado p/ prompt caching: o retry reaproveita o prefixo
