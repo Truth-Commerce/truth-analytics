@@ -30,11 +30,16 @@ export function feedbackDeCallback(
     };
   }
   if (searchParams.erro) {
+    // hasOwnProperty guard: `erro` vem da URL (controlado pelo usuário) — chaves
+    // como 'constructor'/'toString' resolveriam p/ membros de Object.prototype
+    // (truthy) e furariam o ?? fallback, quebrando o render.
+    const mensagem = Object.prototype.hasOwnProperty.call(MENSAGENS_ERRO, searchParams.erro)
+      ? MENSAGENS_ERRO[searchParams.erro]!
+      : 'Não foi possível conectar. Tente novamente.';
     return {
       variante: 'danger',
       titulo: 'Falha ao conectar o Bling',
-      mensagem:
-        MENSAGENS_ERRO[searchParams.erro] ?? 'Não foi possível conectar. Tente novamente.',
+      mensagem,
     };
   }
   return null;

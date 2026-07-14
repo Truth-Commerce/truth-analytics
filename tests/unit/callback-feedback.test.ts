@@ -28,4 +28,15 @@ describe('feedbackDeCallback — retorno do OAuth Bling', () => {
     expect(feedbackDeCallback(undefined)).toBeNull();
     expect(feedbackDeCallback({})).toBeNull();
   });
+
+  it('erro colidindo com membros de Object.prototype → fallback seguro (string)', () => {
+    // ?erro=constructor num objeto literal resolveria p/ Object.prototype.constructor
+    // (função, truthy) sem guarda hasOwnProperty — e React quebraria ao renderizar.
+    for (const chave of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const f = feedbackDeCallback({ erro: chave });
+      expect(f!.variante).toBe('danger');
+      expect(typeof f!.mensagem).toBe('string');
+      expect(f!.mensagem).toBe('Não foi possível conectar. Tente novamente.');
+    }
+  });
 });
