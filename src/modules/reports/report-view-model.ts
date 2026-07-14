@@ -97,3 +97,90 @@ export function primeiroGargalo(analise: AnaliseIa): string | null {
   }
   return analise.gargalos[0] ?? null;
 }
+
+export const FONTE_LABEL: Record<string, string> = { ml_publico: 'Mercado Livre', serpapi: 'Google Shopping' };
+
+export function fonteLabel(fonte: string): string {
+  if (fonte === '') return '—';
+  return FONTE_LABEL[fonte] ?? fonte;
+}
+
+export type PosicaoPrecoView = {
+  sku: string;
+  nome: string;
+  nossoPreco: number;
+  precoMercadoMediano: number;
+  deltaPct: number | null;
+  semVendas: boolean;
+  fonte: string;
+  faixa: {
+    min: number;
+    p25: number;
+    mediana: number;
+    p75: number;
+    pctP25: number;
+    pctMediana: number;
+    pctP75: number;
+    pctNosso: number | null;
+  } | null;
+};
+
+/** View da posição de preço: Δ%, leitura de "sem vendas", fonte pt-BR e faixa de mercado posicionada. */
+export function posicaoPrecoView(
+  posicao: Metricas['posicaoPreco'],
+  faixas: NonNullable<Metricas['faixaMercado']> | undefined,
+): PosicaoPrecoView[] {
+  const faixaPorSku = new Map((faixas ?? []).map((f) => [f.sku, f]));
+  return posicao.map((p) => {
+    const comparavel = p.nossoPreco > 0 && p.precoMercadoMediano > 0;
+    const f = faixaPorSku.get(p.sku) ?? null;
+    let faixa: PosicaoPrecoView['faixa'] = null;
+    if (f) {
+      const lo = f.min;
+      const hi = Math.max(f.p75, p.nossoPreco > 0 ? p.nossoPreco : f.p75);
+      const pct = (v: number): number =>
+        hi === lo ? 50 : Math.min(100, Math.max(0, Math.round(((v - lo) / (hi - lo)) * 100)));
+      faixa = {
+        min: f.min,
+        p25: f.p25,
+        mediana: f.mediana,
+        p75: f.p75,
+        pctP25: pct(f.p25),
+        pctMediana: pct(f.mediana),
+        pctP75: pct(f.p75),
+        pctNosso: p.nossoPreco > 0 ? pct(p.nossoPreco) : null,
+      };
+    }
+    return {
+      sku: p.sku,
+      nome: p.nome,
+      nossoPreco: p.nossoPreco,
+      precoMercadoMediano: p.precoMercadoMediano,
+      deltaPct: comparavel
+        ? Math.round(((p.nossoPreco - p.precoMercadoMediano) / p.precoMercadoMediano) * 1000) / 10
+        : null,
+      semVendas: p.nossoPreco === 0,
+      fonte: fonteLabel(p.fonte),
+      faixa,
+    };
+  });
+}
+
+/** Δ% de receita por sku entre topProdutos atual e anterior (null = sem base). */
+export function deltaReceitaPorSku(
+  atual: Metricas['topProdutos'],
+  anterior: Metricas['topProdutos'] | undefined,
+): Map<string, number | null> {
+  const ant = new Map((anterior ?? []).map((p) => [p.sku, p.receita]));
+  const out = new Map<string, number | null>();
+  for (const p of atual) {
+    const receitaAnterior = ant.get(p.sku);
+    out.set(
+      p.sku,
+      receitaAnterior === undefined || receitaAnterior === 0
+        ? null
+        : Math.round(((p.receita - receitaAnterior) / receitaAnterior) * 1000) / 10,
+    );
+  }
+  return out;
+}

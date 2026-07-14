@@ -11,13 +11,12 @@ import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Stat } from '@/components/ui/Stat';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { Alert } from '@/components/ui/Alert';
 import { ScoreGauge } from '@/components/ui/charts/ScoreGauge';
 import { Reveal } from './reveal';
 import { Toc } from './toc';
-import { EvolucaoChart } from './evolucao-chart';
+import { MetricasSection } from './metricas-section';
 import { HeroKpisFaixa } from './hero-kpis';
 
 export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
@@ -123,133 +122,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
 
           <div className="min-w-0 flex-1 space-y-10">
             <Reveal id="metricas" data-testid="metricas" className="space-y-6 scroll-mt-24">
-              <h2 className="font-heading text-xl font-semibold text-white">Métricas</h2>
-
-              {/* Ticket médio como Stat */}
-              <Card className="inline-flex">
-                <Stat label="Ticket médio" value={formatBRL(rel.metricas.ticketMedio)} />
-              </Card>
-
-              {rel.metricas.benchmarkParcial && (
-                <Badge variant="warn" className="flex w-fit gap-1.5">
-                  Benchmark de mercado parcial — dados de concorrência incompletos.
-                </Badge>
-              )}
-
-              {/* Evolução agora como chart + tabela */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Evolução</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <EvolucaoChart
-                    data={rel.metricas.evolucao.map((e) => ({ x: e.data, y: e.total }))}
-                  />
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>Data</TH>
-                        <TH className="text-right">Total</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.evolucao.map((e, i) => (
-                        <TR key={i}>
-                          <TD className="font-mono text-sm">{e.data}</TD>
-                          <TD numeric>{formatBRL(e.total)}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Vendas por canal */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Vendas por canal</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>Canal</TH>
-                        <TH className="text-right">Total</TH>
-                        <TH className="text-right">Pedidos</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.vendasPorCanal.map((v, i) => (
-                        <TR key={i}>
-                          <TD>{v.canal}</TD>
-                          <TD numeric>{formatBRL(v.total)}</TD>
-                          <TD numeric>{v.pedidos}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Top produtos */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Top produtos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>Nome</TH>
-                        <TH>SKU</TH>
-                        <TH className="text-right">Qtd.</TH>
-                        <TH className="text-right">Receita</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.topProdutos.map((p, i) => (
-                        <TR key={i}>
-                          <TD>{p.nome}</TD>
-                          <TD className="font-mono text-sm">{p.sku}</TD>
-                          <TD numeric>{p.quantidade}</TD>
-                          <TD numeric>{formatBRL(p.receita)}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Posição de preço */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Posição de preço</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>SKU</TH>
-                        <TH>Nome</TH>
-                        <TH className="text-right">Nosso preço</TH>
-                        <TH className="text-right">Mercado (mediana)</TH>
-                        <TH>Fonte</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.posicaoPreco.map((pp, i) => (
-                        <TR key={i}>
-                          <TD className="font-mono text-sm">{pp.sku}</TD>
-                          <TD>{pp.nome}</TD>
-                          <TD numeric>{formatBRL(pp.nossoPreco)}</TD>
-                          <TD numeric>{formatBRL(pp.precoMercadoMediano)}</TD>
-                          <TD>{pp.fonte}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
+              <MetricasSection metricas={rel.metricas} anterior={anterior?.metricas ?? null} />
             </Reveal>
 
             {rel.metricas.truth_score && (

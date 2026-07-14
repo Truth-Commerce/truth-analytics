@@ -12,7 +12,8 @@ interface GlassTooltipProps {
   active?: boolean;
   label?: string | number;
   payload?: GlassTooltipPayloadItem[];
-  formatValue?: (v: number) => string;
+  /** `name` = série do item (Recharts `name`), p/ formatar séries com escalas distintas (ex.: Pareto R$ vs %). */
+  formatValue?: (v: number, name?: string | number) => string;
 }
 
 /** Tooltip glass compartilhado (content custom do Recharts). */
@@ -35,7 +36,7 @@ export function GlassTooltip({ active, label, payload, formatValue }: GlassToolt
             {item.name !== undefined && payload.length > 1 ? (
               <span className="text-muted">{item.name}:</span>
             ) : null}
-            {formatValue ? formatValue(raw) : raw}
+            {formatValue ? formatValue(raw, item.name) : raw}
           </p>
         );
       })}
