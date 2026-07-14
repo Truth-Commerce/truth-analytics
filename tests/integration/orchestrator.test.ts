@@ -12,7 +12,7 @@
  * A cobertura do orquestrador + plan-lock é a prioridade desta suite.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -20,6 +20,7 @@ import postgres from 'postgres';
 import {
   connections,
   marketSnapshots,
+  notifications,
   orders,
   organizations,
   reports,
@@ -133,6 +134,14 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     await tdb.delete(reports).where(eq(reports.org_id, orgId));
     await tdb.delete(trackedProducts).where(eq(trackedProducts.org_id, orgId));
     await tdb.delete(connections).where(eq(connections.org_id, orgId));
+    // Notificações do(s) usuário(s) da org: finalize agora cria 'relatorio_pronto'
+    // in-app (best-effort) — filhos de users, precisam ser removidos antes.
+    await tdb.delete(notifications).where(
+      inArray(
+        notifications.user_id,
+        tdb.select({ id: users.id }).from(users).where(eq(users.org_id, orgId)),
+      ),
+    );
     await tdb.delete(users).where(eq(users.org_id, orgId));
     await tdb.delete(organizations).where(eq(organizations.id, orgId));
     await sql.end();
