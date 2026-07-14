@@ -315,3 +315,28 @@ describe('notification templates (puro)', () => {
     });
   });
 });
+
+describe('alertasDigestTemplate', () => {
+  it('1 alerta → assunto com o título; N alertas → assunto com a contagem; escapa HTML', async () => {
+    const { alertasDigestTemplate } = await import('@/modules/notifications/templates');
+    const um = alertasDigestTemplate(
+      [{ titulo: 'Queda de vendas de 60%', corpo: 'Últimos 7 dias <fracos>' }],
+      'https://app.exemplo.com',
+    );
+    expect(um.subject).toContain('Queda de vendas de 60%');
+    expect(um.html).toContain('&lt;fracos&gt;');
+    expect(um.html).not.toContain('<fracos>');
+    expect(um.text).toContain('https://app.exemplo.com/dashboard');
+
+    const tres = alertasDigestTemplate(
+      [
+        { titulo: 'A', corpo: 'a' },
+        { titulo: 'B', corpo: 'b' },
+        { titulo: 'C', corpo: 'c' },
+      ],
+      'https://app.exemplo.com',
+    );
+    expect(tres.subject).toContain('3');
+    expect(tres.html).toContain('<li>');
+  });
+});

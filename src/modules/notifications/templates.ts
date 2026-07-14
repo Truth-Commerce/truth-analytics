@@ -249,6 +249,39 @@ export function alertaTemplate(titulo: string, corpo: string, appUrl: string): E
 }
 
 /**
+ * Template: digest de alertas — UM e-mail por org por execução do cron com
+ * TODOS os alertas novos (anti-spam; a notificação in-app continua 1 por
+ * alerta). `titulo`/`corpo` vêm dos detectores (pt-BR), mas são escapados.
+ */
+export function alertasDigestTemplate(
+  alertas: { titulo: string; corpo: string }[],
+  appUrl: string,
+): EmailContent {
+  const url = `${appUrl}/dashboard`;
+  const subject =
+    alertas.length === 1
+      ? `⚠ ${alertas[0].titulo} — Truth Analytics`
+      : `⚠ ${alertas.length} novos alertas na sua loja — Truth Analytics`;
+  const text = [
+    'Detectamos os seguintes alertas na sua operação:',
+    '',
+    ...alertas.flatMap((a) => [`• ${a.titulo}`, `  ${a.corpo}`, '']),
+    `Acesse seu painel em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Detectamos os seguintes alertas na sua operação:</p>
+<ul>
+${alertas.map((a) => `<li><strong>${escapeHtml(a.titulo)}</strong><br>${escapeHtml(a.corpo)}</li>`).join('\n')}
+</ul>
+<p><a href="${escapeHtml(url)}">Acesse seu painel</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
  * Template: conexão Bling expirou (enviado ao cliente).
  */
 export function blingConnectionFailedTemplate(appUrl: string): EmailContent {

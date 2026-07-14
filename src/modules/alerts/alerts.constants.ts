@@ -14,3 +14,5 @@ export const PRODUTO_PARADO_DIAS = 14;
 export const PRODUTO_HISTORICO_DIAS = 90;
 /** Verificação roda só p/ orgs com relatório done nos últimos 45 dias. */
 export const JANELA_RELATORIO_RECENTE_DIAS = 45;
+/** Cooldown pós-resolução: alerta resolvido não renasce por 7 dias (dedup por tipo+chave). */
+export const ALERTA_COOLDOWN_DIAS = 7;

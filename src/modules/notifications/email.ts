@@ -4,6 +4,7 @@ import type { Plano } from '@/modules/auth/user.types';
 import {
   accountActivatedTemplate,
   alertaTemplate,
+  alertasDigestTemplate,
   blingConnectionFailedTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
@@ -139,5 +140,18 @@ export async function sendTaskAprovadaEmail(to: string, titulo: string, url: str
  */
 export async function sendAlertaEmail(to: string, titulo: string, corpo: string): Promise<void> {
   const content = alertaTemplate(titulo, corpo, serverEnv.APP_URL);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Digest: notifica o cliente sobre TODOS os alertas novos da execução em um
+ * único e-mail. Nunca lança.
+ */
+export async function sendAlertasDigestEmail(
+  to: string,
+  alertas: { titulo: string; corpo: string }[],
+): Promise<void> {
+  if (alertas.length === 0) return;
+  const content = alertasDigestTemplate(alertas, serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }

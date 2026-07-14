@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -33,6 +34,11 @@ export const alerts = pgTable(
   },
   (t) => ({
     org_abertos_idx: index('alerts_org_abertos_idx').on(t.org_id, t.resolvido, t.created_at),
+    // Anti-corrida: no máx. 1 alerta ABERTO por (org, tipo, chave de dedup).
+    // A chave vive em dados->>'chave_dedup' (gravada por criarAlertas).
+    org_tipo_dedup_aberto_uq: uniqueIndex('alerts_org_tipo_dedup_aberto_uq')
+      .on(t.org_id, t.tipo, sql`(${t.dados}->>'chave_dedup')`)
+      .where(sql`${t.resolvido} = false`),
     tipo_check: check(
       'alerts_tipo_check',
       sql`${t.tipo} IN ('queda_vendas', 'concorrente_preco', 'produto_parado')`,

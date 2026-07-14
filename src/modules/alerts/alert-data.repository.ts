@@ -1,4 +1,4 @@
-import { and, between, desc, eq, gte } from 'drizzle-orm';
+import { and, between, desc, eq, gte, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { orders, organizations, reports, trackedProducts } from '@/db/schema';
@@ -99,4 +99,16 @@ export async function getUltimaVendaPorSku(
     }
   }
   return { produtos, ultimaVendaPorSku };
+}
+
+/**
+ * Data do pedido mais recente da org (MAX(orders.data)) — o "agora efetivo"
+ * das janelas dos detectores. Null = org sem nenhum pedido.
+ */
+export async function getUltimaDataPedido(orgId: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ ultima: sql<Date | string | null>`max(${orders.data})` })
+    .from(orders)
+    .where(eq(orders.org_id, orgId));
+  return row?.ultima ? new Date(row.ultima) : null;
 }
