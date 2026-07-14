@@ -77,6 +77,37 @@ export async function getLatestReport(orgId: string): Promise<ReportSummary | nu
   return row ? summaryRowToSummary(row) : null;
 }
 
+/**
+ * Summaries só de relatórios `done` (p/ selects do comparativo). Limit 50.
+ * Mesmo padrão de `listReports`, acrescentando o filtro de status.
+ */
+export async function listDoneReports(orgId: string): Promise<ReportSummary[]> {
+  const rows = await db
+    .select(summaryColumns)
+    .from(reports)
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done')))
+    .orderBy(desc(reports.created_at))
+    .limit(LIST_LIMIT);
+  return rows.map(summaryRowToSummary);
+}
+
+/**
+ * Últimos relatórios `done` COM métricas (mais recente primeiro). Usado para
+ * montar o hero do Truth Score (atual + anterior) no dashboard.
+ */
+export async function getUltimosDoneDetalhados(
+  orgId: string,
+  limite = 2,
+): Promise<ReportDetail[]> {
+  const rows = await db
+    .select()
+    .from(reports)
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done')))
+    .orderBy(desc(reports.created_at))
+    .limit(limite);
+  return rows.map(rowToDetail);
+}
+
 export async function getLatestDoneReport(orgId: string): Promise<ReportDetail | null> {
   const [row] = await db
     .select()

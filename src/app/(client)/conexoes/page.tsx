@@ -1,15 +1,20 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getConnection } from '@/modules/connections/connection.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { getOrgSettings } from '@/modules/organizations/organization-settings.repository';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { DisconnectBling } from './disconnect-bling';
 import { TrackedProducts } from './tracked-products';
+import { GeracaoAutomaticaToggle } from './geracao-automatica-toggle';
 
 export default async function ConexoesPage() {
   const access = await requireActiveOrg();
-  const conn = await getConnection(access.orgId);
-  const produtos = await listTrackedProducts(access.orgId);
+  const [conn, produtos, settings] = await Promise.all([
+    getConnection(access.orgId),
+    listTrackedProducts(access.orgId),
+    getOrgSettings(access.orgId),
+  ]);
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
@@ -50,6 +55,20 @@ export default async function ConexoesPage() {
           <TrackedProducts
             produtos={produtos.map((p) => ({ id: p.id, nome: p.nome, sku: p.sku, ativo: p.ativo }))}
           />
+        </CardContent>
+      </Card>
+
+      {/* Preferências */}
+      <Card>
+        <CardHeader>
+          <CardTitle as="h2" className="text-base">Preferências</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <GeracaoAutomaticaToggle ativa={settings?.geracaoAutomatica ?? true} />
+          <p className="mt-2 text-xs text-dim">
+            Com a geração automática ligada, seu relatório é gerado sozinho quando o ciclo do plano vence
+            e você recebe um e-mail quando ele fica pronto.
+          </p>
         </CardContent>
       </Card>
     </main>

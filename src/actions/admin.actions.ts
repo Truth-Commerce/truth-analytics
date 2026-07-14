@@ -17,6 +17,7 @@ import {
 } from '@/modules/admin/admin.repository';
 import { periodoDoPlano } from '@/modules/admin/periodo-plano';
 import { recordAudit } from '@/modules/audit/audit.repository';
+import { setMetaMensal } from '@/modules/organizations/organization-settings.repository';
 import { dispatchPipelineRun } from '@/modules/pipeline/dispatch';
 import { createQueuedReport, markReportFailed } from '@/modules/reports/report.repository';
 import { sendAccountActivatedEmail } from '@/modules/notifications/email';
@@ -188,6 +189,25 @@ export async function setPlanoAction(
     throw e;
   }
   revalidatePath('/admin');
+  return { ok: true };
+}
+
+/** Só admin. Follow-up F2/F3c: liberar também para analista da carteira quando a role existir. */
+export async function setMetaMensalAction(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const admin = await requireAdmin();
+  const orgId = String(formData.get('orgId') ?? '');
+  const raw = String(formData.get('meta') ?? '').trim().replace(',', '.');
+  const meta = raw === '' ? null : Number(raw);
+  if (!orgId) return { error: 'Cliente inválido.' };
+  if (meta !== null && (!Number.isFinite(meta) || meta <= 0)) {
+    return { error: 'Informe uma meta maior que zero.' };
+  }
+  await setMetaMensal(orgId, meta);
+  await recordAudit({ orgId, userId: admin.id, acao: 'org.meta_alterada', detalhes: { meta } });
+  revalidatePath(`/admin/${orgId}`);
   return { ok: true };
 }
 

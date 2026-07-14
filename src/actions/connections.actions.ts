@@ -9,6 +9,7 @@ import {
   removeTrackedProduct,
   toggleTrackedProduct,
 } from '@/modules/tracked-products/tracked-product.repository';
+import { setGeracaoAutomatica } from '@/modules/organizations/organization-settings.repository';
 import type { Plano } from '@/modules/auth/user.types';
 
 export type ConnState = { error?: string; ok?: boolean };
@@ -75,6 +76,17 @@ export async function removeTrackedProductAction(
   const id = String(formData.get('id') ?? '');
   if (!id) return { error: 'Produto inválido.' };
   await removeTrackedProduct({ orgId: access.orgId, id });
+  revalidatePath('/conexoes');
+  return { ok: true };
+}
+
+export async function toggleGeracaoAutomaticaAction(
+  _prev: { error?: string; ok?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const access = await requireActiveOrg();
+  const ativa = formData.get('ativa') === 'true';
+  await setGeracaoAutomatica(access.orgId, ativa);
   revalidatePath('/conexoes');
   return { ok: true };
 }

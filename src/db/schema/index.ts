@@ -13,3 +13,4 @@ export * from './task-comments';
 export * from './task-activities';
 export * from './task-templates';
 export * from './notifications';
+export * from './alerts';

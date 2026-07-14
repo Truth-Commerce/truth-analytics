@@ -1,0 +1,48 @@
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  check,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
+
+import { organizations } from './organizations';
+
+export const alerts = pgTable(
+  'alerts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    org_id: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id),
+    tipo: varchar('tipo', { length: 32 }).notNull(),
+    severidade: varchar('severidade', { length: 16 }).notNull().default('atencao'),
+    titulo: varchar('titulo', { length: 255 }).notNull(),
+    corpo: text('corpo').notNull(),
+    dados: jsonb('dados').notNull().default({}),
+    resolvido: boolean('resolvido').notNull().default(false),
+    resolvido_em: timestamp('resolvido_em', { withTimezone: true, mode: 'date' }),
+    created_at: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    org_abertos_idx: index('alerts_org_abertos_idx').on(t.org_id, t.resolvido, t.created_at),
+    tipo_check: check(
+      'alerts_tipo_check',
+      sql`${t.tipo} IN ('queda_vendas', 'concorrente_preco', 'produto_parado')`,
+    ),
+    severidade_check: check(
+      'alerts_severidade_check',
+      sql`${t.severidade} IN ('atencao', 'critico')`,
+    ),
+  }),
+);
+
+export type AlertRecord = typeof alerts.$inferSelect;
+export type NewAlertRecord = typeof alerts.$inferInsert;

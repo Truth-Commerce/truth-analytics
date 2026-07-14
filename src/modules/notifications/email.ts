@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import type { Plano } from '@/modules/auth/user.types';
 import {
   accountActivatedTemplate,
+  alertaTemplate,
   blingConnectionFailedTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
@@ -130,5 +131,13 @@ export async function sendTaskDevolvidaEmail(to: string, titulo: string, url: st
  */
 export async function sendTaskAprovadaEmail(to: string, titulo: string, url: string): Promise<void> {
   const content = taskAprovadaTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Notifica o cliente sobre um novo alerta de inteligência. Nunca lança.
+ */
+export async function sendAlertaEmail(to: string, titulo: string, corpo: string): Promise<void> {
+  const content = alertaTemplate(titulo, corpo, serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }

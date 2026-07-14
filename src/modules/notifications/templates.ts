@@ -223,6 +223,32 @@ export function taskAprovadaTemplate(titulo: string, url: string): EmailContent 
 }
 
 /**
+ * Template: alerta de inteligência (queda de vendas, concorrente abaixo do
+ * preço, produto parado). Enviado ao cliente quando o cron detecta um novo
+ * alerta. `titulo`/`corpo` vêm dos detectores (texto já pt-BR).
+ */
+export function alertaTemplate(titulo: string, corpo: string, appUrl: string): EmailContent {
+  const url = `${appUrl}/dashboard`;
+  const subject = `⚠ ${titulo} — Truth Analytics`;
+  const text = [
+    titulo,
+    '',
+    corpo,
+    '',
+    `Acesse seu painel em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p><strong>${escapeHtml(titulo)}</strong></p>
+<p>${escapeHtml(corpo)}</p>
+<p><a href="${escapeHtml(url)}">Acesse seu painel</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
  * Template: conexão Bling expirou (enviado ao cliente).
  */
 export function blingConnectionFailedTemplate(appUrl: string): EmailContent {

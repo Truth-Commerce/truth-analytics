@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Stat } from '@/components/ui/Stat';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { Alert } from '@/components/ui/Alert';
+import { ScoreGauge } from '@/components/ui/charts/ScoreGauge';
 import { Reveal } from './reveal';
 import { Toc } from './toc';
 import { EvolucaoChart } from './evolucao-chart';
@@ -56,15 +57,26 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
           </div>
           <div className="flex items-center gap-3">
             {rel.status === 'done' && rel.metricas ? (
-              <Button
-                as="a"
-                href={`/api/reports/${rel.id}/pdf`}
-                variant="secondary"
-                size="sm"
-                data-testid="export-pdf"
-              >
-                Exportar PDF
-              </Button>
+              <>
+                <Button
+                  as="a"
+                  href={`/dashboard/relatorios/comparar?a=${rel.id}`}
+                  variant="secondary"
+                  size="sm"
+                  data-testid="comparar-link"
+                >
+                  Comparar
+                </Button>
+                <Button
+                  as="a"
+                  href={`/api/reports/${rel.id}/pdf`}
+                  variant="secondary"
+                  size="sm"
+                  data-testid="export-pdf"
+                >
+                  Exportar PDF
+                </Button>
+              </>
             ) : null}
             <span data-testid="report-status">
               <Badge variant={reportStatusVariant(rel.status)}>{STATUS_LABEL[rel.status]}</Badge>
@@ -78,6 +90,9 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
           <Toc
             items={[
               { href: '#metricas', label: 'Métricas' },
+              ...(rel.metricas.truth_score
+                ? [{ href: '#score-breakdown', label: 'Truth Score' }]
+                : []),
               ...(rel.analiseIa
                 ? [
                     { href: '#resumo', label: 'Resumo executivo' },
@@ -218,6 +233,41 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                 </CardContent>
               </Card>
             </Reveal>
+
+            {rel.metricas.truth_score && (
+              <section id="score-breakdown" data-testid="score-breakdown" className="space-y-3 scroll-mt-24">
+                <h2 className="font-heading text-xl font-semibold text-white">Truth Score</h2>
+                <Card>
+                  <CardContent className="flex flex-wrap items-center gap-8">
+                    <ScoreGauge score={rel.metricas.truth_score.score} />
+                    <div className="min-w-[260px] flex-1 space-y-2">
+                      {(
+                        [
+                          ['Crescimento', rel.metricas.truth_score.fatores.crescimento],
+                          ['Posição de preço', rel.metricas.truth_score.fatores.posicaoPreco],
+                          ['Diversificação de canais', rel.metricas.truth_score.fatores.diversificacao],
+                          ['Regularidade de vendas', rel.metricas.truth_score.fatores.regularidade],
+                          ['Cobertura de benchmark', rel.metricas.truth_score.fatores.cobertura],
+                        ] as const
+                      ).map(([label, fator]) => (
+                        <div key={label}>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted">{label}</span>
+                            <span className="font-mono text-white">{fator.pontos}/{fator.max}</span>
+                          </div>
+                          <div className="h-1.5 rounded bg-white/5">
+                            <div
+                              className="h-1.5 rounded bg-brand"
+                              style={{ width: `${(fator.pontos / fator.max) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </section>
+            )}
 
             {rel.analiseIa ? (
               <>

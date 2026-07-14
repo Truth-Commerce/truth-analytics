@@ -2,14 +2,21 @@ import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import {
   getLatestDoneReport,
   getLatestReport,
+  getUltimosDoneDetalhados,
   listReports,
 } from '@/modules/reports/report.repository';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { dashboardStats, insightsFromAnalise } from '@/modules/reports/dashboard-model';
 import { getConnection } from '@/modules/connections/connection.repository';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
+import {
+  getOrgSettings,
+  getTotalVendasMesCorrente,
+} from '@/modules/organizations/organization-settings.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { listAlertasAbertos } from '@/modules/alerts/alert.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
+import { progressoMeta } from '@/modules/reports/compare';
 import { formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -21,18 +28,29 @@ import { StatCards } from './stat-cards';
 import { InsightsMarquee } from './insights-marquee';
 import { DashboardCharts } from './dashboard-charts';
 import { OnboardingChecklist } from './onboarding-checklist';
+import { TruthScoreCard } from './truth-score-card';
+import { AlertasSection } from './alertas-section';
+import { MetaProgress } from './meta-progress';
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
 
-  const [latest, reports, conn, org, latestDone, produtos] = await Promise.all([
-    getLatestReport(access.orgId),
-    listReports(access.orgId),
-    getConnection(access.orgId),
-    getOrganizationById(access.orgId),
-    getLatestDoneReport(access.orgId),
-    listTrackedProducts(access.orgId),
-  ]);
+  const [latest, reports, conn, org, latestDone, produtos, donesRecentes, alertas, settings, totalMes] =
+    await Promise.all([
+      getLatestReport(access.orgId),
+      listReports(access.orgId),
+      getConnection(access.orgId),
+      getOrganizationById(access.orgId),
+      getLatestDoneReport(access.orgId),
+      listTrackedProducts(access.orgId),
+      getUltimosDoneDetalhados(access.orgId, 2),
+      listAlertasAbertos(access.orgId),
+      getOrgSettings(access.orgId),
+      getTotalVendasMesCorrente(access.orgId),
+    ]);
+
+  const metaAtual = settings?.metaMensal ?? null;
+  const progresso = progressoMeta(totalMes, metaAtual);
 
   const blingOk = !!conn?.connected;
   const gate = org ? podeGerar(org) : { ok: false as const, motivo: 'org_nao_encontrada' };
@@ -94,6 +112,15 @@ export default async function DashboardPage() {
         />
       ) : null}
 
+      {/* Truth Score hero — some quando não há relatório done com score */}
+      <TruthScoreCard atual={donesRecentes[0] ?? null} anterior={donesRecentes[1] ?? null} />
+
+      {/* Meta do mês — some quando o admin não definiu meta */}
+      <MetaProgress progresso={progresso} meta={metaAtual} totalMes={totalMes} />
+
+      {/* Alertas abertos — some quando não há alertas */}
+      <AlertasSection alertas={alertas} />
+
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Gerar relatório (âncora do ⌘K) */}
         <Card id="gerar-relatorio">
@@ -137,7 +164,16 @@ export default async function DashboardPage() {
 
       {/* Histórico */}
       <section data-testid="reports-list">
-        <h2 className="mb-3 font-heading text-base font-semibold text-white">Histórico</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-heading text-base font-semibold text-white">Histórico</h2>
+          <a
+            data-testid="comparar-periodos-link"
+            href="/dashboard/relatorios/comparar"
+            className="text-sm text-brand hover:underline"
+          >
+            Comparar períodos →
+          </a>
+        </div>
         {reports.length > 0 ? (
           <Card className="!p-0">
             <Table>
