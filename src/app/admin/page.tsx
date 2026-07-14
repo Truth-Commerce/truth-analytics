@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { ClientRow } from './client-row';
+import { SystemStatusCard } from './system-status-card';
 
 const PAGE_SIZE = 20;
 
@@ -39,6 +40,8 @@ export default async function AdminPage({
           Buscar
         </Button>
       </form>
+
+      <SystemStatusCard />
 
       <Card className="!p-0">
         <Table>
