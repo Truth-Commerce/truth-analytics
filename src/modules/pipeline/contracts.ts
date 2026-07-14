@@ -74,6 +74,25 @@ export const MetricasSchema = z
           })
           .strict(),
       ),
+    evolucaoDetalhada: z
+      .array(z.object({ data: z.string().min(1), total: z.number(), pedidos: z.number() }).strict())
+      .optional(),
+    canalPorDia: z
+      .array(z.object({ data: z.string().min(1), canais: z.record(z.number()) }).strict())
+      .optional(),
+    porDiaSemana: z
+      .array(
+        z
+          .object({
+            diaSemana: z.number().int().min(0).max(6),
+            label: z.string(),
+            mediaVendas: z.number(),
+            totalVendas: z.number(),
+          })
+          .strict(),
+      )
+      .optional(),
+    ticketPorCanal: z.array(z.object({ canal: z.string(), ticket: z.number() }).strict()).optional(),
     benchmarkParcial: z.boolean(),
     truth_score: TruthScoreSchema.optional(),
   })

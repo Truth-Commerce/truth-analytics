@@ -101,6 +101,88 @@ export function topProdutos(orders: OrderRow[]): { nome: string; sku: string; qu
     .slice(0, 10);
 }
 
+/** Como `evolucao`, mas com contagem de pedidos por dia (v2, campo opcional). */
+export function evolucaoDetalhada(orders: OrderRow[]): { data: string; total: number; pedidos: number }[] {
+  const map = new Map<string, { total: number; pedidos: number }>();
+  for (const o of orders) {
+    const day = o.data.toISOString().slice(0, 10);
+    const cur = map.get(day) ?? { total: 0, pedidos: 0 };
+    map.set(day, { total: cur.total + o.valor_total, pedidos: cur.pedidos + 1 });
+  }
+  return Array.from(map.entries())
+    .map(([data, v]) => ({ data, total: round2(v.total), pedidos: v.pedidos }))
+    .sort((a, b) => a.data.localeCompare(b.data, 'pt-BR'));
+}
+
+/** Total por canal em cada dia UTC (base da área empilhada). Canais em ordem alfabética dentro do dia. */
+export function canalPorDia(orders: OrderRow[]): { data: string; canais: Record<string, number> }[] {
+  const map = new Map<string, Map<string, number>>();
+  for (const o of orders) {
+    const day = o.data.toISOString().slice(0, 10);
+    const canais = map.get(day) ?? new Map<string, number>();
+    canais.set(o.canal, (canais.get(o.canal) ?? 0) + o.valor_total);
+    map.set(day, canais);
+  }
+  return Array.from(map.entries())
+    .map(([data, canais]) => ({
+      data,
+      canais: Object.fromEntries(
+        Array.from(canais.entries())
+          .map(([c, t]) => [c, round2(t)] as const)
+          .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')),
+      ),
+    }))
+    .sort((a, b) => a.data.localeCompare(b.data, 'pt-BR'));
+}
+
+export const DIA_SEMANA_LABEL = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'] as const;
+const ORDEM_COMERCIAL = [1, 2, 3, 4, 5, 6, 0] as const;
+const DIA_MS = 86_400_000;
+
+/**
+ * Média e total de vendas por dia-da-semana (0=dom..6=sáb, ordem seg→dom).
+ * Ocorrências contadas nos dias UTC do período (inclusive) — média honesta
+ * mesmo quando um dia-da-semana ocorre mais vezes que outro na janela.
+ */
+export function porDiaSemana(
+  orders: OrderRow[],
+  periodo: Periodo,
+): { diaSemana: number; label: string; mediaVendas: number; totalVendas: number }[] {
+  const inicio = Date.UTC(
+    periodo.inicio.getUTCFullYear(),
+    periodo.inicio.getUTCMonth(),
+    periodo.inicio.getUTCDate(),
+  );
+  const fim = Date.UTC(periodo.fim.getUTCFullYear(), periodo.fim.getUTCMonth(), periodo.fim.getUTCDate());
+  const ocorrencias = new Map<number, number>();
+  for (let t = inicio; t <= fim; t += DIA_MS) {
+    const dia = new Date(t).getUTCDay();
+    ocorrencias.set(dia, (ocorrencias.get(dia) ?? 0) + 1);
+  }
+  const totais = new Map<number, number>();
+  for (const o of orders) {
+    const dia = o.data.getUTCDay();
+    totais.set(dia, (totais.get(dia) ?? 0) + o.valor_total);
+  }
+  return ORDEM_COMERCIAL.filter((dia) => (ocorrencias.get(dia) ?? 0) > 0).map((dia) => {
+    const totalVendas = round2(totais.get(dia) ?? 0);
+    const n = ocorrencias.get(dia) ?? 1;
+    return { diaSemana: dia, label: DIA_SEMANA_LABEL[dia], mediaVendas: round2(totalVendas / n), totalVendas };
+  });
+}
+
+/** Ticket médio por canal (total/pedidos), ordenado por ticket desc. */
+export function ticketPorCanal(orders: OrderRow[]): { canal: string; ticket: number }[] {
+  const map = new Map<string, { total: number; pedidos: number }>();
+  for (const o of orders) {
+    const cur = map.get(o.canal) ?? { total: 0, pedidos: 0 };
+    map.set(o.canal, { total: cur.total + o.valor_total, pedidos: cur.pedidos + 1 });
+  }
+  return Array.from(map.entries())
+    .map(([canal, v]) => ({ canal, ticket: v.pedidos === 0 ? 0 : round2(v.total / v.pedidos) }))
+    .sort((a, b) => b.ticket - a.ticket || a.canal.localeCompare(b.canal, 'pt-BR'));
+}
+
 /**
  * Median of a list of numbers.
  * Empty → 0. Odd list → middle element. Even list → average of two middles.
@@ -295,6 +377,10 @@ export async function computeMetrics(
     ticketMedio: ticketMedio(orderRows),
     topProdutos: topProdutos(orderRows),
     posicaoPreco: posicao,
+    evolucaoDetalhada: evolucaoDetalhada(orderRows),
+    canalPorDia: canalPorDia(orderRows),
+    porDiaSemana: porDiaSemana(orderRows, periodo),
+    ticketPorCanal: ticketPorCanal(orderRows),
     truth_score: computeTruthScore({
       totalPeriodo,
       totalPeriodoAnterior,
