@@ -1,6 +1,47 @@
-import type { Achado, AnaliseIa } from '@/modules/pipeline/contracts';
+import type { Achado, AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
+import { deltaNumero, totalPedidos, totalVendas } from '@/modules/reports/compare';
 
 export type Prioridade = 'alta' | 'media' | 'baixa';
+
+export type HeroKpis = {
+  total: { valor: number; deltaPct: number | null };
+  pedidos: { valor: number; deltaPct: number | null };
+  ticket: { valor: number; deltaPct: number | null };
+  score: { valor: number; deltaAbs: number | null } | null;
+};
+
+/**
+ * KPIs do hero do relatório. Delta preferencial = comparação com o done
+ * ANTERIOR; fallback do total = truth_score.totalPeriodoAnterior (mesma
+ * duração, computado no pipeline) quando não há relatório anterior.
+ */
+export function heroKpis(atual: Metricas, anterior: Metricas | null): HeroKpis {
+  const ts = atual.truth_score;
+  const totalAtual = ts?.totalPeriodo ?? totalVendas(atual);
+  let totalDelta: number | null = null;
+  if (anterior) {
+    totalDelta = deltaNumero(
+      totalAtual,
+      anterior.truth_score?.totalPeriodo ?? totalVendas(anterior),
+    ).deltaPct;
+  } else if (ts && ts.totalPeriodoAnterior !== null && ts.totalPeriodoAnterior !== 0) {
+    totalDelta = deltaNumero(ts.totalPeriodo, ts.totalPeriodoAnterior).deltaPct;
+  }
+  return {
+    total: { valor: totalAtual, deltaPct: totalDelta },
+    pedidos: {
+      valor: totalPedidos(atual),
+      deltaPct: anterior ? deltaNumero(totalPedidos(atual), totalPedidos(anterior)).deltaPct : null,
+    },
+    ticket: {
+      valor: atual.ticketMedio,
+      deltaPct: anterior ? deltaNumero(atual.ticketMedio, anterior.ticketMedio).deltaPct : null,
+    },
+    score: ts
+      ? { valor: ts.score, deltaAbs: anterior?.truth_score ? ts.score - anterior.truth_score.score : null }
+      : null,
+  };
+}
 
 export const PRIORIDADE_LABEL: Record<Prioridade, string> = {
   alta: 'Alta',

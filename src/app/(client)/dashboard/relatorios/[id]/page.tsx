@@ -2,7 +2,8 @@ import { notFound } from 'next/navigation';
 
 import { AchadosParaTasks } from '@/components/tasks/AchadosParaTasks';
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
-import { getReportById } from '@/modules/reports/report.repository';
+import { getDoneAnterior, getReportById } from '@/modules/reports/report.repository';
+import { heroKpis } from '@/modules/reports/report-view-model';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { friendlyReportError } from '@/modules/reports/report-errors';
 import { listTaskTitulosByReport } from '@/modules/tasks/task.repository';
@@ -17,12 +18,18 @@ import { ScoreGauge } from '@/components/ui/charts/ScoreGauge';
 import { Reveal } from './reveal';
 import { Toc } from './toc';
 import { EvolucaoChart } from './evolucao-chart';
+import { HeroKpisFaixa } from './hero-kpis';
 
 export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
   const access = await requireActiveOrg();
   const rel = await getReportById(params.id, access.orgId);
 
   if (!rel) notFound();
+
+  const anterior =
+    rel.status === 'done' && rel.metricas
+      ? await getDoneAnterior(access.orgId, rel.createdAt, rel.id)
+      : null;
 
   const titulosExistentes = rel.analiseIa
     ? await listTaskTitulosByReport(rel.id, access.orgId)
@@ -83,6 +90,13 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
             </span>
           </div>
         </div>
+
+        {rel.status === 'done' && rel.metricas ? (
+          <HeroKpisFaixa
+            kpis={heroKpis(rel.metricas, anterior?.metricas ?? null)}
+            destaques={rel.analiseIa?.destaques}
+          />
+        ) : null}
       </header>
 
       {rel.status === 'done' && rel.metricas ? (
@@ -93,12 +107,16 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
               ...(rel.metricas.truth_score
                 ? [{ href: '#score-breakdown', label: 'Truth Score' }]
                 : []),
-              ...(rel.analiseIa
-                ? [
-                    { href: '#resumo', label: 'Resumo executivo' },
-                    { href: '#recomendacoes', label: 'Recomendações' },
-                    { href: '#precos', label: 'Preços sugeridos' },
-                  ]
+              ...(rel.analiseIa ? [{ href: '#resumo', label: 'Resumo executivo' }] : []),
+              ...(rel.analiseIa &&
+              ((rel.analiseIa.achados?.length ?? 0) > 0 ||
+                rel.analiseIa.gargalos.length > 0 ||
+                rel.analiseIa.sugestoesMelhoria.length > 0 ||
+                rel.analiseIa.ideiasVenda.length > 0)
+                ? [{ href: '#recomendacoes', label: 'Recomendações' }]
+                : []),
+              ...(rel.analiseIa && rel.analiseIa.recomendacoesPreco.length > 0
+                ? [{ href: '#precos', label: 'Preços sugeridos' }]
                 : []),
             ]}
           />
