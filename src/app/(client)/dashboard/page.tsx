@@ -18,6 +18,7 @@ import { listAlertasAbertos } from '@/modules/alerts/alert.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { progressoMeta } from '@/modules/reports/compare';
 import { formatData, formatPeriodo } from '@/lib/format';
+import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -82,6 +83,16 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Dashboard</h1>
+
+      {/* Conexão expirada — persistente até reconectar (G0/Task 7) */}
+      {conn && conn.status === 'expirado' ? (
+        <Alert variant="danger" title="Sua conexão com o Bling expirou">
+          Seus dados de vendas pararam de atualizar e os relatórios automáticos foram pausados.{' '}
+          <a href="/conexoes" className="font-medium underline underline-offset-2">
+            Reconectar em Conexões →
+          </a>
+        </Alert>
+      ) : null}
 
       <OnboardingChecklist
         blingOk={blingOk}

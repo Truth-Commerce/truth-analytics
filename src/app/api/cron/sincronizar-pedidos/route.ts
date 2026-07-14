@@ -1,7 +1,14 @@
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
-import { listOrgsComBlingOk } from '@/modules/connections/connection.repository';
+import {
+  listConnectionsExpirando,
+  listOrgsComBlingOk,
+} from '@/modules/connections/connection.repository';
+import {
+  MARGEM_RENOVACAO_MS,
+  renovarConexaoDaOrg,
+} from '@/modules/connections/token-renewal';
 import {
   LOTE_MAXIMO_SYNC,
   sincronizarPedidosDaOrg,
@@ -11,7 +18,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 /**
- * Cron diário (7h UTC — Vercel manda `Authorization: Bearer CRON_SECRET`):
+ * Cron diário (7h UTC — Vercel manda `Authorization: Bearer CRON_SECRET`).
+ * Passo 1: renova tokens expirando em <24h; Passo 2: sync incremental —
  * sincroniza os pedidos dos últimos 2 dias de cada org com conexão Bling ok,
  * mantendo `orders` vivo entre relatórios (meta mensal, alertas e "vendas de
  * ontem" deixam de ler uma foto congelada).
@@ -27,6 +35,27 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const agora = new Date();
+
+  // Passo 1 (G0/Task 7): renovação proativa de tokens — RODA ANTES do sync
+  // para que conexões renovadas sincronizem e as que viraram 'expirado' saiam
+  // da lista. Falha em UMA conexão não aborta o lote.
+  let renovadas = 0;
+  let expiradas = 0;
+  for (const orgId of await listConnectionsExpirando(MARGEM_RENOVACAO_MS, agora)) {
+    try {
+      const resultado = await renovarConexaoDaOrg(orgId);
+      if (resultado === 'renovada') renovadas++;
+      else expiradas++;
+      logger.info('cron.sincronizar_pedidos.token', { orgId, resultado });
+    } catch (err) {
+      expiradas++;
+      logger.error('cron.sincronizar_pedidos.token_erro', {
+        orgId,
+        erro: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const orgIds = (await listOrgsComBlingOk()).slice(0, LOTE_MAXIMO_SYNC);
   let sincronizadas = 0;
   let falhas = 0;
@@ -49,5 +78,5 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  return Response.json({ orgs: orgIds.length, sincronizadas, falhas });
+  return Response.json({ orgs: orgIds.length, sincronizadas, falhas, renovadas, expiradas });
 }

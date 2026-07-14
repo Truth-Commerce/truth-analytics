@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, lte } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { connections, organizations } from '@/db/schema';
@@ -63,7 +63,15 @@ export async function getConnection(orgId: string) {
   };
 }
 
-export async function getValidAccessToken(orgId: string): Promise<string> {
+/**
+ * @param margemMs — renova quando faltar menos que isso p/ expirar; default
+ * 60s preserva o comportamento do pipeline; o cron de renovação proativa
+ * passa 24h.
+ */
+export async function getValidAccessToken(
+  orgId: string,
+  margemMs: number = REFRESH_MARGIN_MS,
+): Promise<string> {
   const [row] = await db
     .select()
     .from(connections)
@@ -74,7 +82,7 @@ export async function getValidAccessToken(orgId: string): Promise<string> {
   }
 
   const expMs = row.expira_em ? row.expira_em.getTime() : 0;
-  if (expMs - Date.now() > REFRESH_MARGIN_MS) {
+  if (expMs - Date.now() > margemMs) {
     return decryptSecret(row.access_token);
   }
 
@@ -144,4 +152,29 @@ export async function touchLastSyncAt(orgId: string, quando: Date = new Date()):
     .update(connections)
     .set({ last_sync_at: quando })
     .where(and(eq(connections.org_id, orgId), eq(connections.provider, PROVIDER)));
+}
+
+/**
+ * Orgs com conexão Bling 'ok' cujo token expira em até `margemMs` — universo
+ * do passo de renovação proativa do cron diário.
+ */
+export async function listConnectionsExpirando(
+  margemMs: number,
+  agora: Date = new Date(),
+): Promise<string[]> {
+  const limite = new Date(agora.getTime() + margemMs);
+  const rows = await db
+    .select({ orgId: connections.org_id })
+    .from(connections)
+    .where(
+      and(
+        eq(connections.provider, PROVIDER),
+        eq(connections.status, 'ok'),
+        isNotNull(connections.access_token),
+        isNotNull(connections.refresh_token),
+        isNotNull(connections.expira_em),
+        lte(connections.expira_em, limite),
+      ),
+    );
+  return rows.map((r) => r.orgId);
 }
