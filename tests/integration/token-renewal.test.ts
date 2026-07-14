@@ -14,6 +14,20 @@ const HORA = 3_600_000;
 describe.skipIf(!url)('renovação proativa de tokens Bling — integração', () => {
   let orgId = '';
   let userId = '';
+  let analistaId = '';
+
+  /** Restaura a conexão para 'ok' expirando em 12h (dentro da margem de 24h). */
+  async function resetConexao(): Promise<void> {
+    await db
+      .update(connections)
+      .set({
+        access_token: encryptSecret('tok-antigo'),
+        refresh_token: encryptSecret('rt-antigo'),
+        status: 'ok',
+        expira_em: new Date(Date.now() + 12 * HORA),
+      })
+      .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'bling')));
+  }
 
   beforeAll(async () => {
     const [org] = await db
@@ -26,6 +40,16 @@ describe.skipIf(!url)('renovação proativa de tokens Bling — integração', (
       .values({ org_id: orgId, email: `${PREFIX}${RUN}@example.com`, senha_hash: 'h', role: 'client' })
       .returning({ id: users.id });
     userId = user!.id;
+    const [analista] = await db
+      .insert(users)
+      .values({
+        org_id: orgId,
+        email: `${PREFIX}an-${RUN}@example.com`,
+        senha_hash: 'h',
+        role: 'analista',
+      })
+      .returning({ id: users.id });
+    analistaId = analista!.id;
     // Conexão ok expirando em 12h (dentro da margem de 24h)
     await db.insert(connections).values({
       org_id: orgId,
@@ -39,7 +63,12 @@ describe.skipIf(!url)('renovação proativa de tokens Bling — integração', (
 
   afterAll(async () => {
     try {
+      await db
+        .update(organizations)
+        .set({ analista_id: null })
+        .where(eq(organizations.id, orgId));
       await db.delete(notifications).where(eq(notifications.user_id, userId));
+      await db.delete(notifications).where(eq(notifications.user_id, analistaId));
       await db.delete(connections).where(eq(connections.org_id, orgId));
       await db.delete(users).where(eq(users.org_id, orgId));
       await db.delete(organizations).where(eq(organizations.id, orgId));
@@ -79,10 +108,10 @@ describe.skipIf(!url)('renovação proativa de tokens Bling — integração', (
     }
   });
 
-  it('refresh falhou → status expirado + notify in-app do cliente com href /conexoes', async () => {
+  it('refresh falhou PERMANENTE → status expirado + notify in-app do cliente com href /conexoes', async () => {
     const refreshSpy = vi
       .spyOn(blingProvider, 'refresh')
-      .mockRejectedValueOnce(new Error('invalid_grant'));
+      .mockRejectedValueOnce(new Error('bling_refresh_invalido'));
     try {
       const { renovarConexaoDaOrg } = await import('@/modules/connections/token-renewal');
       const resultado = await renovarConexaoDaOrg(orgId);
@@ -101,6 +130,76 @@ describe.skipIf(!url)('renovação proativa de tokens Bling — integração', (
       const aviso = notifs.find((n) => n.tipo === 'conexao_expirada');
       expect(aviso).toBeDefined();
       expect(aviso!.href).toBe('/conexoes');
+    } finally {
+      refreshSpy.mockRestore();
+    }
+  });
+
+  it('refresh falhou PERMANENTE com analista atribuído → notify in-app do analista com href /analista', async () => {
+    await resetConexao();
+    await db
+      .update(organizations)
+      .set({ analista_id: analistaId })
+      .where(eq(organizations.id, orgId));
+    const refreshSpy = vi
+      .spyOn(blingProvider, 'refresh')
+      .mockRejectedValueOnce(new Error('bling_refresh_invalido'));
+    try {
+      const { renovarConexaoDaOrg } = await import('@/modules/connections/token-renewal');
+      const resultado = await renovarConexaoDaOrg(orgId);
+      expect(resultado).toBe('expirada');
+
+      const notifs = await db
+        .select({ tipo: notifications.tipo, href: notifications.href, corpo: notifications.corpo })
+        .from(notifications)
+        .where(eq(notifications.user_id, analistaId));
+      const aviso = notifs.find((n) => n.tipo === 'conexao_expirada');
+      expect(aviso).toBeDefined();
+      expect(aviso!.href).toBe('/analista');
+      expect(aviso!.corpo).toContain(`${PREFIX}org-${RUN}`);
+    } finally {
+      refreshSpy.mockRestore();
+      await db
+        .update(organizations)
+        .set({ analista_id: null })
+        .where(eq(organizations.id, orgId));
+    }
+  });
+
+  it('refresh falhou TRANSIENTE → status continua ok, ZERO notificação, resultado transiente', async () => {
+    await resetConexao();
+    const notifsAntes = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.user_id, userId));
+
+    const refreshSpy = vi
+      .spyOn(blingProvider, 'refresh')
+      .mockRejectedValueOnce(new Error('bling_refresh_transiente'));
+    try {
+      const { renovarConexaoDaOrg } = await import('@/modules/connections/token-renewal');
+      const resultado = await renovarConexaoDaOrg(orgId);
+      expect(resultado).toBe('transiente');
+
+      // Status NÃO foi tocado — a conexão continua saudável e será re-tentada
+      const [conn] = await db
+        .select({ status: connections.status })
+        .from(connections)
+        .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'bling')));
+      expect(conn!.status).toBe('ok');
+
+      // ZERO notificação nova (cliente e analista)
+      const notifsDepois = await db
+        .select({ id: notifications.id })
+        .from(notifications)
+        .where(eq(notifications.user_id, userId));
+      expect(notifsDepois.length).toBe(notifsAntes.length);
+      const notifsAnalista = await db
+        .select({ id: notifications.id, tipo: notifications.tipo })
+        .from(notifications)
+        .where(eq(notifications.user_id, analistaId));
+      // A única notificação do analista é a do teste permanente anterior
+      expect(notifsAnalista.filter((n) => n.tipo === 'conexao_expirada').length).toBe(1);
     } finally {
       refreshSpy.mockRestore();
     }

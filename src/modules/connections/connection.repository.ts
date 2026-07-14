@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, lte } from 'drizzle-orm';
+import { and, eq, isNotNull, lte, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { connections, organizations } from '@/db/schema';
@@ -99,7 +99,14 @@ export async function getValidAccessToken(
       })
       .where(eq(connections.id, row.id));
     return refreshed.accessToken;
-  } catch {
+  } catch (err) {
+    // Só falha PERMANENTE (refresh_token inválido — 400/401 classificado em
+    // oauth.ts) marca a conexão como expirada e notifica. Transitória
+    // (429/5xx/rede) faz rethrow SEM tocar o status: refresh-on-use tenta de
+    // novo no próximo uso/dia e o refresh_token vale ~30d.
+    const permanente = err instanceof Error && err.message === 'bling_refresh_invalido';
+    if (!permanente) throw err;
+
     await db
       .update(connections)
       .set({ status: 'expirado' })
@@ -125,6 +132,10 @@ export async function disconnectBling(orgId: string): Promise<void> {
 /**
  * Orgs `active` com conexão Bling saudável (status 'ok' e access_token
  * presente) — universo do cron de sync incremental de pedidos.
+ *
+ * Ordem determinística: mais atrasadas primeiro (last_sync_at ASC, nunca
+ * sincronizadas na frente) — sob o cap de 50 orgs por execução, evita
+ * starvation quando houver mais orgs que o lote.
  */
 export async function listOrgsComBlingOk(): Promise<string[]> {
   const rows = await db
@@ -138,7 +149,8 @@ export async function listOrgsComBlingOk(): Promise<string[]> {
         isNotNull(connections.access_token),
         eq(organizations.status, 'active'),
       ),
-    );
+    )
+    .orderBy(sql`${connections.last_sync_at} asc nulls first`);
   return rows.map((r) => r.orgId);
 }
 

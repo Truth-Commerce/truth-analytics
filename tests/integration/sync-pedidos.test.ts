@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// vi.mock é hoisted — literal repetido em CRON_SECRET_TEST abaixo.
+// vi.mock é hoisted — o CRON_SECRET fake vale para todos os testes do arquivo.
 vi.mock('@/lib/env', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/lib/env')>();
   return {
@@ -9,8 +9,6 @@ vi.mock('@/lib/env', async (importOriginal) => {
     serverEnv: { ...mod.serverEnv, CRON_SECRET: 'cron-sincronizar-teste-16+++' },
   };
 });
-
-const CRON_SECRET_TEST = 'cron-sincronizar-teste-16+++';
 
 import { db } from '@/db/client';
 import { connections, orders, organizations } from '@/db/schema';
@@ -30,6 +28,7 @@ function req(auth?: string): Request {
 describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
   let orgId = '';
   let orgErroId = '';
+  let orgNuncaSyncId = '';
 
   beforeAll(async () => {
     const [org] = await db
@@ -66,8 +65,10 @@ describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
       await db.delete(orders).where(eq(orders.org_id, orgId));
       await db.delete(connections).where(eq(connections.org_id, orgId));
       await db.delete(connections).where(eq(connections.org_id, orgErroId));
+      if (orgNuncaSyncId) await db.delete(connections).where(eq(connections.org_id, orgNuncaSyncId));
       await db.delete(organizations).where(eq(organizations.id, orgId));
       await db.delete(organizations).where(eq(organizations.id, orgErroId));
+      if (orgNuncaSyncId) await db.delete(organizations).where(eq(organizations.id, orgNuncaSyncId));
     } finally {
       vi.restoreAllMocks();
     }
@@ -78,6 +79,37 @@ describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
     const ids = await listOrgsComBlingOk();
     expect(ids).toContain(orgId);
     expect(ids).not.toContain(orgErroId);
+  });
+
+  it('listOrgsComBlingOk ordena por last_sync_at ASC NULLS FIRST (nunca sincronizada vem antes)', async () => {
+    // Org mais "atrasada" possível: conexão ok que NUNCA sincronizou (null).
+    const [orgNunca] = await db
+      .insert(organizations)
+      .values({ name: `${PREFIX}org-nunca-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    orgNuncaSyncId = orgNunca!.id;
+    await db.insert(connections).values({
+      org_id: orgNuncaSyncId,
+      provider: 'bling',
+      access_token: 'tok-fake-nunca',
+      refresh_token: 'rt-fake-nunca',
+      status: 'ok',
+      expira_em: new Date(Date.now() + 30 * 86_400_000),
+      last_sync_at: null,
+    });
+    // A org principal já sincronizou (agora) — deve vir DEPOIS da nunca-sincronizada.
+    await db
+      .update(connections)
+      .set({ last_sync_at: new Date() })
+      .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'bling')));
+
+    const { listOrgsComBlingOk } = await import('@/modules/connections/connection.repository');
+    const ids = await listOrgsComBlingOk();
+    const posNunca = ids.indexOf(orgNuncaSyncId);
+    const posSincronizada = ids.indexOf(orgId);
+    expect(posNunca).toBeGreaterThanOrEqual(0);
+    expect(posSincronizada).toBeGreaterThanOrEqual(0);
+    expect(posNunca).toBeLessThan(posSincronizada);
   });
 
   it('sincronizarPedidosDaOrg upserta pedidos da janela de 2 dias e grava last_sync_at', async () => {

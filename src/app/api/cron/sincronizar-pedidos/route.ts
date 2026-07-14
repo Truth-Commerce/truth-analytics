@@ -38,17 +38,23 @@ export async function GET(req: Request): Promise<Response> {
 
   // Passo 1 (G0/Task 7): renovação proativa de tokens — RODA ANTES do sync
   // para que conexões renovadas sincronizem e as que viraram 'expirado' saiam
-  // da lista. Falha em UMA conexão não aborta o lote.
+  // da lista. Falha em UMA conexão não aborta o lote. Falha transitória
+  // (Bling fora do ar/rate limit) NÃO conta como expirada: a conexão continua
+  // 'ok' e será re-tentada no próximo cron.
   let renovadas = 0;
   let expiradas = 0;
+  let transientes = 0;
   for (const orgId of await listConnectionsExpirando(MARGEM_RENOVACAO_MS, agora)) {
     try {
       const resultado = await renovarConexaoDaOrg(orgId);
       if (resultado === 'renovada') renovadas++;
-      else expiradas++;
+      else if (resultado === 'expirada') expiradas++;
+      else transientes++;
       logger.info('cron.sincronizar_pedidos.token', { orgId, resultado });
     } catch (err) {
-      expiradas++;
+      // Erro inesperado: status/notificação NÃO aconteceram — trata como
+      // transiente (re-tenta amanhã), nunca como expirada.
+      transientes++;
       logger.error('cron.sincronizar_pedidos.token_erro', {
         orgId,
         erro: err instanceof Error ? err.message : String(err),
@@ -78,5 +84,12 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  return Response.json({ orgs: orgIds.length, sincronizadas, falhas, renovadas, expiradas });
+  return Response.json({
+    orgs: orgIds.length,
+    sincronizadas,
+    falhas,
+    renovadas,
+    expiradas,
+    transientes,
+  });
 }

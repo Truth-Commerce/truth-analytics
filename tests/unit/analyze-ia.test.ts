@@ -259,6 +259,26 @@ describe('analyzeWithIA', () => {
     expect(mockStream).toHaveBeenCalledTimes(1);
   });
 
+  it('Case 3b — parse inválido na retentativa: loga o parseError antes do throw final', async () => {
+    const loggerModule = await import('@/lib/logger');
+    const errorSpy = vi.spyOn(loggerModule.logger, 'error').mockImplementation(() => {});
+
+    mockCreate.mockResolvedValueOnce(fakeMessage('Não é JSON válido'));
+    streamDevolve(fakeMessage('Também não é JSON'));
+
+    await expect(analyzeWithIA(validMetricas, 'moda')).rejects.toThrow('analise_ia_invalida');
+
+    const chamada = errorSpy.mock.calls.find((c) => c[0] === 'analise_ia.retentativa_invalida');
+    expect(chamada).toBeDefined();
+    const ctx = chamada![1] as { parseError?: unknown };
+    expect(typeof ctx.parseError).toBe('string');
+    expect((ctx.parseError as string).length).toBeGreaterThan(0);
+    // Mensagem curta — truncada em 500 chars como na 1ª tentativa
+    expect((ctx.parseError as string).length).toBeLessThanOrEqual(500);
+
+    errorSpy.mockRestore();
+  });
+
   // -----------------------------------------------------------------------
   // Case 4: benchmarkParcial=true → system prompt inclui aviso de dados incompletos
   // -----------------------------------------------------------------------

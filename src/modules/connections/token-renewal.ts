@@ -9,20 +9,31 @@ export const MARGEM_RENOVACAO_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Renova o token Bling de UMA org (reusa o refresh de getValidAccessToken com
- * margem de 24h). Em falha, o repositório JÁ marcou status='expirado' e
- * enviou o e-mail ao cliente — aqui somamos as notificações in-app (cliente +
- * analista da carteira), best-effort. Como a conexão sai de 'ok', ela não é
- * re-selecionada amanhã → o aviso sai UMA vez, sem spam.
+ * margem de 24h).
+ *
+ * - Falha PERMANENTE ('refresh_bling_falhou' — refresh_token inválido): o
+ *   repositório JÁ marcou status='expirado' e enviou o e-mail ao cliente —
+ *   aqui somamos as notificações in-app (cliente + analista da carteira),
+ *   best-effort. Como a conexão sai de 'ok', ela não é re-selecionada amanhã
+ *   → o aviso sai UMA vez, sem spam.
+ * - Falha TRANSITÓRIA (429/5xx/rede do Bling): NINGUÉM é notificado e o
+ *   status não foi tocado — a conexão continua saudável e o refresh é
+ *   re-tentado no próximo uso/cron (refresh_token vale ~30d; pular um dia é
+ *   seguro).
  */
-export async function renovarConexaoDaOrg(orgId: string): Promise<'renovada' | 'expirada'> {
+export async function renovarConexaoDaOrg(
+  orgId: string,
+): Promise<'renovada' | 'expirada' | 'transiente'> {
   try {
     await getValidAccessToken(orgId, MARGEM_RENOVACAO_MS);
     return 'renovada';
   } catch (err) {
-    logger.warn('token_renewal.refresh_falhou', {
-      orgId,
-      erro: err instanceof Error ? err.message : String(err),
-    });
+    const erro = err instanceof Error ? err.message : String(err);
+    if (erro !== 'refresh_bling_falhou') {
+      logger.warn('token_renewal.refresh_transiente', { orgId, erro });
+      return 'transiente';
+    }
+    logger.warn('token_renewal.refresh_falhou', { orgId, erro });
     await notificarConexaoExpirada(orgId);
     return 'expirada';
   }

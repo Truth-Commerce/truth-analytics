@@ -256,15 +256,18 @@ export async function analyzeWithIA(
   }
 
   const text2 = extractTextBlock(response2.content);
+  let parseError2: string | null = null;
   if (text2 !== null) {
     try {
       const parsed2 = JSON.parse(text2);
       return { analise: AnaliseIaSchema.parse(parsed2), usage };
-    } catch {
-      // fall through
+    } catch (err) {
+      parseError2 = err instanceof Error ? err.message : String(err);
     }
   }
 
-  logger.error('análise IA inválida após retry');
+  logger.error('analise_ia.retentativa_invalida', {
+    parseError: (parseError2 ?? 'resposta sem bloco de texto').slice(0, 500),
+  });
   throw new Error('analise_ia_invalida');
 }

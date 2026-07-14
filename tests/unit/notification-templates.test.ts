@@ -349,4 +349,16 @@ describe('autoGeracaoPausadaTemplate', () => {
     expect(t.html).toContain('&lt;X&gt;');
     expect(t.text).toContain('org-123');
   });
+
+  it('instrui a reprocessar/gerar manualmente e avisa que só religar NÃO resolve', async () => {
+    const { autoGeracaoPausadaTemplate } = await import('@/modules/notifications/templates');
+    const t = autoGeracaoPausadaTemplate('Loja Y', 'org-456');
+    // A pausa é re-aplicada pelo cron enquanto os 3 últimos relatórios forem
+    // failed — a copy NÃO pode dizer que religar em Conexões resolve.
+    expect(t.text).toContain('reprocesse o último relatório no painel admin');
+    expect(t.text).toContain('não resolve enquanto os últimos relatórios forem falhas');
+    expect(t.html).toContain('reprocesse o último relatório no painel admin');
+    expect(t.html).toContain('não resolve enquanto os últimos relatórios forem falhas');
+    expect(t.text).not.toContain('o cliente pode religar em Conexões');
+  });
 });

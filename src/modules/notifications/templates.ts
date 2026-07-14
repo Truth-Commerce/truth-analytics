@@ -292,13 +292,13 @@ export function autoGeracaoPausadaTemplate(orgName: string, orgId: string): Emai
     `Cliente: ${orgName}`,
     `Org ID: ${orgId}`,
     '',
-    'Investigue os erros no painel admin. Após corrigir a causa, o cliente pode religar em Conexões → Preferências (ou reprocessar o último relatório).',
+    'Investigue os erros no painel admin. Após corrigir a causa, reprocesse o último relatório no painel admin (Reprocessar) ou peça ao cliente para gerar um relatório manualmente — apenas religar a geração automática não resolve enquanto os últimos relatórios forem falhas (o cron re-pausa).',
     '',
     'Equipe Truth Analytics',
   ].join('\n');
   const html = `<p>A geração automática de relatórios de <strong>${escapeHtml(orgName)}</strong> foi pausada após 3 falhas consecutivas.</p>
 <p><strong>Org ID:</strong> ${escapeHtml(orgId)}</p>
-<p>Investigue os erros no painel admin. Após corrigir a causa, o cliente pode religar em Conexões → Preferências (ou reprocessar o último relatório).</p>`;
+<p>Investigue os erros no painel admin. Após corrigir a causa, reprocesse o último relatório no painel admin (Reprocessar) ou peça ao cliente para gerar um relatório manualmente — apenas religar a geração automática não resolve enquanto os últimos relatórios forem falhas (o cron re-pausa).</p>`;
 
   return { subject, html, text };
 }

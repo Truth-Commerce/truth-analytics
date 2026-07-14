@@ -18,8 +18,14 @@ const ERRO_LABEL: Record<string, string> = {
   // (fallback genérico já cobriria — estas são só copy mais amigável).
   bling_indisponivel:
     'O Bling não respondeu a tempo. Aguarde alguns instantes e gere o relatório novamente.',
+  // Legado: 'bling_token_falhou' não é mais lançado (substituído pela
+  // classificação invalido/transiente), mas relatórios antigos podem tê-lo.
   bling_token_falhou:
     'A autorização do Bling expirou. Reconecte em Conexões e gere o relatório novamente.',
+  bling_refresh_invalido:
+    'A autorização do Bling expirou. Reconecte em Conexões e gere o relatório novamente.',
+  bling_refresh_transiente:
+    'O Bling não respondeu a tempo. Aguarde alguns instantes e gere o relatório novamente.',
   bling_oauth_nao_configurado:
     'A conexão com o Bling não está configurada. Reconecte em Conexões e tente de novo.',
   ia_nao_configurada:
