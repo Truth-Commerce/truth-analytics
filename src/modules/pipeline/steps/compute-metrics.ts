@@ -6,7 +6,7 @@ import type { MarketSnapshotRecord } from '@/db/schema/market-snapshots';
 import type { OrderRecord } from '@/db/schema/orders';
 import type { TrackedProductRecord } from '@/db/schema/tracked-products';
 import type { MarketResult } from '@/modules/market/market.types';
-import { MetricasSchema, type Metricas } from '@/modules/pipeline/contracts';
+import { MetricasSchema, type Metricas, type ProdutoAbc } from '@/modules/pipeline/contracts';
 import { computeTruthScore } from './truth-score';
 import type { RawOrderItem } from '@/modules/providers/types';
 import type { Periodo } from '@/modules/providers/types';
@@ -21,8 +21,12 @@ export type OrderRow = {
   data: Date;
   /** Drizzle returns numeric as string — already converted to number */
   valor_total: number;
+  /** Frete do pedido (0 quando ausente — retrocompat com fixtures antigas). */
+  frete?: number;
   itens: RawOrderItem[];
 };
+
+export type ProdutoAgregado = { nome: string; sku: string; quantidade: number; receita: number };
 
 export type SnapshotRow = {
   fonte: string;
@@ -75,10 +79,10 @@ export function ticketMedio(orders: OrderRow[]): number {
 /**
  * Aggregate across all itens: group by sku (fallback to '' when sku missing).
  * Sum quantidade and receita (= quantidade * valor per line item).
- * Sort by receita desc, then by nome asc for stability. Cap at top 10.
+ * Sort by receita desc, then by nome asc for stability. Sem cap.
  */
-export function topProdutos(orders: OrderRow[]): { nome: string; sku: string; quantidade: number; receita: number }[] {
-  const map = new Map<string, { nome: string; sku: string; quantidade: number; receita: number }>();
+export function agregarProdutos(orders: OrderRow[]): ProdutoAgregado[] {
+  const map = new Map<string, ProdutoAgregado>();
 
   for (const o of orders) {
     for (const item of o.itens) {
@@ -97,8 +101,140 @@ export function topProdutos(orders: OrderRow[]): { nome: string; sku: string; qu
 
   return Array.from(map.values())
     .map((v) => ({ ...v, receita: round2(v.receita) }))
-    .sort((a, b) => b.receita - a.receita || a.nome.localeCompare(b.nome, 'pt-BR'))
-    .slice(0, 10);
+    .sort((a, b) => b.receita - a.receita || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/** Top 10 produtos por receita — mesmo comportamento histórico (agregarProdutos + cap). */
+export function topProdutos(orders: OrderRow[]): { nome: string; sku: string; quantidade: number; receita: number }[] {
+  return agregarProdutos(orders).slice(0, 10);
+}
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/** Curva ABC por receita acumulada: A ≤ 80%, B ≤ 95%, C resto (1º produto sempre A). */
+export function curvaAbc(orders: OrderRow[]):
+  | { a: ProdutoAbc[]; b: ProdutoAbc[]; c: ProdutoAbc[]; concentracaoTop3Pct: number }
+  | undefined {
+  const todos = agregarProdutos(orders).filter((p) => p.receita > 0);
+  if (todos.length === 0) return undefined;
+  const total = todos.reduce((acc, p) => acc + p.receita, 0);
+  let acumulado = 0;
+  const a: ProdutoAbc[] = [];
+  const b: ProdutoAbc[] = [];
+  const c: ProdutoAbc[] = [];
+  for (const p of todos) {
+    acumulado += p.receita;
+    const pctAcumulado = round1((acumulado / total) * 100);
+    const item: ProdutoAbc = { sku: p.sku, nome: p.nome, receita: p.receita, pctAcumulado };
+    if (pctAcumulado <= 80 || a.length === 0) a.push(item);
+    else if (pctAcumulado <= 95) b.push(item);
+    else c.push(item);
+  }
+  const top3 = todos.slice(0, 3).reduce((acc, p) => acc + p.receita, 0);
+  return { a, b, c, concentracaoTop3Pct: round1((top3 / total) * 100) };
+}
+
+const PIORES_LIMITE = 5;
+
+/** Bottom 5 produtos COM venda no período (receita asc — pior primeiro). */
+export function pioresProdutos(
+  orders: OrderRow[],
+): { sku: string; nome: string; receita: number; quantidade: number }[] {
+  return agregarProdutos(orders)
+    .filter((p) => p.quantidade > 0 && p.receita > 0)
+    .slice(-PIORES_LIMITE)
+    .reverse()
+    .map((p) => ({ sku: p.sku, nome: p.nome, receita: p.receita, quantidade: p.quantidade }));
+}
+
+/** Estatísticas de frete (orders.frete — coluna existente, lida pela 1ª vez aqui). */
+export function freteStats(orders: OrderRow[]):
+  | {
+      freteMedio: number;
+      pctFreteSobreReceita: number;
+      fretePorCanal: { canal: string; freteMedio: number; freteTotal: number }[];
+    }
+  | undefined {
+  if (orders.length === 0) return undefined;
+  const totalFrete = orders.reduce((acc, o) => acc + (o.frete ?? 0), 0);
+  const receita = orders.reduce((acc, o) => acc + o.valor_total, 0);
+  const porCanal = new Map<string, { frete: number; pedidos: number }>();
+  for (const o of orders) {
+    const cur = porCanal.get(o.canal) ?? { frete: 0, pedidos: 0 };
+    porCanal.set(o.canal, { frete: cur.frete + (o.frete ?? 0), pedidos: cur.pedidos + 1 });
+  }
+  return {
+    freteMedio: round2(totalFrete / orders.length),
+    pctFreteSobreReceita: receita <= 0 ? 0 : round1((totalFrete / receita) * 100),
+    fretePorCanal: Array.from(porCanal.entries())
+      .map(([canal, v]) => ({ canal, freteMedio: round2(v.frete / v.pedidos), freteTotal: round2(v.frete) }))
+      .sort((x, y) => y.freteTotal - x.freteTotal || x.canal.localeCompare(y.canal, 'pt-BR')),
+  };
+}
+
+export function unidadesTotais(orders: OrderRow[]): number {
+  return orders.reduce((acc, o) => acc + o.itens.reduce((s, i) => s + i.quantidade, 0), 0);
+}
+
+export function itensPorPedido(orders: OrderRow[]): number {
+  if (orders.length === 0) return 0;
+  return round2(unidadesTotais(orders) / orders.length);
+}
+
+/** Percentil com interpolação linear (pos = (n-1)*p). Lista deve vir ordenada asc. */
+export function percentil(precosOrdenadosAsc: number[], p: number): number {
+  if (precosOrdenadosAsc.length === 0) return 0;
+  const pos = (precosOrdenadosAsc.length - 1) * p;
+  const lo = Math.floor(pos);
+  const hi = Math.min(lo + 1, precosOrdenadosAsc.length - 1);
+  const frac = pos - lo;
+  return round2(precosOrdenadosAsc[lo] + frac * (precosOrdenadosAsc[hi] - precosOrdenadosAsc[lo]));
+}
+
+/**
+ * Faixa de preços de mercado por produto monitorado (min/p25/mediana/p75 + fonte
+ * predominante). Mesmo matching keyword→snapshots de `posicaoPreco`; produto sem
+ * nenhum preço de mercado é OMITIDO.
+ */
+export function faixaMercado(
+  products: ProductRow[],
+  snapshots: SnapshotRow[],
+): { sku: string; nome: string; min: number; p25: number; mediana: number; p75: number; fonte: string }[] {
+  const snapshotsByKeyword = new Map<string, SnapshotRow[]>();
+  for (const snap of snapshots) {
+    const list = snapshotsByKeyword.get(snap.keyword) ?? [];
+    list.push(snap);
+    snapshotsByKeyword.set(snap.keyword, list);
+  }
+
+  const result: { sku: string; nome: string; min: number; p25: number; mediana: number; p75: number; fonte: string }[] = [];
+  for (const p of products) {
+    if (!p.ativo || !p.sku) continue;
+    const allPrecos: number[] = [];
+    const fonteCount = new Map<string, number>();
+    for (const keyword of p.keywords) {
+      for (const snap of snapshotsByKeyword.get(keyword) ?? []) {
+        const precos = Array.isArray(snap.dados?.precos) ? snap.dados.precos : [];
+        allPrecos.push(...precos);
+        fonteCount.set(snap.fonte, (fonteCount.get(snap.fonte) ?? 0) + 1);
+      }
+    }
+    if (allPrecos.length === 0) continue;
+    const sorted = [...allPrecos].sort((x, y) => x - y);
+    const fonte = Array.from(fonteCount.entries()).sort(
+      (x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'pt-BR'),
+    )[0][0];
+    result.push({
+      sku: p.sku,
+      nome: p.nome,
+      min: round2(sorted[0]),
+      p25: percentil(sorted, 0.25),
+      mediana: percentil(sorted, 0.5),
+      p75: percentil(sorted, 0.75),
+      fonte,
+    });
+  }
+  return result.sort((a, b) => a.sku.localeCompare(b.sku, 'pt-BR'));
 }
 
 /** Como `evolucao`, mas com contagem de pedidos por dia (v2, campo opcional). */
@@ -314,6 +450,7 @@ export async function computeMetrics(
     canal: o.canal,
     data: o.data,
     valor_total: Number(o.valor_total),
+    frete: Number(o.frete),
     itens: (o.itens as RawOrderItem[]) ?? [],
   }));
 
@@ -381,6 +518,12 @@ export async function computeMetrics(
     canalPorDia: canalPorDia(orderRows),
     porDiaSemana: porDiaSemana(orderRows, periodo),
     ticketPorCanal: ticketPorCanal(orderRows),
+    curvaAbc: curvaAbc(orderRows),
+    piores: pioresProdutos(orderRows),
+    frete: freteStats(orderRows),
+    unidadesTotais: unidadesTotais(orderRows),
+    itensPorPedido: itensPorPedido(orderRows),
+    faixaMercado: faixaMercado(productRows, snapshotRows),
     truth_score: computeTruthScore({
       totalPeriodo,
       totalPeriodoAnterior,

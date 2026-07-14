@@ -29,6 +29,11 @@ export const TruthScoreSchema = z
 
 export type TruthScore = z.infer<typeof TruthScoreSchema>;
 
+export const ProdutoAbcSchema = z
+  .object({ sku: z.string(), nome: z.string(), receita: z.number(), pctAcumulado: z.number() })
+  .strict();
+export type ProdutoAbc = z.infer<typeof ProdutoAbcSchema>;
+
 export const MetricasSchema = z
   .object({
     vendasPorCanal: z
@@ -93,6 +98,44 @@ export const MetricasSchema = z
       )
       .optional(),
     ticketPorCanal: z.array(z.object({ canal: z.string(), ticket: z.number() }).strict()).optional(),
+    curvaAbc: z
+      .object({
+        a: z.array(ProdutoAbcSchema),
+        b: z.array(ProdutoAbcSchema),
+        c: z.array(ProdutoAbcSchema),
+        concentracaoTop3Pct: z.number(),
+      })
+      .strict()
+      .optional(),
+    piores: z
+      .array(z.object({ sku: z.string(), nome: z.string(), receita: z.number(), quantidade: z.number() }).strict())
+      .optional(),
+    frete: z
+      .object({
+        freteMedio: z.number(),
+        pctFreteSobreReceita: z.number(),
+        fretePorCanal: z
+          .array(z.object({ canal: z.string(), freteMedio: z.number(), freteTotal: z.number() }).strict()),
+      })
+      .strict()
+      .optional(),
+    unidadesTotais: z.number().optional(),
+    itensPorPedido: z.number().optional(),
+    faixaMercado: z
+      .array(
+        z
+          .object({
+            sku: z.string(),
+            nome: z.string(),
+            min: z.number(),
+            p25: z.number(),
+            mediana: z.number(),
+            p75: z.number(),
+            fonte: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
     benchmarkParcial: z.boolean(),
     truth_score: TruthScoreSchema.optional(),
   })
