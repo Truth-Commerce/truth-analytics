@@ -7,6 +7,8 @@ import {
   alertasDigestTemplate,
   autoGeracaoPausadaTemplate,
   blingConnectionFailedTemplate,
+  digestSemanalTemplate,
+  type DigestEmailData,
   lembretePrazoTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
@@ -156,6 +158,15 @@ export async function sendLembretePrazoEmail(
   input: { titulo: string; prazoLabel: string; tipo: 'vence_em_breve' | 'atrasada' },
 ): Promise<void> {
   const content = lembretePrazoTemplate(input, serverEnv.APP_URL);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Digest semanal do Plano de Ação por org (tasks da semana + vendas do mês).
+ * Nunca lança.
+ */
+export async function sendDigestSemanalEmail(to: string, dados: DigestEmailData): Promise<void> {
+  const content = digestSemanalTemplate(dados, serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }
 

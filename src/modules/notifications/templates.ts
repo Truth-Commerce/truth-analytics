@@ -350,6 +350,53 @@ export function lembretePrazoTemplate(
 }
 
 /**
+ * Dados do e-mail de digest semanal — o `resumo` chega PRONTO (montado por
+ * linhaResumo no módulo de digest). Este arquivo NÃO importa digest-semanal
+ * para evitar o ciclo digest → email → templates → digest.
+ */
+export type DigestEmailData = {
+  orgName: string;
+  resumo: string;
+  vendasMes: number;
+  vendasMesAnterior: number;
+};
+
+/**
+ * Template: digest semanal do Plano de Ação + vendas do mês, com CTA para o
+ * plano de ação. `orgName`/`resumo` são escapados no HTML.
+ */
+export function digestSemanalTemplate(dados: DigestEmailData, appUrl: string): EmailContent {
+  const url = `${appUrl}/dashboard/plano-de-acao`;
+  const deltaPct =
+    dados.vendasMesAnterior > 0
+      ? Math.round(((dados.vendasMes - dados.vendasMesAnterior) / dados.vendasMesAnterior) * 1000) / 10
+      : null;
+  const linhaVendas =
+    deltaPct === null
+      ? `Vendas do mês: ${formatBRL(dados.vendasMes)}`
+      : `Vendas do mês: ${formatBRL(dados.vendasMes)} (${deltaPct >= 0 ? '▲' : '▼'} ${Math.abs(deltaPct).toLocaleString('pt-BR')}% vs mês anterior)`;
+  const subject = `Resumo da semana — ${dados.resumo} — Truth Analytics`;
+  const text = [
+    `Como foi a semana do Plano de Ação da ${dados.orgName}:`,
+    '',
+    dados.resumo,
+    linhaVendas,
+    '',
+    `Veja e priorize as próximas tarefas: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Como foi a semana do Plano de Ação da <strong>${escapeHtml(dados.orgName)}</strong>:</p>
+<p><strong>${escapeHtml(dados.resumo)}</strong></p>
+<p>${escapeHtml(linhaVendas)}</p>
+<p><a href="${escapeHtml(url)}">Veja e priorize as próximas tarefas</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
  * Template: geração automática pausada após falhas consecutivas (admin interno).
  */
 export function autoGeracaoPausadaTemplate(orgName: string, orgId: string): EmailContent {

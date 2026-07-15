@@ -371,6 +371,37 @@ describe('lembretePrazoTemplate', () => {
   });
 });
 
+describe('digestSemanalTemplate', () => {
+  const DADOS = {
+    orgName: 'Loja <Teste>',
+    resumo: '3 concluídas ✅, 2 atrasadas ⚠️, 4 em andamento',
+    vendasMes: 10880.5,
+    vendasMesAnterior: 9700,
+  };
+
+  it('assunto com resumo, nome escapado, vendas e CTA do plano de ação', async () => {
+    const { digestSemanalTemplate } = await import('@/modules/notifications/templates');
+    const t = digestSemanalTemplate(DADOS, 'http://x');
+    expect(t.subject).toContain('Resumo da semana');
+    expect(t.html).toContain('&lt;Teste&gt;');
+    expect(t.html).not.toContain('<Teste>');
+    expect(t.html).toContain('3 concluídas ✅, 2 atrasadas ⚠️, 4 em andamento');
+    expect(t.text).toContain('R$');
+    expect(t.html).toContain('http://x/dashboard/plano-de-acao');
+  });
+
+  it('mês anterior > 0 → delta percentual com seta; = 0 → só o valor do mês', async () => {
+    const { digestSemanalTemplate } = await import('@/modules/notifications/templates');
+    const alta = digestSemanalTemplate(DADOS, 'http://x');
+    expect(alta.text).toContain('▲ 12,2% vs mês anterior');
+    const queda = digestSemanalTemplate({ ...DADOS, vendasMes: 8730 }, 'http://x');
+    expect(queda.text).toContain('▼ 10% vs mês anterior');
+    const semBase = digestSemanalTemplate({ ...DADOS, vendasMesAnterior: 0 }, 'http://x');
+    expect(semBase.text).toContain('Vendas do mês:');
+    expect(semBase.text).not.toContain('vs mês anterior');
+  });
+});
+
 describe('autoGeracaoPausadaTemplate', () => {
   it('inclui nome e id da org, escapando HTML', async () => {
     const { autoGeracaoPausadaTemplate } = await import('@/modules/notifications/templates');
