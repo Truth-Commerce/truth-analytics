@@ -1,9 +1,37 @@
+import { formatDiaMes } from '@/lib/format';
+import { hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 import { deltaNumero, totalPedidos, totalVendas } from '@/modules/reports/compare';
 import { ordenarAchados } from '@/modules/reports/report-view-model';
 import type { HistoricoDashboardRow } from '@/modules/reports/report.repository';
 import type { ReportDetail } from '@/modules/reports/report.types';
 import { tituloFromItem } from '@/modules/tasks/report-to-task';
+
+const DIA_MS = 86_400_000;
+
+/**
+ * Countdown POSITIVO da próxima análise automática (reframe do bloqueio do
+ * ciclo como serviço). Dias contados no calendário BRT — 22h de hoje até 1h
+ * de amanhã (BRT) ainda é "hoje".
+ */
+export function proximaAnaliseInfo(
+  geracaoAutomatica: boolean,
+  proximoEm: Date | null,
+  agora: Date = new Date(),
+): { dias: number; data: string } | null {
+  if (!geracaoAutomatica || !proximoEm || proximoEm.getTime() <= agora.getTime()) return null;
+  const dias = Math.round(
+    (inicioDeDiaUtc(hojeBrt(proximoEm)).getTime() - inicioDeDiaUtc(hojeBrt(agora)).getTime()) / DIA_MS,
+  );
+  return { dias, data: formatDiaMes(proximoEm) };
+}
+
+/** Copy pt-BR do countdown (0 = hoje; singular/plural). */
+export function copyProximaAnalise(info: { dias: number; data: string }): string {
+  if (info.dias <= 0) return `Sua próxima análise sai hoje (${info.data}).`;
+  const unidade = info.dias === 1 ? 'dia' : 'dias';
+  return `Sua próxima análise sai automaticamente em ${info.dias} ${unidade} (${info.data}).`;
+}
 
 export type StatItemModel = {
   label: string;

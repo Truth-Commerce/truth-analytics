@@ -4,7 +4,9 @@ import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.type
 import {
   acaoNumeroUm,
   chipsDoRelatorio,
+  copyProximaAnalise,
   linhaDoTempoScore,
+  proximaAnaliseInfo,
   statCardsModel,
 } from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
@@ -64,9 +66,14 @@ export default async function DashboardPage() {
     } else if (!gate.ok) {
       if (gate.motivo === 'ciclo_em_andamento') {
         const proxData = org.proximo_relatorio_liberado_em;
-        motivo = proxData
-          ? `Próximo relatório liberado em ${formatData(proxData)}.`
-          : 'O próximo relatório ainda não foi liberado.';
+        const info = proximaAnaliseInfo(settings?.geracaoAutomatica ?? false, proxData);
+        // Countdown POSITIVO quando a geração automática cuida do ciclo;
+        // fallback neutro quando o cliente desligou a automática.
+        motivo = info
+          ? copyProximaAnalise(info)
+          : proxData
+            ? `Próximo relatório liberado em ${formatData(proxData)}.`
+            : 'O próximo relatório ainda não foi liberado.';
       } else if (gate.motivo === 'sem_plano') {
         motivo = 'Nenhum plano definido.';
       } else {
@@ -136,7 +143,12 @@ export default async function DashboardPage() {
       {/* 6. Números do último período + atalhos para o relatório */}
       <InsightChips chips={chips} />
       {latestDone?.metricas ? (
-        <StatCards items={statCardsModel(latestDone.metricas, doneAnterior?.metricas ?? null)} />
+        <section aria-label="Números do último período" className="space-y-2">
+          <p className="text-xs text-dim" data-testid="stats-periodo">
+            Período analisado: {formatPeriodo(latestDone.periodoInicio, latestDone.periodoFim)}
+          </p>
+          <StatCards items={statCardsModel(latestDone.metricas, doneAnterior?.metricas ?? null)} />
+        </section>
       ) : null}
       {latestDone?.metricas ? (
         <DashboardCharts

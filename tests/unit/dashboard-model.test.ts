@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   acaoNumeroUm,
   chipsDoRelatorio,
+  copyProximaAnalise,
   linhaDoTempoScore,
   posicaoPrecoResumo,
+  proximaAnaliseInfo,
   statCardsModel,
   topProdutosDashboard,
 } from '@/modules/reports/dashboard-model';
@@ -218,6 +220,42 @@ describe('topProdutosDashboard', () => {
   it('sem métricas ou sem produtos → []', () => {
     expect(topProdutosDashboard(null)).toEqual([]);
     expect(topProdutosDashboard(metricas({}))).toEqual([]);
+  });
+});
+
+describe('proximaAnaliseInfo', () => {
+  const agora = new Date('2026-07-14T12:00:00Z');
+
+  it('conta dias-calendário BRT e formata dd/mm', () => {
+    expect(proximaAnaliseInfo(true, new Date('2026-07-19T12:00:00Z'), agora)).toEqual({
+      dias: 5,
+      data: '19/07',
+    });
+  });
+
+  it('15/07 01:00Z = ainda 14/07 no BRT → 0 dias ("sai hoje")', () => {
+    expect(proximaAnaliseInfo(true, new Date('2026-07-15T01:00:00Z'), agora)).toEqual({
+      dias: 0,
+      data: '14/07',
+    });
+  });
+
+  it('null quando automática desligada, sem data ou data no passado', () => {
+    expect(proximaAnaliseInfo(false, new Date('2026-07-19T12:00:00Z'), agora)).toBeNull();
+    expect(proximaAnaliseInfo(true, null, agora)).toBeNull();
+    expect(proximaAnaliseInfo(true, new Date('2026-07-10T12:00:00Z'), agora)).toBeNull();
+  });
+});
+
+describe('copyProximaAnalise', () => {
+  it('hoje / singular / plural', () => {
+    expect(copyProximaAnalise({ dias: 0, data: '14/07' })).toBe('Sua próxima análise sai hoje (14/07).');
+    expect(copyProximaAnalise({ dias: 1, data: '15/07' })).toBe(
+      'Sua próxima análise sai automaticamente em 1 dia (15/07).',
+    );
+    expect(copyProximaAnalise({ dias: 5, data: '19/07' })).toBe(
+      'Sua próxima análise sai automaticamente em 5 dias (19/07).',
+    );
   });
 });
 
