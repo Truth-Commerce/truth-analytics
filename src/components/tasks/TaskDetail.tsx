@@ -43,6 +43,7 @@ const EVENTO_LABEL: Record<string, string> = {
   devolvida: 'Devolvida para ajustes',
   editada: 'Editada',
   prazo: 'Prazo alterado',
+  reincidencia: 'Reincidência de recomendação concluída',
 };
 
 function statusLabel(status: string | null): string {
@@ -141,6 +142,7 @@ export function TaskDetail({
             {PRIORIDADE_TASK_LABEL[task.prioridade]}
           </Badge>
           {atrasada ? <Badge variant="danger">Atrasada</Badge> : null}
+          {task.descricao.includes('_Reincidente:') ? <Badge variant="warn">Reincidente</Badge> : null}
         </div>
 
         {task.prazo ? <p className="mt-2 text-xs text-dim">Prazo: {formatData(task.prazo)}</p> : null}

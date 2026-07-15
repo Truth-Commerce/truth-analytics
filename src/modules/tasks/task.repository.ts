@@ -1,7 +1,8 @@
-import { and, count, desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { taskComments, taskActivities, tasks } from '@/db/schema';
+import { normalizarTexto } from './report-to-task';
 import type {
   TaskAtor, TaskCriadoPor, TaskDetail, TaskPrioridade, TaskStatus, TaskSummary, TaskTipo,
 } from './task.types';
@@ -179,4 +180,33 @@ export async function listTaskTitulosByReport(reportId: string, orgId: string): 
     .from(tasks)
     .where(and(eq(tasks.report_id, reportId), eq(tasks.org_id, orgId)));
   return rows.map((r) => r.titulo);
+}
+
+export const DEDUP_CONCLUIDAS_LIMITE = 500;
+
+/** Títulos CRUS das tasks ABERTAS da org (dedup cross-report + botões da UI). */
+export async function listTaskTitulosAbertos(orgId: string): Promise<string[]> {
+  const rows = await db
+    .select({ titulo: tasks.titulo })
+    .from(tasks)
+    .where(and(eq(tasks.org_id, orgId), ne(tasks.status, 'concluida')));
+  return rows.map((r) => r.titulo);
+}
+
+/**
+ * Task CONCLUÍDA mais recente cujo título normalizado bate com `titulo`
+ * (reincidência). Varre no máx. DEDUP_CONCLUIDAS_LIMITE concluídas.
+ */
+export async function findTaskConcluidaPorTitulo(
+  orgId: string,
+  titulo: string,
+): Promise<{ id: string; titulo: string; updatedAt: Date } | null> {
+  const alvo = normalizarTexto(titulo);
+  const rows = await db
+    .select({ id: tasks.id, titulo: tasks.titulo, updatedAt: tasks.updated_at })
+    .from(tasks)
+    .where(and(eq(tasks.org_id, orgId), eq(tasks.status, 'concluida')))
+    .orderBy(desc(tasks.updated_at))
+    .limit(DEDUP_CONCLUIDAS_LIMITE);
+  return rows.find((r) => normalizarTexto(r.titulo) === alvo) ?? null;
 }

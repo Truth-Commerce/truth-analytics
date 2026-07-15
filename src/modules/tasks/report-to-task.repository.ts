@@ -4,10 +4,11 @@ import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { AnaliseIaSchema, MetricasSchema } from '@/modules/pipeline/contracts';
 import { totalVendas } from '@/modules/reports/compare';
-import { achadoToTaskInput, itemToTaskInput, tituloFromItem, type FonteAnalise } from './report-to-task';
+import { achadoToTaskInput, itemToTaskInput, normalizarTexto, tituloFromItem, type FonteAnalise } from './report-to-task';
 import { prazoDefault } from './sla';
+import { recordTaskActivity } from './task-activity.repository';
 import { getTemplateAtivoPorTipo } from './task-template.repository';
-import { createTask, listTaskTitulosByReport } from './task.repository';
+import { createTask, findTaskConcluidaPorTitulo, listTaskTitulosAbertos } from './task.repository';
 
 export async function createTasksFromReport(input: {
   reportId: string;
@@ -26,7 +27,8 @@ export async function createTasksFromReport(input: {
   // Baseline "Vendas do período" para a descrição v2 — calculado UMA vez.
   const metricasParsed = MetricasSchema.safeParse(rep.metricas);
   const baselineVendas = metricasParsed.success ? totalVendas(metricasParsed.data) : null;
-  const existentes = new Set(await listTaskTitulosByReport(input.reportId, input.orgId));
+  // Dedup ORG-WIDE: títulos normalizados de tasks abertas (qualquer report).
+  const abertosNorm = new Set((await listTaskTitulosAbertos(input.orgId)).map(normalizarTexto));
   let criadas = 0;
   for (const item of input.itens) {
     const { fonte, indice } = item;
@@ -34,34 +36,52 @@ export async function createTasksFromReport(input: {
       const achado = parsed.data.achados?.[indice];
       if (!achado) continue;
       const titulo = tituloFromItem(achado.titulo);
-      if (existentes.has(titulo)) continue;
+      const tituloNorm = normalizarTexto(titulo);
+      if (abertosNorm.has(tituloNorm)) continue;
+      const anterior = await findTaskConcluidaPorTitulo(input.orgId, titulo);
       const checklistPlaybook =
         item.usarChecklistPlaybook === true
           ? ((await getTemplateAtivoPorTipo(achado.tipo))?.checklist ?? [])
           : undefined;
       const t = achadoToTaskInput(achado, input.reportId, { baselineVendas, checklistPlaybook });
-      await createTask({
+      const descricaoFinal = anterior
+        ? `${t.descricao}\n\n_Reincidente: recomendação já concluída anteriormente — [tarefa anterior](/dashboard/plano-de-acao/${anterior.id})._`
+        : t.descricao;
+      const taskId = await createTask({
         orgId: input.orgId,
         ...t,
+        descricao: descricaoFinal,
         prazo: item.prazo ?? prazoDefault(t.prioridade),
         actorUserId: input.actorUserId,
       });
-      existentes.add(titulo);
+      if (anterior) {
+        await recordTaskActivity({ taskId, userId: input.actorUserId ?? null, evento: 'reincidencia', de: anterior.id });
+      }
+      abertosNorm.add(tituloNorm);
       criadas += 1;
       continue;
     }
     const texto = parsed.data[fonte]?.[indice];
     if (typeof texto !== 'string' || texto.length === 0) continue;
     const titulo = tituloFromItem(texto);
-    if (existentes.has(titulo)) continue;
+    const tituloNorm = normalizarTexto(titulo);
+    if (abertosNorm.has(tituloNorm)) continue;
+    const anterior = await findTaskConcluidaPorTitulo(input.orgId, titulo);
     const t = itemToTaskInput({ fonte, texto, reportId: input.reportId });
-    await createTask({
+    const descricaoFinal = anterior
+      ? `${t.descricao}\n\n_Reincidente: recomendação já concluída anteriormente — [tarefa anterior](/dashboard/plano-de-acao/${anterior.id})._`
+      : t.descricao;
+    const taskId = await createTask({
       orgId: input.orgId,
       ...t,
+      descricao: descricaoFinal,
       prazo: item.prazo ?? prazoDefault(t.prioridade),
       actorUserId: input.actorUserId,
     });
-    existentes.add(titulo);
+    if (anterior) {
+      await recordTaskActivity({ taskId, userId: input.actorUserId ?? null, evento: 'reincidencia', de: anterior.id });
+    }
+    abertosNorm.add(tituloNorm);
     criadas += 1;
   }
   return criadas;

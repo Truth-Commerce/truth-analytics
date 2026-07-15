@@ -7,7 +7,7 @@ import { getDoneAnterior, getReportById } from '@/modules/reports/report.reposit
 import { heroKpis } from '@/modules/reports/report-view-model';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { friendlyReportError } from '@/modules/reports/report-errors';
-import { listTaskTitulosByReport } from '@/modules/tasks/task.repository';
+import { listTaskTitulosAbertos } from '@/modules/tasks/task.repository';
 import { listTemplates } from '@/modules/tasks/task-template.repository';
 import type { TaskTipo } from '@/modules/tasks/task.types';
 import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
@@ -34,7 +34,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
       : null;
 
   const titulosExistentes = rel.analiseIa
-    ? await listTaskTitulosByReport(rel.id, access.orgId)
+    ? await listTaskTitulosAbertos(access.orgId)
     : [];
 
   // Playbook sugerido por tipo no mini-form de conversão achado→task: 1º
