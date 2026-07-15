@@ -47,10 +47,10 @@ export function StatCards({ items }: { items: StatItem[] }) {
         <motion.div
           key={item.label}
           variants={fadeLift}
-          className="flex flex-col gap-1 rounded-2xl border border-line bg-bg-surface p-5"
+          className="flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-bg-surface p-5"
         >
           <span className="text-xs uppercase tracking-wide text-muted">{item.label}</span>
-          <div className="flex items-end justify-between gap-2">
+          <div className="flex flex-wrap items-end justify-between gap-2">
             <StatValue value={item.value} format={item.format} />
             {item.spark && item.spark.length > 1 ? <Sparkline data={item.spark} /> : null}
           </div>

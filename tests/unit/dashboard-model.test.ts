@@ -8,6 +8,7 @@ import {
   linhaDoTempoScore,
   posicaoPrecoResumo,
   proximaAnaliseInfo,
+  srSummaryEvolucao,
   statCardsModel,
   topProdutosDashboard,
 } from '@/modules/reports/dashboard-model';
@@ -287,6 +288,25 @@ describe('copyProximaAnalise', () => {
     expect(copyProximaAnalise({ dias: 5, data: '19/07' })).toBe(
       'Sua próxima análise sai automaticamente em 5 dias (19/07).',
     );
+  });
+});
+
+describe('srSummaryEvolucao', () => {
+  it('resume período, total e melhor dia em pt-BR', () => {
+    const s = srSummaryEvolucao([
+      { data: '2026-06-01', total: 500 },
+      { data: '2026-06-15', total: 1500 },
+      { data: '2026-06-30', total: 1000 },
+    ]);
+    expect(s).toContain('01/06 a 30/06');
+    // "R$" e o número são separados por NBSP no Intl pt-BR — asserção pelo trecho numérico.
+    expect(s).toContain('3.000,00');
+    expect(s).toContain('melhor dia 15/06');
+    expect(s).toContain('1.500,00');
+  });
+
+  it('sem dados → mensagem honesta', () => {
+    expect(srSummaryEvolucao([])).toBe('Sem dados de evolução de vendas no período.');
   });
 });
 

@@ -1,4 +1,4 @@
-import { formatDiaMes } from '@/lib/format';
+import { formatBRL, formatDataCurta, formatDiaMes } from '@/lib/format';
 import { hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 import { deltaNumero, totalPedidos, totalVendas } from '@/modules/reports/compare';
@@ -31,6 +31,19 @@ export function copyProximaAnalise(info: { dias: number; data: string }): string
   if (info.dias <= 0) return `Sua próxima análise sai hoje (${info.data}).`;
   const unidade = info.dias === 1 ? 'dia' : 'dias';
   return `Sua próxima análise sai automaticamente em ${info.dias} ${unidade} (${info.data}).`;
+}
+
+/**
+ * Fallback acessível do gráfico de evolução (sr-only): período, total e
+ * melhor dia — o essencial que o gráfico comunica visualmente.
+ */
+export function srSummaryEvolucao(evolucao: { data: string; total: number }[]): string {
+  if (evolucao.length === 0) return 'Sem dados de evolução de vendas no período.';
+  const primeiro = evolucao[0];
+  const ultimo = evolucao[evolucao.length - 1];
+  const total = Math.round(evolucao.reduce((acc, e) => acc + e.total, 0) * 100) / 100;
+  const melhor = evolucao.reduce((a, b) => (b.total > a.total ? b : a));
+  return `Evolução diária de vendas de ${formatDataCurta(primeiro.data)} a ${formatDataCurta(ultimo.data)}: total de ${formatBRL(total)}; melhor dia ${formatDataCurta(melhor.data)} com ${formatBRL(melhor.total)}.`;
 }
 
 export type StatItemModel = {

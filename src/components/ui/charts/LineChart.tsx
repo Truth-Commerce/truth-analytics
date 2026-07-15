@@ -20,50 +20,57 @@ interface LineChartProps {
   data: XY[];
   height?: number;
   formatY?: (v: number) => string;
+  /** Formatação do tooltip (default = formatY) — permite eixo compacto + tooltip completo. */
+  formatTooltip?: (v: number) => string;
+  /** Resumo acessível renderizado como <p class="sr-only"> (fallback do gráfico). */
+  srSummary?: string;
 }
 
 /** Linha/área com gradiente verde neon → transparente (evolução temporal). */
-export function LineChart({ data, height = 260, formatY }: LineChartProps) {
+export function LineChart({ data, height = 260, formatY, formatTooltip, srSummary }: LineChartProps) {
   const gradId = useId().replace(/:/g, '');
   return (
-    <div style={{ width: '100%', height }}>
-      <ResponsiveContainer>
-        <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={chartTheme.areaFrom} />
-              <stop offset="100%" stopColor={chartTheme.areaTo} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid stroke={chartTheme.grid} vertical={false} />
-          <XAxis
-            dataKey="x"
-            stroke={chartTheme.grid}
-            tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }}
-            tickLine={false}
-          />
-          <YAxis
-            width={70}
-            stroke={chartTheme.grid}
-            tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }}
-            tickLine={false}
-            tickFormatter={(v: number) => (formatY ? formatY(v) : String(v))}
-          />
-          <Tooltip
-            cursor={{ stroke: chartTheme.brand, strokeOpacity: 0.3 }}
-            content={<GlassTooltip formatValue={formatY} />}
-          />
-          <Area
-            type="monotone"
-            dataKey="y"
-            stroke={chartTheme.brand}
-            strokeWidth={2}
-            fill={`url(#${gradId})`}
-            dot={false}
-            activeDot={{ r: 4, fill: chartTheme.brand, stroke: '#04150a' }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div>
+      <div style={{ width: '100%', height }}>
+        <ResponsiveContainer>
+          <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={chartTheme.areaFrom} />
+                <stop offset="100%" stopColor={chartTheme.areaTo} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={chartTheme.grid} vertical={false} />
+            <XAxis
+              dataKey="x"
+              stroke={chartTheme.grid}
+              tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }}
+              tickLine={false}
+            />
+            <YAxis
+              width={70}
+              stroke={chartTheme.grid}
+              tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }}
+              tickLine={false}
+              tickFormatter={(v: number) => (formatY ? formatY(v) : String(v))}
+            />
+            <Tooltip
+              cursor={{ stroke: chartTheme.brand, strokeOpacity: 0.3 }}
+              content={<GlassTooltip formatValue={formatTooltip ?? formatY} />}
+            />
+            <Area
+              type="monotone"
+              dataKey="y"
+              stroke={chartTheme.brand}
+              strokeWidth={2}
+              fill={`url(#${gradId})`}
+              dot={false}
+              activeDot={{ r: 4, fill: chartTheme.brand, stroke: '#04150a' }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      {srSummary ? <p className="sr-only">{srSummary}</p> : null}
     </div>
   );
 }

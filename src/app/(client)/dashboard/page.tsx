@@ -8,11 +8,12 @@ import {
   historicoComDeltas,
   linhaDoTempoScore,
   proximaAnaliseInfo,
+  srSummaryEvolucao,
   statCardsModel,
 } from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { paceMeta, progressoMeta } from '@/modules/reports/compare';
-import { formatBRL, formatData, formatDataUtc, formatPeriodo } from '@/lib/format';
+import { formatBRL, formatData, formatDataCurta, formatDataUtc, formatPeriodo } from '@/lib/format';
 import { hojeBrt } from '@/lib/timezone';
 import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -154,8 +155,12 @@ export default async function DashboardPage() {
       ) : null}
       {latestDone?.metricas ? (
         <DashboardCharts
-          evolucao={latestDone.metricas.evolucao.map((e) => ({ x: e.data, y: e.total }))}
+          evolucao={latestDone.metricas.evolucao.map((e) => ({
+            x: formatDataCurta(e.data), // '2026-07-06' → '06/07' (fim das datas ISO no eixo)
+            y: e.total,
+          }))}
           canais={latestDone.metricas.vendasPorCanal.map((v) => ({ label: v.canal, value: v.total }))}
+          srSummary={srSummaryEvolucao(latestDone.metricas.evolucao)}
         />
       ) : null}
       <BentoCards latestDone={latestDone} />

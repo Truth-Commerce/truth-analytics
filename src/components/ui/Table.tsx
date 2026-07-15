@@ -8,7 +8,11 @@ interface TableWrapperProps {
 
 export function Table({ className = '', children, ...rest }: TableWrapperProps) {
   return (
-    <div className="overflow-x-auto">
+    // `relative` faz o wrapper ser o containing block dos descendentes
+    // position:absolute (ex.: <th><span class="sr-only">). Sem isso, essas
+    // células sr-only se posicionam relativas ao <html> e "escapam" do
+    // overflow-x-auto, estourando a largura da página no mobile (375px).
+    <div className="relative overflow-x-auto">
       <table className={`w-full text-sm ${className}`} {...rest}>
         {children}
       </table>
