@@ -317,6 +317,39 @@ ${alertas.map((a) => `<li><strong>${escapeHtml(a.titulo)}</strong><br>${escapeHt
 }
 
 /**
+ * Template: lembrete de prazo de tarefa (vence em breve / atrasada).
+ * `titulo` vem do usuário → escapado.
+ */
+export function lembretePrazoTemplate(
+  input: { titulo: string; prazoLabel: string; tipo: 'vence_em_breve' | 'atrasada' },
+  appUrl: string,
+): EmailContent {
+  const url = `${appUrl}/dashboard/plano-de-acao`;
+  const subject =
+    input.tipo === 'atrasada'
+      ? 'Tarefa atrasada no seu Plano de Ação — Truth Analytics'
+      : 'Tarefa perto do prazo — Truth Analytics';
+  const text = [
+    input.tipo === 'atrasada'
+      ? 'Uma tarefa do seu Plano de Ação está atrasada.'
+      : 'Uma tarefa do seu Plano de Ação está perto do prazo.',
+    '',
+    `Tarefa: ${input.titulo}`,
+    `Prazo: ${input.prazoLabel}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>${input.tipo === 'atrasada' ? 'Uma tarefa do seu Plano de Ação está <strong>atrasada</strong>.' : 'Uma tarefa do seu Plano de Ação está <strong>perto do prazo</strong>.'}</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(input.titulo)}<br><strong>Prazo:</strong> ${escapeHtml(input.prazoLabel)}</p>
+<p><a href="${escapeHtml(url)}">Abrir o Plano de Ação</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+  return { subject, html, text };
+}
+
+/**
  * Template: geração automática pausada após falhas consecutivas (admin interno).
  */
 export function autoGeracaoPausadaTemplate(orgName: string, orgId: string): EmailContent {

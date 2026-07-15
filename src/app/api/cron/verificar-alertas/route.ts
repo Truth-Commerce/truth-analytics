@@ -26,6 +26,7 @@ import {
 import { sendAlertasDigestEmail } from '@/modules/notifications/email';
 import { notify } from '@/modules/notifications/notification.repository';
 import { getOrgPrimaryUser } from '@/modules/notifications/recipients';
+import { processarLembretesDePrazo } from '@/modules/tasks/lembretes-prazo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -122,5 +123,14 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  return Response.json({ orgs: orgIds.length, alertasCriados: criadosTotal });
+  // G3: cobrança de prazos — independente do loop de alertas (cobre TODA org
+  // active com task, não só as com relatório recente).
+  let lembretesEnviados = 0;
+  try {
+    lembretesEnviados = await processarLembretesDePrazo(agora);
+  } catch (err) {
+    logger.error('cron.lembretes_prazo.erro', { erro: err instanceof Error ? err.message : String(err) });
+  }
+
+  return Response.json({ orgs: orgIds.length, alertasCriados: criadosTotal, lembretesEnviados });
 }

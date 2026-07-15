@@ -7,6 +7,7 @@ import {
   alertasDigestTemplate,
   autoGeracaoPausadaTemplate,
   blingConnectionFailedTemplate,
+  lembretePrazoTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
@@ -146,6 +147,15 @@ export async function sendTaskDevolvidaEmail(to: string, titulo: string, url: st
  */
 export async function sendTaskAprovadaEmail(to: string, titulo: string, url: string): Promise<void> {
   const content = taskAprovadaTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/** Lembrete de prazo de tarefa. Nunca lança. */
+export async function sendLembretePrazoEmail(
+  to: string,
+  input: { titulo: string; prazoLabel: string; tipo: 'vence_em_breve' | 'atrasada' },
+): Promise<void> {
+  const content = lembretePrazoTemplate(input, serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }
 

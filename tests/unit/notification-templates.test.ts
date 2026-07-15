@@ -5,6 +5,7 @@ import {
   alertaTemplate,
   blingConnectionFailedTemplate,
   escapeHtml,
+  lembretePrazoTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
   taskAprovadaTemplate,
@@ -349,6 +350,24 @@ describe('alertasDigestTemplate', () => {
     );
     expect(tres.subject).toContain('3');
     expect(tres.html).toContain('<li>');
+  });
+});
+
+describe('lembretePrazoTemplate', () => {
+  it('vence_em_breve: assunto de aviso + título escapado + link do plano', () => {
+    const t = lembretePrazoTemplate(
+      { titulo: 'Ajustar <preço> do kit', prazoLabel: 'Vence amanhã', tipo: 'vence_em_breve' },
+      'http://x',
+    );
+    expect(t.subject).toContain('Tarefa perto do prazo');
+    expect(t.html).toContain('&lt;preço&gt;');
+    expect(t.html).toContain('http://x/dashboard/plano-de-acao');
+    expect(t.text).toContain('Vence amanhã');
+  });
+
+  it('atrasada: assunto de atraso', () => {
+    const t = lembretePrazoTemplate({ titulo: 'T', prazoLabel: 'Atrasada há 2d', tipo: 'atrasada' }, 'http://x');
+    expect(t.subject).toContain('Tarefa atrasada');
   });
 });
 

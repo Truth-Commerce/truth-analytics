@@ -2,7 +2,7 @@ import { inArray, like, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db/client';
-import { organizations, tasks, users } from '@/db/schema';
+import { notifications, organizations, taskActivities, tasks, users } from '@/db/schema';
 import { hashPassword } from '@/modules/auth/password';
 import type { UserAccess } from '@/modules/auth/user.types';
 import { somarDias } from '@/modules/tasks/sla';
@@ -109,6 +109,9 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('meu dia do analista + carteira 
   });
 
   afterAll(async () => {
+    // FK: task_activities → tasks. O cron de lembretes de prazo (G3) é global e
+    // pode gravar activities nas tasks atrasadas desta suíte — limpar antes.
+    await db.delete(taskActivities).where(inArray(taskActivities.task_id, taskIds));
     await db.delete(tasks).where(inArray(tasks.id, taskIds));
     // organizations.analista_id referencia users.id (sem ON DELETE) — limpar
     // antes de apagar o usuário, senão a FK bloqueia o delete.
@@ -116,6 +119,9 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('meu dia do analista + carteira 
       .update(organizations)
       .set({ analista_id: null })
       .where(like(organizations.name, `${PREFIX}%`));
+    // FK: notifications → users. O cron de lembretes (G3) notifica o analista das
+    // tasks atrasadas desta suíte — limpar antes de apagar os usuários.
+    await db.delete(notifications).where(inArray(notifications.user_id, [analistaId].filter(Boolean)));
     await db.delete(users).where(inArray(users.id, [analistaId].filter(Boolean)));
     await db.delete(organizations).where(like(organizations.name, `${PREFIX}%`));
   });

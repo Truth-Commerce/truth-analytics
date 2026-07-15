@@ -11,6 +11,15 @@ vi.mock('@/lib/env', async (importOriginal) => {
   };
 });
 
+// Este teste foca no LOOP DE ALERTAS. O passo aditivo de lembretes de prazo
+// (G3/Task 7) é GLOBAL — varre todas as orgs active com task e escreveria
+// notifications/task_activities nas orgs de OUTRAS suítes rodando em paralelo.
+// Mockado aqui (coberto pelo lembretes-prazo.test.ts dedicado); mantemos só a
+// verificação de que o route expõe o campo aditivo no JSON.
+vi.mock('@/modules/tasks/lembretes-prazo', () => ({
+  processarLembretesDePrazo: vi.fn().mockResolvedValue(0),
+}));
+
 const CRON_SECRET_TEST = 'cron-verificar-alertas-teste-16+';
 
 import { db } from '@/db/client';
@@ -104,8 +113,14 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
     try {
       const res = await GET(req(`Bearer ${CRON_SECRET_TEST}`));
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { orgs: number; alertasCriados: number };
+      const body = (await res.json()) as {
+        orgs: number;
+        alertasCriados: number;
+        lembretesEnviados: number;
+      };
       expect(body.alertasCriados).toBeGreaterThanOrEqual(2);
+      // Campo aditivo do G3 (Task 7): o route expõe o total de lembretes de prazo.
+      expect(body).toHaveProperty('lembretesEnviados');
 
       const criados = await db
         .select({ tipo: alerts.tipo, severidade: alerts.severidade, dados: alerts.dados })
