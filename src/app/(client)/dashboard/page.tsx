@@ -1,7 +1,7 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDashboardData } from '@/modules/reports/dashboard-data';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
-import { insightsFromAnalise, statCardsModel } from '@/modules/reports/dashboard-model';
+import { acaoNumeroUm, chipsDoRelatorio, statCardsModel } from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { progressoMeta } from '@/modules/reports/compare';
 import { formatData, formatPeriodo } from '@/lib/format';
@@ -13,12 +13,13 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { GenerateReport } from './generate-report';
 import { StatCards } from './stat-cards';
-import { InsightsMarquee } from './insights-marquee';
+import { InsightChips } from './insight-chips';
 import { DashboardCharts } from './dashboard-charts';
 import { OnboardingChecklist } from './onboarding-checklist';
 import { TruthScoreCard } from './truth-score-card';
 import { AlertasSection } from './alertas-section';
 import { MetaProgress } from './meta-progress';
+import { AcaoPrincipalCard } from './acao-principal';
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
@@ -59,13 +60,14 @@ export default async function DashboardPage() {
     }
   }
 
-  const insights = insightsFromAnalise(latestDone?.analiseIa ?? null);
+  const chips = chipsDoRelatorio(latestDone);
+  const acao = latestDone ? acaoNumeroUm(latestDone.analiseIa) : null;
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Dashboard</h1>
 
-      {/* Conexão expirada — persistente até reconectar (G0/Task 7) */}
+      {/* 1. Conexão expirada — persistente até reconectar (G0/Task 7) */}
       {conn && conn.status === 'expirado' ? (
         <Alert variant="danger" title="Sua conexão com o Bling expirou">
           Seus dados de vendas pararam de atualizar e os relatórios automáticos foram pausados.{' '}
@@ -75,21 +77,40 @@ export default async function DashboardPage() {
         </Alert>
       ) : null}
 
+      {/* 2. Alertas abertos — a decisão mais urgente primeiro (some sem alertas) */}
+      <AlertasSection alertas={alertas} />
+
+      {/* 3. Como está minha loja: Truth Score + Ação nº 1 da IA */}
+      {latestDone?.metricas?.truth_score || acao ? (
+        <section data-testid="como-esta-minha-loja" className="grid gap-4 lg:grid-cols-2">
+          <TruthScoreCard atual={latestDone} anterior={doneAnterior} />
+          {acao && latestDone ? (
+            <AcaoPrincipalCard
+              reportId={latestDone.id}
+              acao={acao}
+              jaExiste={data.titulosTasksUltimoDone.includes(acao.titulo)}
+            />
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* 4. Meta do mês — só depois da primeira análise (org nova = onboarding) */}
+      {historico.length > 0 ? (
+        <MetaProgress progresso={progresso} meta={metaAtual} totalMes={totalMes} />
+      ) : null}
+
+      {/* 5. Primeiros passos — o componente se esconde sozinho quando completo */}
       <OnboardingChecklist
         blingOk={blingOk}
         temProdutos={data.temProdutos}
         temRelatorio={historico.length > 0}
       />
 
-      {/* Marquee de insights do último relatório */}
-      <InsightsMarquee insights={insights} />
-
-      {/* Stats do último relatório done */}
+      {/* 6. Números do último período + atalhos para o relatório */}
+      <InsightChips chips={chips} />
       {latestDone?.metricas ? (
         <StatCards items={statCardsModel(latestDone.metricas, doneAnterior?.metricas ?? null)} />
       ) : null}
-
-      {/* Charts do último relatório done */}
       {latestDone?.metricas ? (
         <DashboardCharts
           evolucao={latestDone.metricas.evolucao.map((e) => ({ x: e.data, y: e.total }))}
@@ -97,15 +118,7 @@ export default async function DashboardPage() {
         />
       ) : null}
 
-      {/* Truth Score hero — some quando não há relatório done com score */}
-      <TruthScoreCard atual={latestDone} anterior={doneAnterior} />
-
-      {/* Meta do mês — some quando o admin não definiu meta */}
-      <MetaProgress progresso={progresso} meta={metaAtual} totalMes={totalMes} />
-
-      {/* Alertas abertos — some quando não há alertas */}
-      <AlertasSection alertas={alertas} />
-
+      {/* 7. Gerar relatório + último relatório */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Gerar relatório (âncora do ⌘K) */}
         <Card id="gerar-relatorio">
@@ -151,8 +164,8 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Histórico */}
-      <section data-testid="reports-list">
+      {/* 8. Histórico */}
+      <section id="historico" data-testid="reports-list">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="font-heading text-base font-semibold text-white">Histórico</h2>
           <a

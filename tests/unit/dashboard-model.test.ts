@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { insightsFromAnalise, statCardsModel } from '@/modules/reports/dashboard-model';
-import type { AnaliseIa, Metricas, TruthScore } from '@/modules/pipeline/contracts';
+import { acaoNumeroUm, chipsDoRelatorio, statCardsModel } from '@/modules/reports/dashboard-model';
+import type { Achado, AnaliseIa, Metricas, TruthScore } from '@/modules/pipeline/contracts';
+import type { ReportDetail } from '@/modules/reports/report.types';
 
 const SCORE: TruthScore = {
   score: 76,
@@ -69,16 +70,90 @@ describe('statCardsModel', () => {
   });
 });
 
-describe('insightsFromAnalise (removido na Task 2 — mantido até lá)', () => {
-  const ANALISE: AnaliseIa = {
-    resumoExecutivo: 'ok',
-    gargalos: ['Frete caro'],
-    sugestoesMelhoria: ['Negociar tarifa'],
-    ideiasVenda: ['Kit promocional'],
-    recomendacoesPreco: [],
+function detail(over: Partial<ReportDetail>): ReportDetail {
+  return {
+    id: 'r-1',
+    status: 'done',
+    periodoInicio: new Date('2026-06-01T00:00:00Z'),
+    periodoFim: new Date('2026-06-30T23:59:59Z'),
+    createdAt: new Date('2026-07-01T12:00:00Z'),
+    metricas: metricas({}),
+    analiseIa: null,
+    erro: null,
+    ...over,
   };
+}
 
-  it('prefixa por origem', () => {
-    expect(insightsFromAnalise(ANALISE)[0]).toBe('Gargalo: Frete caro');
+function achado(over: Partial<Achado>): Achado {
+  return {
+    titulo: 'Achado',
+    descricao: 'Descrição.',
+    tipo: 'outro',
+    prioridade: 'media',
+    impactoEstimadoMensalBRL: null,
+    comoFazer: [],
+    skus: [],
+    ...over,
+  };
+}
+
+const ANALISE_BASE: AnaliseIa = {
+  resumoExecutivo: 'ok',
+  gargalos: ['Frete caro no Mercado Livre'],
+  sugestoesMelhoria: [],
+  ideiasVenda: [],
+  recomendacoesPreco: [],
+};
+
+describe('chipsDoRelatorio', () => {
+  it('done com análise → 3 chips apontando para as seções do relatório', () => {
+    const chips = chipsDoRelatorio(detail({ analiseIa: ANALISE_BASE }));
+    expect(chips).toEqual([
+      { label: 'Métricas do período', href: '/dashboard/relatorios/r-1#metricas' },
+      { label: 'Análise da IA', href: '/dashboard/relatorios/r-1#resumo' },
+      { label: 'Recomendações', href: '/dashboard/relatorios/r-1#recomendacoes' },
+    ]);
+  });
+
+  it('done sem análise → só o chip de métricas; sem done → []', () => {
+    expect(chipsDoRelatorio(detail({}))).toEqual([
+      { label: 'Métricas do período', href: '/dashboard/relatorios/r-1#metricas' },
+    ]);
+    expect(chipsDoRelatorio(null)).toEqual([]);
+    expect(chipsDoRelatorio(detail({ metricas: null }))).toEqual([]);
+  });
+});
+
+describe('acaoNumeroUm', () => {
+  it('com achados v2 → melhor achado por impacto, com índice ORIGINAL', () => {
+    const analise: AnaliseIa = {
+      ...ANALISE_BASE,
+      achados: [
+        achado({ titulo: 'Menor', impactoEstimadoMensalBRL: 100 }),
+        achado({ titulo: 'Maior', impactoEstimadoMensalBRL: 2000, descricao: 'Vale muito.' }),
+      ],
+    };
+    expect(acaoNumeroUm(analise)).toEqual({
+      titulo: 'Maior',
+      descricao: 'Vale muito.',
+      impactoBRL: 2000,
+      fonte: 'achados',
+      indice: 1,
+    });
+  });
+
+  it('relatório antigo → fallback gargalos[0] com fonte/indice do fluxo legado', () => {
+    expect(acaoNumeroUm(ANALISE_BASE)).toEqual({
+      titulo: 'Frete caro no Mercado Livre',
+      descricao: null,
+      impactoBRL: null,
+      fonte: 'gargalos',
+      indice: 0,
+    });
+  });
+
+  it('sem análise ou sem itens → null', () => {
+    expect(acaoNumeroUm(null)).toBeNull();
+    expect(acaoNumeroUm({ ...ANALISE_BASE, gargalos: [] })).toBeNull();
   });
 });

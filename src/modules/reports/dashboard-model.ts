@@ -1,5 +1,8 @@
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 import { deltaNumero, totalPedidos, totalVendas } from '@/modules/reports/compare';
+import { ordenarAchados } from '@/modules/reports/report-view-model';
+import type { ReportDetail } from '@/modules/reports/report.types';
+import { tituloFromItem } from '@/modules/tasks/report-to-task';
 
 export type StatItemModel = {
   label: string;
@@ -40,14 +43,67 @@ export function statCardsModel(atual: Metricas, anterior: Metricas | null): Stat
   return itens;
 }
 
-const MAX_INSIGHTS = 8;
+export type ChipRelatorio = { label: string; href: string };
 
-/** Frases curtas para o marquee, na ordem gargalo → sugestão → ideia (pura). */
-export function insightsFromAnalise(a: AnaliseIa | null): string[] {
-  if (!a) return [];
-  return [
-    ...a.gargalos.map((g) => `Gargalo: ${g}`),
-    ...a.sugestoesMelhoria.map((s) => `Sugestão: ${s}`),
-    ...a.ideiasVenda.map((i) => `Ideia: ${i}`),
-  ].slice(0, MAX_INSIGHTS);
+const MAX_CHIPS = 3;
+
+/**
+ * Chips estáticos de atalho para as seções do último relatório done.
+ * Substitui o marquee (WCAG 2.2.2 resolvido por não haver mais animação).
+ * Âncoras estáveis da página do relatório: #metricas, #resumo, #recomendacoes.
+ */
+export function chipsDoRelatorio(latestDone: ReportDetail | null): ChipRelatorio[] {
+  if (!latestDone || latestDone.status !== 'done' || !latestDone.metricas) return [];
+  const base = `/dashboard/relatorios/${latestDone.id}`;
+  const chips: ChipRelatorio[] = [{ label: 'Métricas do período', href: `${base}#metricas` }];
+  const a = latestDone.analiseIa;
+  if (a) {
+    chips.push({ label: 'Análise da IA', href: `${base}#resumo` });
+    const temRecomendacoes =
+      (a.achados?.length ?? 0) > 0 ||
+      a.gargalos.length > 0 ||
+      a.sugestoesMelhoria.length > 0 ||
+      a.ideiasVenda.length > 0;
+    if (temRecomendacoes) chips.push({ label: 'Recomendações', href: `${base}#recomendacoes` });
+  }
+  return chips.slice(0, MAX_CHIPS);
+}
+
+export type AcaoPrincipal = {
+  titulo: string;
+  descricao: string | null;
+  impactoBRL: number | null;
+  fonte: 'achados' | 'gargalos';
+  indice: number;
+};
+
+/**
+ * "Ação nº 1": o achado da IA de maior impacto (ordem canônica da G1) ou,
+ * em relatório antigo, gargalos[0]. `indice` é a posição ORIGINAL no array —
+ * contrato do createTasksFromReportAction (itens: [{fonte, indice}]).
+ * `titulo` passa por tituloFromItem (igual à task criada) para casar com a
+ * checagem de jaExiste contra os títulos já persistidos.
+ */
+export function acaoNumeroUm(analise: AnaliseIa | null): AcaoPrincipal | null {
+  if (!analise) return null;
+  if (analise.achados && analise.achados.length > 0) {
+    const { achado, indice } = ordenarAchados(analise.achados)[0];
+    return {
+      titulo: tituloFromItem(achado.titulo),
+      descricao: achado.descricao,
+      impactoBRL: achado.impactoEstimadoMensalBRL,
+      fonte: 'achados',
+      indice,
+    };
+  }
+  if (analise.gargalos.length > 0) {
+    return {
+      titulo: tituloFromItem(analise.gargalos[0]),
+      descricao: null,
+      impactoBRL: null,
+      fonte: 'gargalos',
+      indice: 0,
+    };
+  }
+  return null;
 }
