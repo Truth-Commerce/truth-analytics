@@ -1,7 +1,12 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDashboardData } from '@/modules/reports/dashboard-data';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
-import { acaoNumeroUm, chipsDoRelatorio, statCardsModel } from '@/modules/reports/dashboard-model';
+import {
+  acaoNumeroUm,
+  chipsDoRelatorio,
+  linhaDoTempoScore,
+  statCardsModel,
+} from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { progressoMeta } from '@/modules/reports/compare';
 import { formatData, formatPeriodo } from '@/lib/format';
@@ -61,6 +66,7 @@ export default async function DashboardPage() {
   }
 
   const chips = chipsDoRelatorio(latestDone);
+  const timeline = linhaDoTempoScore(historico);
   const acao = latestDone ? acaoNumeroUm(latestDone.analiseIa) : null;
 
   return (
@@ -83,7 +89,12 @@ export default async function DashboardPage() {
       {/* 3. Como está minha loja: Truth Score + Ação nº 1 da IA */}
       {latestDone?.metricas?.truth_score || acao ? (
         <section data-testid="como-esta-minha-loja" className="grid gap-4 lg:grid-cols-2">
-          <TruthScoreCard atual={latestDone} anterior={doneAnterior} />
+          <TruthScoreCard
+            atual={latestDone}
+            anterior={doneAnterior}
+            serie={timeline.serie}
+            timelineTexto={timeline.texto}
+          />
           {acao && latestDone ? (
             <AcaoPrincipalCard
               reportId={latestDone.id}

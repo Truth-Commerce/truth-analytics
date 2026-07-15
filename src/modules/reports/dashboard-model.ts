@@ -1,6 +1,7 @@
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 import { deltaNumero, totalPedidos, totalVendas } from '@/modules/reports/compare';
 import { ordenarAchados } from '@/modules/reports/report-view-model';
+import type { HistoricoDashboardRow } from '@/modules/reports/report.repository';
 import type { ReportDetail } from '@/modules/reports/report.types';
 import { tituloFromItem } from '@/modules/tasks/report-to-task';
 
@@ -41,6 +42,25 @@ export function statCardsModel(atual: Metricas, anterior: Metricas | null): Stat
     itens.push({ label: 'Variação vs análise anterior', value: deltaPct, format: 'pct' });
   }
   return itens;
+}
+
+export type LinhaDoTempoScore = { serie: number[]; texto: string | null };
+
+/**
+ * Linha do tempo do Truth Score: todos os scores persistidos (F3a), em ordem
+ * cronológica. O histórico chega DESC (query do dashboard) → reverte.
+ * Texto só com ≥ 2 pontos ("De 58 para 76 em 4 relatórios").
+ */
+export function linhaDoTempoScore(historico: HistoricoDashboardRow[]): LinhaDoTempoScore {
+  const serie = historico
+    .filter((r) => r.status === 'done' && r.score !== null)
+    .map((r) => r.score as number)
+    .reverse();
+  const texto =
+    serie.length >= 2
+      ? `De ${serie[0]} para ${serie[serie.length - 1]} em ${serie.length} relatórios`
+      : null;
+  return { serie, texto };
 }
 
 export type ChipRelatorio = { label: string; href: string };

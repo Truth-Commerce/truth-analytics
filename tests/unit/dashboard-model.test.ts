@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { acaoNumeroUm, chipsDoRelatorio, statCardsModel } from '@/modules/reports/dashboard-model';
+import {
+  acaoNumeroUm,
+  chipsDoRelatorio,
+  linhaDoTempoScore,
+  statCardsModel,
+} from '@/modules/reports/dashboard-model';
 import type { Achado, AnaliseIa, Metricas, TruthScore } from '@/modules/pipeline/contracts';
+import type { HistoricoDashboardRow } from '@/modules/reports/report.repository';
 import type { ReportDetail } from '@/modules/reports/report.types';
 
 const SCORE: TruthScore = {
@@ -155,5 +161,40 @@ describe('acaoNumeroUm', () => {
   it('sem análise ou sem itens → null', () => {
     expect(acaoNumeroUm(null)).toBeNull();
     expect(acaoNumeroUm({ ...ANALISE_BASE, gargalos: [] })).toBeNull();
+  });
+});
+
+function linha(over: Partial<HistoricoDashboardRow>): HistoricoDashboardRow {
+  return {
+    id: `r-${Math.random()}`,
+    status: 'done',
+    periodoInicio: new Date('2026-06-01T00:00:00Z'),
+    periodoFim: new Date('2026-06-07T23:59:59Z'),
+    createdAt: new Date('2026-06-08T12:00:00Z'),
+    score: null,
+    totalPeriodo: null,
+    ...over,
+  };
+}
+
+describe('linhaDoTempoScore', () => {
+  it('ordena cronologicamente (input é desc), ignora failed/sem score e narra a evolução', () => {
+    const historico = [
+      linha({ status: 'failed' }), // mais recente, sem score
+      linha({ score: 76, totalPeriodo: 1000 }),
+      linha({ score: 71, totalPeriodo: 900 }),
+      linha({ score: 64, totalPeriodo: 850 }),
+      linha({ score: 58, totalPeriodo: 800 }), // mais antigo
+    ];
+    expect(linhaDoTempoScore(historico)).toEqual({
+      serie: [58, 64, 71, 76],
+      texto: 'De 58 para 76 em 4 relatórios',
+    });
+  });
+
+  it('1 score só → serie de 1 SEM texto; nenhum score → vazio', () => {
+    expect(linhaDoTempoScore([linha({ score: 70 })])).toEqual({ serie: [70], texto: null });
+    expect(linhaDoTempoScore([linha({})])).toEqual({ serie: [], texto: null });
+    expect(linhaDoTempoScore([])).toEqual({ serie: [], texto: null });
   });
 });
