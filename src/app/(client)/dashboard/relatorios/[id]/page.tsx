@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 
+import { AchadosCards } from '@/components/tasks/AchadosCards';
 import { AchadosParaTasks } from '@/components/tasks/AchadosParaTasks';
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDoneAnterior, getReportById } from '@/modules/reports/report.repository';
@@ -176,11 +177,19 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                   </Card>
                 </Reveal>
 
-                {rel.analiseIa.gargalos.length > 0 ||
+                {(rel.analiseIa.achados?.length ?? 0) > 0 ||
+                rel.analiseIa.gargalos.length > 0 ||
                 rel.analiseIa.sugestoesMelhoria.length > 0 ||
                 rel.analiseIa.ideiasVenda.length > 0 ? (
                   <Reveal id="recomendacoes" className="space-y-4 scroll-mt-24">
                     <h2 className="font-heading text-xl font-semibold text-white">Recomendações</h2>
+                    {rel.analiseIa.achados && rel.analiseIa.achados.length > 0 ? (
+                      <AchadosCards
+                        reportId={rel.id}
+                        achados={rel.analiseIa.achados}
+                        titulosExistentes={titulosExistentes}
+                      />
+                    ) : (
                     <div className="space-y-4">
                       {rel.analiseIa.gargalos.length > 0 ? (
                         <Card className="flex flex-col gap-3">
@@ -227,6 +236,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                         </Card>
                       ) : null}
                     </div>
+                    )}
                   </Reveal>
                 ) : null}
 
