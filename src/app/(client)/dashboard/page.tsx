@@ -8,8 +8,9 @@ import {
   statCardsModel,
 } from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
-import { progressoMeta } from '@/modules/reports/compare';
-import { formatData, formatPeriodo } from '@/lib/format';
+import { paceMeta, progressoMeta } from '@/modules/reports/compare';
+import { formatData, formatDataUtc, formatPeriodo } from '@/lib/format';
+import { hojeBrt } from '@/lib/timezone';
 import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -34,6 +35,14 @@ export default async function DashboardPage() {
 
   const metaAtual = settings?.metaMensal ?? null;
   const progresso = progressoMeta(totalMes, metaAtual);
+  const pace = paceMeta(totalMes, metaAtual, hojeBrt());
+  // Ancoragem temporal: last_sync_at (instante real → BRT) ou MAX(orders.data)
+  // (data pura → UTC) — disponíveis via G0.
+  const dadosAte = conn?.last_sync_at
+    ? formatData(conn.last_sync_at)
+    : data.ultimaDataPedido
+      ? formatDataUtc(data.ultimaDataPedido)
+      : null;
 
   const blingOk = !!conn?.connected;
   const gate = org ? podeGerar(org) : { ok: false as const, motivo: 'org_nao_encontrada' };
@@ -107,7 +116,13 @@ export default async function DashboardPage() {
 
       {/* 4. Meta do mês — só depois da primeira análise (org nova = onboarding) */}
       {historico.length > 0 ? (
-        <MetaProgress progresso={progresso} meta={metaAtual} totalMes={totalMes} />
+        <MetaProgress
+          progresso={progresso}
+          meta={metaAtual}
+          totalMes={totalMes}
+          pace={pace}
+          dadosAte={dadosAte}
+        />
       ) : null}
 
       {/* 5. Primeiros passos — o componente se esconde sozinho quando completo */}

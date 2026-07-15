@@ -12,6 +12,50 @@ export function progressoMeta(totalMes: number, meta: number | null): ProgressoM
   };
 }
 
+/** ±5 pontos percentuais entre % real e % esperado = "no ritmo". */
+export const PACE_TOLERANCIA_PP = 5;
+
+export type PaceMeta = {
+  pctEsperado: number;
+  pctReal: number;
+  ritmo: 'adiantado' | 'no_ritmo' | 'atrasado';
+  projecao: number;
+  mensagem: string;
+};
+
+/**
+ * Pace da meta mensal (pura): % esperado até hoje = dia do mês / dias do mês
+ * (hojeIso vem de hojeBrt — calendário America/Sao_Paulo) vs % real, com
+ * projeção LINEAR de fechamento. Null sem meta (mesma regra de progressoMeta).
+ */
+export function paceMeta(totalMes: number, meta: number | null, hojeIso: string): PaceMeta | null {
+  const progresso = progressoMeta(totalMes, meta);
+  if (progresso === null) return null;
+  const ano = Number(hojeIso.slice(0, 4));
+  const mes = Number(hojeIso.slice(5, 7));
+  const dia = Number(hojeIso.slice(8, 10));
+  const diasNoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const pctEsperado = Math.round((dia / diasNoMes) * 100);
+  const pctReal = progresso.percentual;
+  const diff = pctReal - pctEsperado;
+  const ritmo: PaceMeta['ritmo'] =
+    diff >= PACE_TOLERANCIA_PP ? 'adiantado' : diff <= -PACE_TOLERANCIA_PP ? 'atrasado' : 'no_ritmo';
+  const projecao = Math.round((totalMes / dia) * diasNoMes * 100) / 100;
+  const rotulo =
+    ritmo === 'adiantado'
+      ? 'Você está adiantado'
+      : ritmo === 'atrasado'
+        ? 'Você está atrasado'
+        : 'Você está no ritmo';
+  return {
+    pctEsperado,
+    pctReal,
+    ritmo,
+    projecao,
+    mensagem: `${rotulo}: até hoje o esperado era ~${pctEsperado}% da meta — você está em ${pctReal}%.`,
+  };
+}
+
 export type DeltaNumero = {
   atual: number;
   anterior: number;
