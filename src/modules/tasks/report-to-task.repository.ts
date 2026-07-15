@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { AnaliseIaSchema } from '@/modules/pipeline/contracts';
 import { achadoToTaskInput, itemToTaskInput, tituloFromItem, type FonteAnalise } from './report-to-task';
+import { prazoDefault } from './sla';
 import { createTask, listTaskTitulosByReport } from './task.repository';
 
 export async function createTasksFromReport(input: {
@@ -29,7 +30,7 @@ export async function createTasksFromReport(input: {
       const titulo = tituloFromItem(achado.titulo);
       if (existentes.has(titulo)) continue;
       const t = achadoToTaskInput(achado, input.reportId);
-      await createTask({ orgId: input.orgId, ...t, actorUserId: input.actorUserId });
+      await createTask({ orgId: input.orgId, ...t, prazo: prazoDefault(t.prioridade), actorUserId: input.actorUserId });
       existentes.add(titulo);
       criadas += 1;
       continue;
@@ -39,7 +40,7 @@ export async function createTasksFromReport(input: {
     const titulo = tituloFromItem(texto);
     if (existentes.has(titulo)) continue;
     const t = itemToTaskInput({ fonte, texto, reportId: input.reportId });
-    await createTask({ orgId: input.orgId, ...t, actorUserId: input.actorUserId });
+    await createTask({ orgId: input.orgId, ...t, prazo: prazoDefault(t.prioridade), actorUserId: input.actorUserId });
     existentes.add(titulo);
     criadas += 1;
   }

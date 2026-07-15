@@ -15,6 +15,7 @@ import type { UserAccess } from '@/modules/auth/user.types';
 import { CHECKLIST_UNCHECKED, toggleChecklistLine } from '@/modules/tasks/checklist-line';
 import { FONTES_ANALISE } from '@/modules/tasks/report-to-task';
 import { createTasksFromReport } from '@/modules/tasks/report-to-task.repository';
+import { prazoDefault } from '@/modules/tasks/sla';
 import { recordTaskActivity } from '@/modules/tasks/task-activity.repository';
 import { addTaskComment } from '@/modules/tasks/task-comment.repository';
 import { getTemplateById } from '@/modules/tasks/task-template.repository';
@@ -156,7 +157,7 @@ export async function createTaskAction(
     tipo,
     prioridade,
     criadoPor,
-    prazo: prazo ?? null,
+    prazo: prazo ?? prazoDefault(prioridade),
     actorUserId: access.id,
   });
 
