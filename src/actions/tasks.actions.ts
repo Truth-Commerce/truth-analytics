@@ -620,6 +620,7 @@ export async function createTasksFromReportAction(
     if (ator !== 'cliente') {
       await notifyTasksDoRelatorio(orgId, reportId, criadas);
     }
+    revalidatePath('/dashboard'); // card "Ação nº 1" (G2) — refresca o jaExiste
     revalidatePath('/dashboard/plano-de-acao');
     revalidatePath(`/dashboard/relatorios/${reportId}`);
     revalidatePath(`/analista/${orgId}`);

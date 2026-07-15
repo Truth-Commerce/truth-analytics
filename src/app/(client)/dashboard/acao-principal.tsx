@@ -45,7 +45,12 @@ export function AcaoPrincipalCard({
 
   useEffect(() => {
     if (state.ok && typeof state.criadas === 'number') {
-      toast({ variant: 'success', title: 'Tarefa criada no Plano de Ação' });
+      // Dedupe do servidor pode devolver criadas: 0 — toast honesto, sem sucesso falso.
+      if (state.criadas > 0) {
+        toast({ variant: 'success', title: 'Tarefa criada no Plano de Ação' });
+      } else {
+        toast({ variant: 'info', title: 'Tarefa já existia no Plano de Ação' });
+      }
     }
   }, [state, toast]);
 
