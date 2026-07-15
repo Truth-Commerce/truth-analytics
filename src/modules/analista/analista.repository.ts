@@ -1,11 +1,12 @@
-import { and, count, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, isNotNull, lt, lte, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { organizations, taskActivities, tasks, users } from '@/db/schema';
+import { hojeBrt } from '@/lib/timezone';
 import { listClientOrganizations } from '@/modules/admin/admin.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import type { UserAccess } from '@/modules/auth/user.types';
-import { countTasksByStatus } from '@/modules/tasks/task.repository';
+import { somarDias } from '@/modules/tasks/sla';
 import type {
   TaskCriadoPor,
   TaskPrioridade,
@@ -65,14 +66,6 @@ export async function setOrgAnalista(input: {
 // confiar em `access.orgId` aqui — o escopo é sempre derivado do papel.
 // ---------------------------------------------------------------------------
 
-async function countTasksAtrasadas(orgId: string): Promise<number> {
-  const [row] = await db
-    .select({ n: count() })
-    .from(tasks)
-    .where(and(eq(tasks.org_id, orgId), lt(tasks.prazo, sql`CURRENT_DATE`), ne(tasks.status, 'concluida')));
-  return Number(row?.n ?? 0);
-}
-
 export type CarteiraOrg = {
   orgId: string;
   orgName: string;
@@ -81,6 +74,20 @@ export type CarteiraOrg = {
   emRevisao: number;
 };
 
+const zeroCounts = (): Record<TaskStatus, number> => ({
+  backlog: 0,
+  todo: 0,
+  em_andamento: 0,
+  em_revisao: 0,
+  concluida: 0,
+});
+
+/**
+ * Carteira por org, em 2 queries agregadas no TOTAL (GROUP BY) — o antigo
+ * `Promise.all` fazia 2 queries POR org (N+1 da auditoria). Atrasadas contam
+ * contra hoje BRT (o antigo `CURRENT_DATE` era o dia UTC do banco). Retorno
+ * ORDENADO por criticidade: atrasadas desc → emRevisao desc → orgName asc.
+ */
 export async function getCarteira(access: UserAccess): Promise<CarteiraOrg[]> {
   const orgs =
     access.role === 'admin_truth'
@@ -89,16 +96,117 @@ export async function getCarteira(access: UserAccess): Promise<CarteiraOrg[]> {
           .select({ id: organizations.id, name: organizations.name })
           .from(organizations)
           .where(eq(organizations.analista_id, access.id));
+  if (orgs.length === 0) return [];
+  const orgIds = orgs.map((o) => o.id);
+  const hoje = hojeBrt();
 
-  return Promise.all(
-    orgs.map(async (org) => {
-      const [counts, atrasadas] = await Promise.all([
-        countTasksByStatus(org.id),
-        countTasksAtrasadas(org.id),
-      ]);
-      return { orgId: org.id, orgName: org.name, counts, atrasadas, emRevisao: counts.em_revisao };
-    }),
-  );
+  const [countsRows, atrasadasRows] = await Promise.all([
+    db
+      .select({ orgId: tasks.org_id, status: tasks.status, n: count() })
+      .from(tasks)
+      .where(inArray(tasks.org_id, orgIds))
+      .groupBy(tasks.org_id, tasks.status),
+    db
+      .select({ orgId: tasks.org_id, n: count() })
+      .from(tasks)
+      .where(and(inArray(tasks.org_id, orgIds), lt(tasks.prazo, hoje), ne(tasks.status, 'concluida')))
+      .groupBy(tasks.org_id),
+  ]);
+
+  const countsMap = new Map<string, Record<TaskStatus, number>>();
+  for (const r of countsRows) {
+    const base = countsMap.get(r.orgId) ?? zeroCounts();
+    base[r.status as TaskStatus] = Number(r.n);
+    countsMap.set(r.orgId, base);
+  }
+  const atrasadasMap = new Map(atrasadasRows.map((r) => [r.orgId, Number(r.n)]));
+
+  return orgs
+    .map((org) => {
+      const counts = countsMap.get(org.id) ?? zeroCounts();
+      return {
+        orgId: org.id,
+        orgName: org.name,
+        counts,
+        atrasadas: atrasadasMap.get(org.id) ?? 0,
+        emRevisao: counts.em_revisao,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.atrasadas - a.atrasadas || b.emRevisao - a.emRevisao || a.orgName.localeCompare(b.orgName, 'pt-BR'),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// "Meu dia" (G3 Task 6) — faixa consolidada cross-org da carteira.
+// ---------------------------------------------------------------------------
+
+export const VENCEM_JANELA_DIAS = 7;
+export const SEM_ATIVIDADE_DIAS = 14;
+export const MEU_DIA_LIMITE = 50;
+
+export type MeuDiaItem = {
+  taskId: string;
+  orgId: string;
+  orgName: string;
+  titulo: string;
+  prazo: string | null;
+  status: TaskStatus;
+  updatedAt: Date;
+};
+
+export type MeuDia = {
+  atrasadas: MeuDiaItem[];
+  vencem7d: MeuDiaItem[];
+  emRevisao: MeuDiaItem[];
+  semAtividade14d: MeuDiaItem[];
+};
+
+const CAMPOS_MEU_DIA = {
+  taskId: tasks.id,
+  orgId: organizations.id,
+  orgName: organizations.name,
+  titulo: tasks.titulo,
+  prazo: tasks.prazo,
+  status: tasks.status,
+  updatedAt: tasks.updated_at,
+};
+
+/** Faixa "Meu dia": 4 listas cross-org da carteira, cada uma numa query agregada. */
+export async function getMeuDia(access: UserAccess, agora: Date = new Date()): Promise<MeuDia> {
+  const escopoOrg =
+    access.role === 'admin_truth' ? undefined : eq(organizations.analista_id, access.id);
+  const hoje = hojeBrt(agora);
+  const fimJanela = somarDias(hoje, VENCEM_JANELA_DIAS);
+  const corteAtividade = new Date(agora.getTime() - SEM_ATIVIDADE_DIAS * 86_400_000);
+  const abertas = inArray(tasks.status, ['backlog', 'todo', 'em_andamento']);
+
+  function consulta(cond: ReturnType<typeof and>, ordem: 'prazo' | 'updated') {
+    return db
+      .select(CAMPOS_MEU_DIA)
+      .from(tasks)
+      .innerJoin(organizations, eq(tasks.org_id, organizations.id))
+      .where(escopoOrg ? and(cond, escopoOrg) : cond)
+      .orderBy(ordem === 'prazo' ? tasks.prazo : tasks.updated_at)
+      .limit(MEU_DIA_LIMITE);
+  }
+
+  const [atrasadas, vencem7d, emRevisao, semAtividade14d] = await Promise.all([
+    consulta(and(ne(tasks.status, 'concluida'), lt(tasks.prazo, hoje)), 'prazo'),
+    consulta(and(ne(tasks.status, 'concluida'), gte(tasks.prazo, hoje), lte(tasks.prazo, fimJanela)), 'prazo'),
+    consulta(eq(tasks.status, 'em_revisao'), 'updated'),
+    consulta(and(abertas, lt(tasks.updated_at, corteAtividade)), 'updated'),
+  ]);
+
+  const mapear = (rows: typeof atrasadas): MeuDiaItem[] =>
+    rows.map((r) => ({ ...r, status: r.status as TaskStatus }));
+  return {
+    atrasadas: mapear(atrasadas),
+    vencem7d: mapear(vencem7d),
+    emRevisao: mapear(emRevisao),
+    semAtividade14d: mapear(semAtividade14d),
+  };
 }
 
 export async function listTasksEmRevisao(
