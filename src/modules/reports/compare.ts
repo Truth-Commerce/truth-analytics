@@ -48,6 +48,58 @@ export type ComparacaoRelatorios = {
   porCanal: { canal: string; delta: DeltaNumero }[];
 };
 
+export type ProdutoComparado = {
+  sku: string;
+  nome: string;
+  receitaAtual: number;
+  receitaAnterior: number;
+  situacao: 'subiu' | 'caiu' | 'estavel' | 'entrou' | 'saiu';
+};
+
+/** Interseção dos top produtos por sku (fallback: nome). Ordenado por receita atual desc. */
+export function compararTopProdutos(atual: Metricas, anterior: Metricas): ProdutoComparado[] {
+  const chave = (p: Metricas['topProdutos'][number]): string => p.sku || p.nome;
+  const mapA = new Map(atual.topProdutos.map((p) => [chave(p), p]));
+  const mapB = new Map(anterior.topProdutos.map((p) => [chave(p), p]));
+  const out: ProdutoComparado[] = [];
+  for (const k of new Set([...mapA.keys(), ...mapB.keys()])) {
+    const a = mapA.get(k);
+    const b = mapB.get(k);
+    const receitaAtual = a?.receita ?? 0;
+    const receitaAnterior = b?.receita ?? 0;
+    const situacao: ProdutoComparado['situacao'] = !a
+      ? 'saiu'
+      : !b
+        ? 'entrou'
+        : receitaAtual > receitaAnterior
+          ? 'subiu'
+          : receitaAtual < receitaAnterior
+            ? 'caiu'
+            : 'estavel';
+    const ref = (a ?? b)!;
+    out.push({ sku: ref.sku, nome: ref.nome, receitaAtual, receitaAnterior, situacao });
+  }
+  return out.sort((x, y) => y.receitaAtual - x.receitaAtual || x.nome.localeCompare(y.nome, 'pt-BR'));
+}
+
+/** Uma frase determinística de leitura da comparação (sem IA — pura). */
+export function leituraComparacao(comp: ComparacaoRelatorios): string {
+  const pct = comp.totalVendas.deltaPct;
+  if (pct === null) return 'Sem base de comparação no período anterior.';
+  const fmt = (v: number): string => Math.abs(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  if (pct > 0) {
+    const top = [...comp.porCanal].sort((a, b) => b.delta.deltaAbs - a.delta.deltaAbs)[0];
+    const sufixo = top && top.delta.deltaAbs > 0 ? `, puxado por ${top.canal}` : '';
+    return `Crescimento de ${fmt(pct)}% nas vendas${sufixo}.`;
+  }
+  if (pct < 0) {
+    const pior = [...comp.porCanal].sort((a, b) => a.delta.deltaAbs - b.delta.deltaAbs)[0];
+    const sufixo = pior && pior.delta.deltaAbs < 0 ? `, com maior recuo em ${pior.canal}` : '';
+    return `Queda de ${fmt(pct)}% nas vendas${sufixo}.`;
+  }
+  return 'Vendas estáveis em relação ao período anterior.';
+}
+
 /** Pura. `atual` = relatório mais recente (A); `anterior` = base de comparação (B). */
 export function compararMetricas(atual: Metricas, anterior: Metricas): ComparacaoRelatorios {
   const canais = new Map<string, { a: number; b: number }>();

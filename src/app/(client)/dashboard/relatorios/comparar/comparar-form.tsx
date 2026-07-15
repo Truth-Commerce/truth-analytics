@@ -1,11 +1,11 @@
 'use client';
 
+import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
+
 type RelatorioOption = { id: string; label: string };
 
-/**
- * Form GET puro — sem estado no client. A submissão recarrega a página
- * server-side com `?a=...&b=...`, que faz a busca escopada por org.
- */
+/** Form GET puro — a submissão recarrega a página com ?a=&b= (busca escopada por org no server). */
 export function CompararForm({
   relatorios,
   a,
@@ -16,18 +16,10 @@ export function CompararForm({
   b?: string;
 }) {
   return (
-    <form
-      method="get"
-      data-testid="comparar-form"
-      className="flex flex-wrap items-end gap-3"
-    >
+    <form method="get" data-testid="comparar-form" className="flex flex-wrap items-end gap-3">
       <label className="flex flex-col gap-1 text-sm text-muted">
         Período A
-        <select
-          name="a"
-          defaultValue={a ?? ''}
-          className="rounded-lg border border-line bg-bg-surface px-3 py-2 text-white"
-        >
+        <Select name="a" defaultValue={a ?? ''} className="min-w-[220px]">
           <option value="" disabled>
             Selecione…
           </option>
@@ -36,31 +28,20 @@ export function CompararForm({
               {r.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="flex flex-col gap-1 text-sm text-muted">
-        Período B
-        <select
-          name="b"
-          defaultValue={b ?? ''}
-          className="rounded-lg border border-line bg-bg-surface px-3 py-2 text-white"
-        >
-          <option value="" disabled>
-            Selecione…
-          </option>
+        Período B <span className="text-dim">(vazio = anterior)</span>
+        <Select name="b" defaultValue={b ?? ''} className="min-w-[220px]">
+          <option value="">Automático (anterior)</option>
           {relatorios.map((r) => (
             <option key={r.id} value={r.id}>
               {r.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
-      <button
-        type="submit"
-        className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-black hover:brightness-110"
-      >
-        Comparar
-      </button>
+      <Button type="submit">Comparar</Button>
     </form>
   );
 }
