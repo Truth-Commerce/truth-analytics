@@ -103,7 +103,7 @@ export async function getCarteira(access: UserAccess): Promise<CarteiraOrg[]> {
 
 export async function listTasksEmRevisao(
   access: UserAccess,
-): Promise<Array<TaskSummary & { orgId: string; orgName: string }>> {
+): Promise<Array<TaskSummary & { orgId: string; orgName: string; updatedAt: Date }>> {
   const condicaoStatus = eq(tasks.status, 'em_revisao');
   const escopo =
     access.role === 'admin_truth' ? condicaoStatus : and(condicaoStatus, eq(organizations.analista_id, access.id));
@@ -120,6 +120,7 @@ export async function listTasksEmRevisao(
       report_id: tasks.report_id,
       ordem: tasks.ordem,
       created_at: tasks.created_at,
+      updated_at: tasks.updated_at,
       orgId: organizations.id,
       orgName: organizations.name,
     })
@@ -139,6 +140,7 @@ export async function listTasksEmRevisao(
     reportId: r.report_id,
     ordem: r.ordem,
     createdAt: r.created_at,
+    updatedAt: r.updated_at,
     orgId: r.orgId,
     orgName: r.orgName,
   }));
