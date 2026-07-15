@@ -4,7 +4,9 @@ import {
   acaoNumeroUm,
   chipsDoRelatorio,
   linhaDoTempoScore,
+  posicaoPrecoResumo,
   statCardsModel,
+  topProdutosDashboard,
 } from '@/modules/reports/dashboard-model';
 import type { Achado, AnaliseIa, Metricas, TruthScore } from '@/modules/pipeline/contracts';
 import type { HistoricoDashboardRow } from '@/modules/reports/report.repository';
@@ -196,5 +198,67 @@ describe('linhaDoTempoScore', () => {
     expect(linhaDoTempoScore([linha({ score: 70 })])).toEqual({ serie: [70], texto: null });
     expect(linhaDoTempoScore([linha({})])).toEqual({ serie: [], texto: null });
     expect(linhaDoTempoScore([])).toEqual({ serie: [], texto: null });
+  });
+});
+
+describe('topProdutosDashboard', () => {
+  it('corta em 5 preservando a ordem por receita (já vem ordenado do pipeline)', () => {
+    const top = Array.from({ length: 8 }, (_, i) => ({
+      nome: `P${i}`,
+      sku: `S${i}`,
+      quantidade: 1,
+      receita: 800 - i * 100,
+    }));
+    const r = topProdutosDashboard(metricas({ topProdutos: top }));
+    expect(r).toHaveLength(5);
+    expect(r[0]).toEqual({ nome: 'P0', sku: 'S0', receita: 800 });
+    expect(r[4].sku).toBe('S4');
+  });
+
+  it('sem métricas ou sem produtos → []', () => {
+    expect(topProdutosDashboard(null)).toEqual([]);
+    expect(topProdutosDashboard(metricas({}))).toEqual([]);
+  });
+});
+
+describe('posicaoPrecoResumo', () => {
+  const item = (sku: string, nosso: number, mercado: number) => ({
+    sku,
+    nome: `Produto ${sku}`,
+    nossoPreco: nosso,
+    precoMercadoMediano: mercado,
+    fonte: 'ml_publico',
+  });
+
+  it('conta acima/abaixo/na média (tolerância ±2%) e monta a leitura', () => {
+    const m = metricas({
+      posicaoPreco: [
+        item('A', 110, 100), // +10% → acima
+        item('B', 120, 100), // +20% → acima
+        item('C', 90, 100), // -10% → abaixo
+        item('D', 80, 100), // -20% → abaixo
+        item('E', 70, 100), // -30% → abaixo
+        item('F', 101, 100), // +1% → na média
+      ],
+    });
+    expect(posicaoPrecoResumo(m)).toEqual({
+      acima: 2,
+      abaixo: 3,
+      naMedia: 1,
+      total: 6,
+      leitura: '2 acima / 3 abaixo do mercado · 1 na média',
+    });
+  });
+
+  it('exclui itens com nossoPreco 0 ou mercado 0 (nunca conta "R$ 0,00" como preço)', () => {
+    const m = metricas({ posicaoPreco: [item('A', 0, 100), item('B', 100, 0)] });
+    expect(posicaoPrecoResumo(m)).toBeNull();
+  });
+
+  it('sem métricas / lista vazia → null; sem "na média" a leitura fica curta', () => {
+    expect(posicaoPrecoResumo(null)).toBeNull();
+    expect(posicaoPrecoResumo(metricas({}))).toBeNull();
+    const m = metricas({ posicaoPreco: [item('A', 110, 100), item('B', 90, 100)] });
+    expect(posicaoPrecoResumo(m)?.leitura).toBe('1 acima / 1 abaixo do mercado');
   });
 });

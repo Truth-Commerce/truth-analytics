@@ -89,6 +89,58 @@ export function chipsDoRelatorio(latestDone: ReportDetail | null): ChipRelatorio
   return chips.slice(0, MAX_CHIPS);
 }
 
+export const TOP_PRODUTOS_DASHBOARD = 5;
+
+export type TopProdutoDashboard = { nome: string; sku: string; receita: number };
+
+/** Top 5 por receita — metricas.topProdutos JÁ vem ordenado desc do pipeline. */
+export function topProdutosDashboard(m: Metricas | null): TopProdutoDashboard[] {
+  if (!m) return [];
+  return m.topProdutos
+    .slice(0, TOP_PRODUTOS_DASHBOARD)
+    .map((p) => ({ nome: p.nome, sku: p.sku, receita: p.receita }));
+}
+
+/** |Δ%| ≤ 2% da mediana de mercado conta como "na média". */
+export const TOLERANCIA_NA_MEDIA_PCT = 2;
+
+export type ResumoPosicaoPreco = {
+  acima: number;
+  abaixo: number;
+  naMedia: number;
+  total: number;
+  leitura: string;
+};
+
+/**
+ * Leitura leiga da posição de preço ("2 acima / 3 abaixo do mercado").
+ * Itens com nossoPreco <= 0 ou mercado <= 0 são EXCLUÍDOS (P1 da auditoria:
+ * "R$ 0,00" não é preço). Null sem nenhum item comparável.
+ */
+export function posicaoPrecoResumo(m: Metricas | null): ResumoPosicaoPreco | null {
+  const itens = (m?.posicaoPreco ?? []).filter(
+    (p) => p.nossoPreco > 0 && p.precoMercadoMediano > 0,
+  );
+  if (itens.length === 0) return null;
+  let acima = 0;
+  let abaixo = 0;
+  let naMedia = 0;
+  for (const p of itens) {
+    const deltaPct = ((p.nossoPreco - p.precoMercadoMediano) / p.precoMercadoMediano) * 100;
+    if (Math.abs(deltaPct) <= TOLERANCIA_NA_MEDIA_PCT) naMedia++;
+    else if (deltaPct > 0) acima++;
+    else abaixo++;
+  }
+  const basica = `${acima} acima / ${abaixo} abaixo do mercado`;
+  return {
+    acima,
+    abaixo,
+    naMedia,
+    total: itens.length,
+    leitura: naMedia > 0 ? `${basica} · ${naMedia} na média` : basica,
+  };
+}
+
 export type AcaoPrincipal = {
   titulo: string;
   descricao: string | null;

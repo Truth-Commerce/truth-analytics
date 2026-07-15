@@ -21,6 +21,7 @@ import { GenerateReport } from './generate-report';
 import { StatCards } from './stat-cards';
 import { InsightChips } from './insight-chips';
 import { DashboardCharts } from './dashboard-charts';
+import { BentoCards } from './bento-cards';
 import { OnboardingChecklist } from './onboarding-checklist';
 import { TruthScoreCard } from './truth-score-card';
 import { AlertasSection } from './alertas-section';
@@ -143,6 +144,7 @@ export default async function DashboardPage() {
           canais={latestDone.metricas.vendasPorCanal.map((v) => ({ label: v.canal, value: v.total }))}
         />
       ) : null}
+      <BentoCards latestDone={latestDone} />
 
       {/* 7. Gerar relatório + último relatório */}
       <div className="grid gap-4 lg:grid-cols-2">
