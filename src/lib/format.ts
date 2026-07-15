@@ -49,3 +49,14 @@ export function formatDataCurta(isoDia: string): string {
 export function formatDiaMes(d: Date): string {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }).format(d);
 }
+
+/** Slug de nome para filenames: minúsculo, sem acentos, hífens. Vazio → 'cliente'. */
+export function slugify(s: string): string {
+  const slug = s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-+|-+$)/g, '');
+  return slug || 'cliente';
+}

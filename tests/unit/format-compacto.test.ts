@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBRLCompacto, formatDataCurta } from '@/lib/format';
+import { formatBRLCompacto, formatDataCurta, slugify } from '@/lib/format';
 
 describe('formatBRLCompacto', () => {
   it.each([
@@ -20,5 +20,16 @@ describe('formatDataCurta', () => {
   it("'2026-06-01' → '01/06' (slicing puro, imune a timezone)", () => {
     expect(formatDataCurta('2026-06-01')).toBe('01/06');
     expect(formatDataCurta('2026-12-25')).toBe('25/12');
+  });
+});
+
+describe('slugify', () => {
+  it.each([
+    ['Comercial Mattos & Cia', 'comercial-mattos-cia'],
+    ['Bazar Estrela do Mar', 'bazar-estrela-do-mar'],
+    ['Ação & Emoção Ltda.', 'acao-emocao-ltda'],
+    ['', 'cliente'],
+  ])('%s → %s', (entrada, esperado) => {
+    expect(slugify(entrada)).toBe(esperado);
   });
 });
