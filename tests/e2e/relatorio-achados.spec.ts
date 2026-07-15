@@ -105,7 +105,14 @@ test('relatório v2 → achados viram cards ordenados por impacto e "Virar taref
   await expect(cards).toContainText('Cotar transportadoras parceiras');
   await expect(cards).toContainText('SKU-001');
 
+  // G3 T3: "Virar tarefa" abre o mini-form de conversão pré-preenchido; o
+  // submit real sai do botão "Criar tarefa" do mini-form.
   await page.getByTestId('virar-task-achados-1').click();
+  const miniForm = page.getByTestId('achado-form-1');
+  await expect(miniForm).toBeVisible();
+  // Prazo pré-preenchido com o default de SLA (data válida yyyy-mm-dd).
+  await expect(miniForm.locator('input[type="date"]')).toHaveValue(/^\d{4}-\d{2}-\d{2}$/);
+  await page.getByTestId('achado-criar-1').click();
   // Mesmo racional do relatorio-task.spec.ts: asserir o TEXTO final garante
   // esperar o server action concluir antes de navegar.
   await expect(page.getByTestId('virar-task-achados-1')).toHaveText('Tarefa criada');

@@ -54,24 +54,43 @@ export function itemToTaskInput(input: { fonte: FonteAnalise; texto: string; rep
   };
 }
 
+export type AchadoExtras = {
+  /** Total de vendas do período do relatório — vira a linha "Vendas do período". */
+  baselineVendas?: number | null;
+  /** Itens extras de checklist (playbook por tipo), após os passos da IA. */
+  checklistPlaybook?: string[];
+};
+
 /**
  * Conversão achado estruturado → task: usa o título direto (sem heurística de
  * slice), o tipo e a prioridade que a própria IA atribuiu, e transforma os
  * passos de `comoFazer` em um checklist markdown. Impacto e SKUs entram na
- * descrição só quando presentes.
+ * descrição só quando presentes. v2 (`extras`): baseline de vendas, link
+ * markdown para o relatório e checklist do playbook — o link só aparece no
+ * fluxo v2 (`extras` presente) para não alterar as descrições G1 existentes.
  */
 export function achadoToTaskInput(
   achado: Achado,
   reportId: string,
+  extras?: AchadoExtras,
 ): { titulo: string; descricao: string; tipo: TaskTipo; prioridade: TaskPrioridade; criadoPor: 'ia'; reportId: string } {
   const linhas: string[] = [achado.descricao.trim()];
   if (achado.impactoEstimadoMensalBRL !== null) {
     linhas.push(`Impacto estimado: ${formatBRL(achado.impactoEstimadoMensalBRL)}/mês`);
   }
   if (achado.skus.length > 0) linhas.push(`SKUs: ${achado.skus.join(', ')}`);
+  if (extras?.baselineVendas != null) {
+    linhas.push(`Vendas do período: ${formatBRL(extras.baselineVendas)}`);
+  }
+  if (extras) {
+    linhas.push(`[Ver relatório](/dashboard/relatorios/${reportId})`);
+  }
   linhas.push('', '_Origem: análise IA do relatório._');
   if (achado.comoFazer.length > 0) {
     linhas.push(...achado.comoFazer.map((p) => `${CHECKLIST_UNCHECKED}${p}`));
+  }
+  if (extras?.checklistPlaybook && extras.checklistPlaybook.length > 0) {
+    linhas.push(...extras.checklistPlaybook.map((p) => `${CHECKLIST_UNCHECKED}${p}`));
   }
   return {
     titulo: tituloFromItem(achado.titulo),

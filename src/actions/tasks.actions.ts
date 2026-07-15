@@ -568,6 +568,8 @@ export async function toggleChecklistItemFormAction(formData: FormData): Promise
 const createTasksFromReportItemSchema = z.object({
   fonte: z.enum(FONTES_ANALISE),
   indice: z.number().int().min(0),
+  prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  usarChecklistPlaybook: z.boolean().optional(),
 });
 const createTasksFromReportSchema = z.object({
   reportId: z.string().min(1),

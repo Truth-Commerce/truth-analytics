@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { db } from '@/db/client';
@@ -47,6 +47,17 @@ export async function listTemplates(soAtivos = false): Promise<TaskTemplate[]> {
     ? await db.select().from(taskTemplates).where(eq(taskTemplates.ativo, true))
     : await db.select().from(taskTemplates);
   return rows.map(rowToTemplate);
+}
+
+/** 1º template ATIVO do tipo (created_at asc) — playbook sugerido da conversão achado→task. */
+export async function getTemplateAtivoPorTipo(tipo: TaskTipo): Promise<TaskTemplate | null> {
+  const [row] = await db
+    .select()
+    .from(taskTemplates)
+    .where(and(eq(taskTemplates.tipo, tipo), eq(taskTemplates.ativo, true)))
+    .orderBy(asc(taskTemplates.created_at))
+    .limit(1);
+  return row ? rowToTemplate(row) : null;
 }
 
 // ---------------------------------------------------------------------------
