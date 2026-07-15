@@ -4,8 +4,10 @@ import { reportReadyTemplate, type ReportReadyEmailData } from '@/modules/notifi
 
 const DADOS: ReportReadyEmailData = {
   reportId: 'rep-123',
-  periodoInicio: new Date('2026-06-01T12:00:00Z'),
-  periodoFim: new Date('2026-06-30T12:00:00Z'),
+  // Fronteiras de período REAIS: dias-calendário codificados como meia-noite
+  // UTC (inicioDeDiaUtc). Formatar em BRT deslocaria o início 1 dia para trás.
+  periodoInicio: new Date('2026-06-01T00:00:00Z'),
+  periodoFim: new Date('2026-06-30T00:00:00Z'),
   totalPeriodo: 10880,
   deltaPct: 12.2,
   score: 76,

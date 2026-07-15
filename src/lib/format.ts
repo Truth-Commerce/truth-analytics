@@ -50,6 +50,15 @@ export function formatDiaMes(d: Date): string {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }).format(d);
 }
 
+/**
+ * Date → 'dd/mm' em UTC — para fronteiras de PERÍODO (dias-calendário
+ * codificados como meia-noite UTC, ver src/lib/timezone.ts). Formatar em BRT
+ * deslocaria o dia 1 para trás. Para instantes reais, use formatDiaMes.
+ */
+export function formatDiaMesUtc(d: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }).format(d);
+}
+
 /** Slug de nome para filenames: minúsculo, sem acentos, hífens. Vazio → 'cliente'. */
 export function slugify(s: string): string {
   const slug = s

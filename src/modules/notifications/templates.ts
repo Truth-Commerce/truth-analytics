@@ -1,4 +1,4 @@
-import { formatBRL, formatDiaMes } from '@/lib/format';
+import { formatBRL, formatDiaMesUtc } from '@/lib/format';
 import type { Plano } from '@/modules/auth/user.types';
 
 export type EmailContent = {
@@ -71,7 +71,9 @@ export type ReportReadyEmailData = {
  */
 export function reportReadyTemplate(dados: ReportReadyEmailData, appUrl: string): EmailContent {
   const url = `${appUrl}/dashboard/relatorios/${dados.reportId}`;
-  const periodo = `${formatDiaMes(dados.periodoInicio)}–${formatDiaMes(dados.periodoFim)}`;
+  // Fronteiras de período são dias-calendário em UTC — formatar em UTC para
+  // não deslocar o dia de início (meia-noite UTC = 21h BRT do dia anterior).
+  const periodo = `${formatDiaMesUtc(dados.periodoInicio)}–${formatDiaMesUtc(dados.periodoFim)}`;
   const total = formatBRL(dados.totalPeriodo);
   const deltaTexto =
     dados.deltaPct === null
