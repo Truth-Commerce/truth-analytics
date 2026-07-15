@@ -6,6 +6,7 @@ import postgres from 'postgres';
 
 import {
   connections,
+  loginAttempts,
   marketSnapshots,
   notifications,
   orders,
@@ -78,6 +79,10 @@ export async function cleanupE2E(): Promise<void> {
 
     // Globalmente: templates semeados em algum teste (não pertencem a nenhuma org).
     await tdb.delete(taskTemplates).where(like(taskTemplates.titulo, `${E2E_PREFIX}%`));
+
+    // Globalmente: tentativas de login/signup dos e-mails de teste (não têm FK
+    // para org). Acumulam entre rodadas e o rate-limit de signup derruba os E2E.
+    await tdb.delete(loginAttempts).where(like(loginAttempts.email, `${E2E_PREFIX}%`));
   } finally {
     await sql.end();
   }
