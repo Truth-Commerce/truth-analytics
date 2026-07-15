@@ -115,4 +115,21 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
     const rows = await db.select().from(tasks).where(eq(tasks.id, t2!.id));
     expect(rows).toHaveLength(0);
   });
+
+  it('redirectTo com backslash ("/\\evil.com" — WHATWG trata \\ como /) é recusado: exclui sem redirecionar', async () => {
+    sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+    const [t3] = await db
+      .insert(tasks)
+      .values({ org_id: orgId, titulo: `${PREFIX}task3-${RUN}`, criado_por: 'analista', prioridade: 'media' })
+      .returning({ id: tasks.id });
+
+    // '/\evil.com' passa em startsWith('/') e não em startsWith('//'), mas o
+    // parser WHATWG normaliza '\' para '/' em http(s) → resolveria externo.
+    await expect(
+      deleteTaskFormAction(form({ orgId, taskId: t3!.id, redirectTo: '/\\evil.com' })),
+    ).resolves.toBeUndefined();
+
+    const rows = await db.select().from(tasks).where(eq(tasks.id, t3!.id));
+    expect(rows).toHaveLength(0);
+  });
 });

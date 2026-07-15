@@ -501,10 +501,14 @@ export async function deleteTaskFormAction(formData: FormData): Promise<void> {
   revalidateTaskRoutes(orgId);
 
   // Exclusão a partir da página de detalhe: a página deixa de existir —
-  // redireciona para onde o form mandar (só paths internos; '//' seria uma
-  // URL protocol-relative, ou seja, um host externo — recusada).
+  // redireciona para onde o form mandar. Só paths internos: '//' seria uma
+  // URL protocol-relative (host externo) e, no parsing WHATWG, '\' equivale
+  // a '/' em http(s) — '/\evil.com' também resolveria externo. Ambos recusados.
   const redirectTo = String(formData.get('redirectTo') ?? '');
-  if (redirectTo.startsWith('/') && !redirectTo.startsWith('//')) redirect(redirectTo);
+  const redirectSeguro =
+    redirectTo.startsWith('/') && !redirectTo.startsWith('//') && !redirectTo.includes('\\');
+  if (redirectSeguro) redirect(redirectTo);
+  if (redirectTo) logger.warn('deleteTaskFormAction: redirectTo recusado', { orgId });
 }
 
 // ---------------------------------------------------------------------------
