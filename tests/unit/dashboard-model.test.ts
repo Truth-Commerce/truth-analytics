@@ -4,6 +4,7 @@ import {
   acaoNumeroUm,
   chipsDoRelatorio,
   copyProximaAnalise,
+  historicoComDeltas,
   linhaDoTempoScore,
   posicaoPrecoResumo,
   proximaAnaliseInfo,
@@ -200,6 +201,36 @@ describe('linhaDoTempoScore', () => {
     expect(linhaDoTempoScore([linha({ score: 70 })])).toEqual({ serie: [70], texto: null });
     expect(linhaDoTempoScore([linha({})])).toEqual({ serie: [], texto: null });
     expect(linhaDoTempoScore([])).toEqual({ serie: [], texto: null });
+  });
+});
+
+describe('historicoComDeltas', () => {
+  it('delta vs o done anterior mais próximo, pulando failed', () => {
+    const historico = [
+      linha({ id: 'd', score: 76, totalPeriodo: 1000 }), // mais recente
+      linha({ id: 'c', status: 'failed' }),              // pulado como base
+      linha({ id: 'b', score: 64, totalPeriodo: 850 }),
+      linha({ id: 'a', score: 58, totalPeriodo: 800 }),  // mais antigo
+    ];
+    const r = historicoComDeltas(historico);
+    expect(r[0]).toMatchObject({ id: 'd', deltaScore: 12, deltaFaturamento: 150 }); // vs 'b' (pula 'c')
+    expect(r[1]).toMatchObject({ id: 'c', deltaScore: null, deltaFaturamento: null }); // failed sem valores
+    expect(r[2]).toMatchObject({ id: 'b', deltaScore: 6, deltaFaturamento: 50 });
+    expect(r[3]).toMatchObject({ id: 'a', deltaScore: null, deltaFaturamento: null }); // primeiro
+  });
+
+  it('done antigo sem truth_score não serve de base (procura o próximo que tem)', () => {
+    const historico = [
+      linha({ id: 'c', score: 70, totalPeriodo: 900 }),
+      linha({ id: 'b', status: 'done' }), // done PRÉ-F3a: sem score/total
+      linha({ id: 'a', score: 60, totalPeriodo: 700 }),
+    ];
+    const r = historicoComDeltas(historico);
+    expect(r[0]).toMatchObject({ deltaScore: 10, deltaFaturamento: 200 }); // 'c' vs 'a'
+  });
+
+  it('lista vazia → []', () => {
+    expect(historicoComDeltas([])).toEqual([]);
   });
 });
 

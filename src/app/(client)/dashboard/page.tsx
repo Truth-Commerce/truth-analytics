@@ -5,13 +5,14 @@ import {
   acaoNumeroUm,
   chipsDoRelatorio,
   copyProximaAnalise,
+  historicoComDeltas,
   linhaDoTempoScore,
   proximaAnaliseInfo,
   statCardsModel,
 } from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { paceMeta, progressoMeta } from '@/modules/reports/compare';
-import { formatData, formatDataUtc, formatPeriodo } from '@/lib/format';
+import { formatBRL, formatData, formatDataUtc, formatPeriodo } from '@/lib/format';
 import { hojeBrt } from '@/lib/timezone';
 import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -85,6 +86,7 @@ export default async function DashboardPage() {
   const chips = chipsDoRelatorio(latestDone);
   const timeline = linhaDoTempoScore(historico);
   const acao = latestDone ? acaoNumeroUm(latestDone.analiseIa) : null;
+  const linhas = historicoComDeltas(historico);
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
@@ -223,11 +225,13 @@ export default async function DashboardPage() {
                 <TR>
                   <TH>Status</TH>
                   <TH>Período</TH>
+                  <TH>Faturamento</TH>
+                  <TH>Score</TH>
                   <TH><span className="sr-only">Ações</span></TH>
                 </TR>
               </THead>
               <TBody>
-                {historico.map((r) => (
+                {linhas.map((r) => (
                   <TR key={r.id}>
                     <TD>
                       <Badge variant={reportStatusVariant(r.status)}>
@@ -235,6 +239,26 @@ export default async function DashboardPage() {
                       </Badge>
                     </TD>
                     <TD className="text-muted">{formatPeriodo(r.periodoInicio, r.periodoFim)}</TD>
+                    <TD className="font-mono">
+                      {r.totalPeriodo !== null ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {formatBRL(r.totalPeriodo)}
+                          <DeltaSeta delta={r.deltaFaturamento} />
+                        </span>
+                      ) : (
+                        <span className="text-dim">—</span>
+                      )}
+                    </TD>
+                    <TD className="font-mono">
+                      {r.score !== null ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.score}
+                          <DeltaSeta delta={r.deltaScore} />
+                        </span>
+                      ) : (
+                        <span className="text-dim">—</span>
+                      )}
+                    </TD>
                     <TD>
                       <a
                         href={`/dashboard/relatorios/${r.id}`}
@@ -261,5 +285,18 @@ export default async function DashboardPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function DeltaSeta({ delta }: { delta: number | null }) {
+  if (delta === null || delta === 0) return null;
+  const subiu = delta > 0;
+  return (
+    <span
+      aria-label={subiu ? 'subiu vs relatório anterior' : 'caiu vs relatório anterior'}
+      className={`text-xs ${subiu ? 'text-brand' : 'text-danger-fg'}`}
+    >
+      {subiu ? '▲' : '▼'}
+    </span>
   );
 }

@@ -91,6 +91,36 @@ export function linhaDoTempoScore(historico: HistoricoDashboardRow[]): LinhaDoTe
   return { serie, texto };
 }
 
+export type HistoricoLinha = HistoricoDashboardRow & {
+  deltaScore: number | null;
+  deltaFaturamento: number | null;
+};
+
+/**
+ * Setas do histórico (pura): cada linha comparada ao done ANTERIOR mais
+ * próximo que tenha o valor (failed e done sem truth_score são pulados na
+ * base — a comparação é sempre relatório vs relatório, nunca vs buraco).
+ * Input em ordem desc (como vem de listHistoricoDashboard).
+ */
+export function historicoComDeltas(historico: HistoricoDashboardRow[]): HistoricoLinha[] {
+  return historico.map((row, i) => {
+    let deltaScore: number | null = null;
+    let deltaFaturamento: number | null = null;
+    for (let j = i + 1; j < historico.length; j++) {
+      const prev = historico[j];
+      if (prev.status !== 'done') continue;
+      if (deltaScore === null && row.score !== null && prev.score !== null) {
+        deltaScore = row.score - prev.score;
+      }
+      if (deltaFaturamento === null && row.totalPeriodo !== null && prev.totalPeriodo !== null) {
+        deltaFaturamento = Math.round((row.totalPeriodo - prev.totalPeriodo) * 100) / 100;
+      }
+      if (deltaScore !== null && deltaFaturamento !== null) break;
+    }
+    return { ...row, deltaScore, deltaFaturamento };
+  });
+}
+
 export type ChipRelatorio = { label: string; href: string };
 
 const MAX_CHIPS = 3;
