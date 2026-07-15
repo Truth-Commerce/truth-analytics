@@ -1,20 +1,7 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
-import {
-  getLatestDoneReport,
-  getLatestReport,
-  getUltimosDoneDetalhados,
-  listReports,
-} from '@/modules/reports/report.repository';
+import { getDashboardData } from '@/modules/reports/dashboard-data';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
-import { dashboardStats, insightsFromAnalise } from '@/modules/reports/dashboard-model';
-import { getConnection } from '@/modules/connections/connection.repository';
-import { getOrganizationById } from '@/modules/admin/admin.repository';
-import {
-  getOrgSettings,
-  getTotalVendasMesCorrente,
-} from '@/modules/organizations/organization-settings.repository';
-import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
-import { listAlertasAbertos } from '@/modules/alerts/alert.repository';
+import { insightsFromAnalise, statCardsModel } from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { progressoMeta } from '@/modules/reports/compare';
 import { formatData, formatPeriodo } from '@/lib/format';
@@ -36,19 +23,8 @@ import { MetaProgress } from './meta-progress';
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
 
-  const [latest, reports, conn, org, latestDone, produtos, donesRecentes, alertas, settings, totalMes] =
-    await Promise.all([
-      getLatestReport(access.orgId),
-      listReports(access.orgId),
-      getConnection(access.orgId),
-      getOrganizationById(access.orgId),
-      getLatestDoneReport(access.orgId),
-      listTrackedProducts(access.orgId),
-      getUltimosDoneDetalhados(access.orgId, 2),
-      listAlertasAbertos(access.orgId),
-      getOrgSettings(access.orgId),
-      getTotalVendasMesCorrente(access.orgId),
-    ]);
+  const data = await getDashboardData(access.orgId);
+  const { alertas, conn, doneAnterior, historico, latest, latestDone, org, settings, totalMes } = data;
 
   const metaAtual = settings?.metaMensal ?? null;
   const progresso = progressoMeta(totalMes, metaAtual);
@@ -83,7 +59,6 @@ export default async function DashboardPage() {
     }
   }
 
-  const stats = latestDone?.metricas ? dashboardStats(latestDone.metricas) : null;
   const insights = insightsFromAnalise(latestDone?.analiseIa ?? null);
 
   return (
@@ -102,23 +77,16 @@ export default async function DashboardPage() {
 
       <OnboardingChecklist
         blingOk={blingOk}
-        temProdutos={produtos.length > 0}
-        temRelatorio={reports.length > 0}
+        temProdutos={data.temProdutos}
+        temRelatorio={historico.length > 0}
       />
 
       {/* Marquee de insights do último relatório */}
       <InsightsMarquee insights={insights} />
 
       {/* Stats do último relatório done */}
-      {stats ? (
-        <StatCards
-          items={[
-            { label: 'Faturamento do período', value: stats.faturamento, format: 'brl', spark: stats.evolucaoTotais },
-            { label: 'Pedidos', value: stats.pedidos, format: 'int' },
-            { label: 'Ticket médio', value: stats.ticketMedio, format: 'brl' },
-            { label: 'Relatórios gerados', value: reports.length, format: 'int' },
-          ]}
-        />
+      {latestDone?.metricas ? (
+        <StatCards items={statCardsModel(latestDone.metricas, doneAnterior?.metricas ?? null)} />
       ) : null}
 
       {/* Charts do último relatório done */}
@@ -130,7 +98,7 @@ export default async function DashboardPage() {
       ) : null}
 
       {/* Truth Score hero — some quando não há relatório done com score */}
-      <TruthScoreCard atual={donesRecentes[0] ?? null} anterior={donesRecentes[1] ?? null} />
+      <TruthScoreCard atual={latestDone} anterior={doneAnterior} />
 
       {/* Meta do mês — some quando o admin não definiu meta */}
       <MetaProgress progresso={progresso} meta={metaAtual} totalMes={totalMes} />
@@ -195,7 +163,7 @@ export default async function DashboardPage() {
             Comparar períodos →
           </a>
         </div>
-        {reports.length > 0 ? (
+        {historico.length > 0 ? (
           <Card className="!p-0">
             <Table>
               <THead>
@@ -206,7 +174,7 @@ export default async function DashboardPage() {
                 </TR>
               </THead>
               <TBody>
-                {reports.map((r) => (
+                {historico.map((r) => (
                   <TR key={r.id}>
                     <TD>
                       <Badge variant={reportStatusVariant(r.status)}>

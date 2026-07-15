@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lt, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
@@ -75,6 +75,40 @@ export async function getLatestReport(orgId: string): Promise<ReportSummary | nu
     .orderBy(desc(reports.created_at))
     .limit(1);
   return row ? summaryRowToSummary(row) : null;
+}
+
+export type HistoricoDashboardRow = ReportSummary & {
+  /** Extraído no SQL de metricas->'truth_score'->>'score' (null p/ failed/antigo). */
+  score: number | null;
+  /** Extraído no SQL de metricas->'truth_score'->>'totalPeriodo'. */
+  totalPeriodo: number | null;
+};
+
+/**
+ * Histórico do dashboard em UMA query leve: summaries + score/faturamento do
+ * Truth Score extraídos do jsonb NO BANCO (sem puxar metricas/analise_ia
+ * inteiros). Serve o histórico, o `latest` (primeira linha) e a linha do
+ * tempo do score. Desc por created_at; escopado por org_id.
+ */
+export async function listHistoricoDashboard(
+  orgId: string,
+  limite = LIST_LIMIT,
+): Promise<HistoricoDashboardRow[]> {
+  const rows = await db
+    .select({
+      ...summaryColumns,
+      score: sql<string | null>`(${reports.metricas}->'truth_score'->>'score')`,
+      total_periodo: sql<string | null>`(${reports.metricas}->'truth_score'->>'totalPeriodo')`,
+    })
+    .from(reports)
+    .where(eq(reports.org_id, orgId))
+    .orderBy(desc(reports.created_at))
+    .limit(limite);
+  return rows.map((row) => ({
+    ...summaryRowToSummary(row),
+    score: row.score === null ? null : Number(row.score),
+    totalPeriodo: row.total_periodo === null ? null : Number(row.total_periodo),
+  }));
 }
 
 /**

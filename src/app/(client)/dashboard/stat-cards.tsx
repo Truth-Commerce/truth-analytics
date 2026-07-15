@@ -10,12 +10,23 @@ import { Sparkline } from '@/components/ui/charts/Sparkline';
 export type StatItem = {
   label: string;
   value: number;
-  format: 'brl' | 'int';
+  format: 'brl' | 'int' | 'pct';
   spark?: number[];
 };
 
-function StatValue({ value, format }: { value: number; format: 'brl' | 'int' }) {
+function StatValue({ value, format }: { value: number; format: 'brl' | 'int' | 'pct' }) {
   const v = useCountUp(value);
+  if (format === 'pct') {
+    const positivo = value >= 0;
+    return (
+      <span
+        className={`font-mono text-2xl font-bold ${positivo ? 'text-brand' : 'text-danger-fg'}`}
+      >
+        {positivo ? '▲ +' : '▼ '}
+        {Math.abs(value).toFixed(1).replace('.', ',')}%
+      </span>
+    );
+  }
   return (
     <span className="font-mono text-2xl font-bold text-white">
       {format === 'brl' ? formatBRL(v) : String(Math.round(v))}
