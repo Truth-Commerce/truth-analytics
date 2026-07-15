@@ -22,6 +22,7 @@ import {
 import { DevolverTaskButton } from './DevolverTaskButton';
 import { TaskChecklist } from './TaskChecklist';
 import { TaskComments } from './TaskComments';
+import { TaskEditForm } from './TaskEditForm';
 
 const PRIORIDADE_BADGE_VARIANT: Record<TaskPrioridade, 'danger' | 'warn' | 'neutral'> = {
   alta: 'danger',
@@ -144,6 +145,21 @@ export function TaskDetail({
 
         {task.prazo ? <p className="mt-2 text-xs text-dim">Prazo: {formatData(task.prazo)}</p> : null}
       </header>
+
+      {ator !== 'cliente' && orgId ? (
+        <TaskEditForm
+          task={{
+            id: task.id,
+            titulo: task.titulo,
+            descricao: task.descricao,
+            tipo: task.tipo,
+            prioridade: task.prioridade,
+            prazo: task.prazo,
+          }}
+          orgId={orgId}
+          backHref={backHref}
+        />
+      ) : null}
 
       {textoLivre || itensChecklist.length > 0 ? (
         <Card>

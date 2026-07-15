@@ -499,6 +499,12 @@ export async function deleteTaskFormAction(formData: FormData): Promise<void> {
   await recordAudit({ orgId, userId: access.id, acao: 'task.excluida', detalhes: { titulo: task.titulo } });
 
   revalidateTaskRoutes(orgId);
+
+  // Exclusão a partir da página de detalhe: a página deixa de existir —
+  // redireciona para onde o form mandar (só paths internos; '//' seria uma
+  // URL protocol-relative, ou seja, um host externo — recusada).
+  const redirectTo = String(formData.get('redirectTo') ?? '');
+  if (redirectTo.startsWith('/') && !redirectTo.startsWith('//')) redirect(redirectTo);
 }
 
 // ---------------------------------------------------------------------------
