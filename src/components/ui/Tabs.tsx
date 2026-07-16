@@ -50,7 +50,7 @@ export function Tabs({ items, defaultValue, className = '' }: TabsProps) {
             tabIndex={t.id === active ? 0 : -1}
             onClick={() => setActive(t.id)}
             data-testid={`tab-${t.id}`}
-            className={`-mb-px whitespace-nowrap rounded-t-lg border-b-2 px-4 py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/50 ${
+            className={`-mb-px whitespace-nowrap rounded-t-lg border-b-2 px-4 py-2 text-sm outline-none transition-colors duration-200 ease-truth focus-visible:ring-2 focus-visible:ring-brand/50 ${
               t.id === active
                 ? 'border-brand font-medium text-white'
                 : 'border-transparent text-muted hover:text-white'

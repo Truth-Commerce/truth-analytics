@@ -11,3 +11,13 @@ export const chartTheme = {
 export function seriesColor(i: number): string {
   return chartTheme.series[i % chartTheme.series.length];
 }
+
+/**
+ * Cor do arco do Truth Score por faixa — alinhada aos tokens do tailwind
+ * (brand / warning.DEFAULT / danger.DEFAULT). O #eab308 fora de token morreu aqui.
+ */
+export function corDoScore(score: number): string {
+  if (score >= 70) return '#07dd2b';
+  if (score >= 40) return '#f59e0b';
+  return '#ef4444';
+}

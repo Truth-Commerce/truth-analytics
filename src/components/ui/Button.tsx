@@ -54,7 +54,7 @@ const sizeClasses: Record<ButtonSize, string> = {
 };
 
 export function Button({ variant = 'primary', size = 'md', className = '', children, ...rest }: ButtonProps) {
-  const base = `inline-flex items-center justify-center rounded-full font-medium transition-all duration-150 outline-none focus-visible:outline-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
+  const base = `inline-flex items-center justify-center rounded-full font-medium transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 ease-truth outline-none focus-visible:outline-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
 
   if (rest.as === 'a') {
     const { as: _as, href, ...anchorRest } = rest as ButtonAsAnchor;
