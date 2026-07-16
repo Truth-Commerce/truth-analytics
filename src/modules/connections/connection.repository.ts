@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, lte, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { connections } from '@/db/schema';
+import { connections, organizations } from '@/db/schema';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { decryptSecret, encryptSecret } from '@/modules/crypto/crypto';
 import { sendBlingConnectionFailedEmail } from '@/modules/notifications/email';
@@ -63,7 +63,15 @@ export async function getConnection(orgId: string) {
   };
 }
 
-export async function getValidAccessToken(orgId: string): Promise<string> {
+/**
+ * @param margemMs — renova quando faltar menos que isso p/ expirar; default
+ * 60s preserva o comportamento do pipeline; o cron de renovação proativa
+ * passa 24h.
+ */
+export async function getValidAccessToken(
+  orgId: string,
+  margemMs: number = REFRESH_MARGIN_MS,
+): Promise<string> {
   const [row] = await db
     .select()
     .from(connections)
@@ -74,7 +82,7 @@ export async function getValidAccessToken(orgId: string): Promise<string> {
   }
 
   const expMs = row.expira_em ? row.expira_em.getTime() : 0;
-  if (expMs - Date.now() > REFRESH_MARGIN_MS) {
+  if (expMs - Date.now() > margemMs) {
     return decryptSecret(row.access_token);
   }
 
@@ -91,7 +99,14 @@ export async function getValidAccessToken(orgId: string): Promise<string> {
       })
       .where(eq(connections.id, row.id));
     return refreshed.accessToken;
-  } catch {
+  } catch (err) {
+    // Só falha PERMANENTE (refresh_token inválido — 400/401 classificado em
+    // oauth.ts) marca a conexão como expirada e notifica. Transitória
+    // (429/5xx/rede) faz rethrow SEM tocar o status: refresh-on-use tenta de
+    // novo no próximo uso/dia e o refresh_token vale ~30d.
+    const permanente = err instanceof Error && err.message === 'bling_refresh_invalido';
+    if (!permanente) throw err;
+
     await db
       .update(connections)
       .set({ status: 'expirado' })
@@ -112,4 +127,66 @@ export async function disconnectBling(orgId: string): Promise<void> {
     .set({ access_token: null, refresh_token: null, status: 'erro' })
     .where(and(eq(connections.org_id, orgId), eq(connections.provider, PROVIDER)));
   await recordAudit({ orgId, acao: 'connection.bling.desconectada' });
+}
+
+/**
+ * Orgs `active` com conexão Bling saudável (status 'ok' e access_token
+ * presente) — universo do cron de sync incremental de pedidos.
+ *
+ * Ordem determinística: mais atrasadas primeiro (last_sync_at ASC, nunca
+ * sincronizadas na frente) — sob o cap de 50 orgs por execução, evita
+ * starvation quando houver mais orgs que o lote.
+ */
+export async function listOrgsComBlingOk(): Promise<string[]> {
+  const rows = await db
+    .select({ orgId: connections.org_id })
+    .from(connections)
+    .innerJoin(organizations, eq(organizations.id, connections.org_id))
+    .where(
+      and(
+        eq(connections.provider, PROVIDER),
+        eq(connections.status, 'ok'),
+        isNotNull(connections.access_token),
+        eq(organizations.status, 'active'),
+      ),
+    )
+    .orderBy(sql`${connections.last_sync_at} asc nulls first`);
+  return rows.map((r) => r.orgId);
+}
+
+/**
+ * Registra o instante da última sincronização de pedidos da org (frescor dos
+ * dados). Chamado por collectBlingOrders — pipeline e cron de sync passam
+ * pelo mesmo caminho.
+ */
+export async function touchLastSyncAt(orgId: string, quando: Date = new Date()): Promise<void> {
+  await db
+    .update(connections)
+    .set({ last_sync_at: quando })
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, PROVIDER)));
+}
+
+/**
+ * Orgs com conexão Bling 'ok' cujo token expira em até `margemMs` — universo
+ * do passo de renovação proativa do cron diário.
+ */
+export async function listConnectionsExpirando(
+  margemMs: number,
+  agora: Date = new Date(),
+): Promise<string[]> {
+  const limite = new Date(agora.getTime() + margemMs);
+  const rows = await db
+    .select({ orgId: connections.org_id })
+    .from(connections)
+    .where(
+      and(
+        eq(connections.provider, PROVIDER),
+        eq(connections.status, 'ok'),
+        isNotNull(connections.access_token),
+        isNotNull(connections.refresh_token),
+        isNotNull(connections.expira_em),
+        lte(connections.expira_em, limite),
+      ),
+    );
+  return rows.map((r) => r.orgId);
 }

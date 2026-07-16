@@ -89,7 +89,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     const metricas = await computeMetrics(orgId, reportId, periodo, benchmarkParcial);
 
     await setEtapa(reportId, 'analisando_ia');
-    const analise = await analyzeWithIA(metricas, nicho);
+    const { analise, usage: iaUsage } = await analyzeWithIA(metricas, nicho);
 
     await setEtapa(reportId, 'finalizando');
     let clientEmail: string | null = null;
@@ -98,7 +98,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     } catch {
       // lookup falhou — e-mail pulado, pipeline continua
     }
-    await finalize({ reportId, orgId, metricas, analise, plano, clientEmail });
+    await finalize({ reportId, orgId, metricas, analise, plano, clientEmail, iaUsage });
 
     log.info('pipeline concluído');
     return { reportId, status: 'done' };

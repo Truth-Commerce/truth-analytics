@@ -11,18 +11,19 @@ import {
 import {
   getPosicaoPrecoUltimoDone,
   getTotaisSemanais,
+  getUltimaDataPedido,
   getUltimaVendaPorSku,
   listOrgsComRelatorioRecente,
 } from '@/modules/alerts/alert-data.repository';
 import {
   criarAlertas,
-  listAlertasAbertos,
+  listAlertasParaDedup,
 } from '@/modules/alerts/alert.repository';
 import {
   JANELA_RELATORIO_RECENTE_DIAS,
   PRODUTO_HISTORICO_DIAS,
 } from '@/modules/alerts/alerts.constants';
-import { sendAlertaEmail } from '@/modules/notifications/email';
+import { sendAlertasDigestEmail } from '@/modules/notifications/email';
 import { notify } from '@/modules/notifications/notification.repository';
 import { getOrgPrimaryUser } from '@/modules/notifications/recipients';
 
@@ -31,13 +32,22 @@ export const maxDuration = 300;
 
 /**
  * Cron diário (Vercel manda `Authorization: Bearer CRON_SECRET`): roda os
- * detectores de alertas (queda de vendas, concorrente abaixo do preço, produto
- * parado) para cada org com relatório recente, deduplica contra os alertas já
- * abertos, persiste os novos e notifica o cliente (in-app + e-mail).
+ * detectores de alertas para cada org com relatório recente e persiste os
+ * novos com dedup + notificação.
  *
- * Falha em UMA org (try/catch por org) não aborta o lote. A notificação é
- * best-effort num try/catch aninhado — falha ao notificar não desfaz os
- * alertas já persistidos nem interrompe o processamento das demais orgs.
+ * Verdade dos dados (G0):
+ * - FRESCOR: as janelas de queda/produto parado são ancoradas no "agora
+ *   efetivo" = MAX(orders.data) da org — se o dado parou de sincronizar, as
+ *   janelas param junto (zero falso "queda de 100%"). Org sem pedido algum
+ *   pula esses detectores; concorrente_preco continua (lê posicaoPreco do
+ *   último relatório done, não a tabela orders).
+ * - COOLDOWN: dedup contra abertos + resolvidos nos últimos 7 dias.
+ * - DIGEST: 1 e-mail por org por execução com TODOS os alertas novos;
+ *   in-app continua 1 notificação por alerta.
+ * - CORRIDA: criarAlertas usa ON CONFLICT DO NOTHING (índice único parcial).
+ *
+ * Falha em UMA org (try/catch por org) não aborta o lote; notificação é
+ * best-effort aninhada.
  */
 export async function GET(req: Request): Promise<Response> {
   if (!serverEnv.CRON_SECRET) {
@@ -53,29 +63,34 @@ export async function GET(req: Request): Promise<Response> {
 
   for (const orgId of orgIds) {
     try {
-      const [semanais, posicao, parado, abertos] = await Promise.all([
-        getTotaisSemanais(orgId, agora),
+      const agoraEfetivo = await getUltimaDataPedido(orgId);
+
+      const [semanais, posicao, parado, dedupBase] = await Promise.all([
+        agoraEfetivo ? getTotaisSemanais(orgId, agoraEfetivo) : Promise.resolve(null),
         getPosicaoPrecoUltimoDone(orgId),
-        getUltimaVendaPorSku(orgId, PRODUTO_HISTORICO_DIAS, agora),
-        listAlertasAbertos(orgId),
+        agoraEfetivo
+          ? getUltimaVendaPorSku(orgId, PRODUTO_HISTORICO_DIAS, agoraEfetivo)
+          : Promise.resolve(null),
+        listAlertasParaDedup(orgId, agora),
       ]);
 
-      const queda = detectarQuedaVendas(semanais);
+      const queda = semanais ? detectarQuedaVendas(semanais) : null;
       const candidatos: AlertaCandidato[] = [
         ...(queda ? [queda] : []),
         ...detectarConcorrenteAbaixo(posicao),
-        ...detectarProdutoParado(parado.produtos, parado.ultimaVendaPorSku, agora),
+        ...(parado && agoraEfetivo
+          ? detectarProdutoParado(parado.produtos, parado.ultimaVendaPorSku, agoraEfetivo)
+          : []),
       ];
-      const novos = filtrarNaoDuplicados(
-        candidatos,
-        abertos.map((a) => ({ tipo: a.tipo, chaveDedup: a.chaveDedup })),
-      );
+      const novos = filtrarNaoDuplicados(candidatos, dedupBase);
       if (novos.length === 0) continue;
 
-      await criarAlertas(orgId, novos);
-      criadosTotal += novos.length;
+      const idsCriados = await criarAlertas(orgId, novos);
+      if (idsCriados.length === 0) continue; // corrida: outra execução criou antes
+      criadosTotal += idsCriados.length;
 
-      // Notificação in-app + e-mail — best-effort, nunca aborta o cron.
+      // Notificação — best-effort, nunca aborta o cron.
+      // In-app: 1 por alerta. E-mail: DIGEST único com todos os novos.
       try {
         const user = await getOrgPrimaryUser(orgId);
         if (user) {
@@ -86,8 +101,11 @@ export async function GET(req: Request): Promise<Response> {
               corpo: n.corpo,
               href: '/dashboard',
             });
-            await sendAlertaEmail(user.email, n.titulo, n.corpo);
           }
+          await sendAlertasDigestEmail(
+            user.email,
+            novos.map((n) => ({ titulo: n.titulo, corpo: n.corpo })),
+          );
         }
       } catch (err) {
         logger.warn('cron.verificar_alertas.notificacao_falhou', {
@@ -95,7 +113,7 @@ export async function GET(req: Request): Promise<Response> {
           erro: err instanceof Error ? err.message : String(err),
         });
       }
-      logger.info('cron.verificar_alertas.org', { orgId, criados: novos.length });
+      logger.info('cron.verificar_alertas.org', { orgId, criados: idsCriados.length });
     } catch (err) {
       logger.error('cron.verificar_alertas.erro', {
         orgId,

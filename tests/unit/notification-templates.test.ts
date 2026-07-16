@@ -315,3 +315,50 @@ describe('notification templates (puro)', () => {
     });
   });
 });
+
+describe('alertasDigestTemplate', () => {
+  it('1 alerta → assunto com o título; N alertas → assunto com a contagem; escapa HTML', async () => {
+    const { alertasDigestTemplate } = await import('@/modules/notifications/templates');
+    const um = alertasDigestTemplate(
+      [{ titulo: 'Queda de vendas de 60%', corpo: 'Últimos 7 dias <fracos>' }],
+      'https://app.exemplo.com',
+    );
+    expect(um.subject).toContain('Queda de vendas de 60%');
+    expect(um.html).toContain('&lt;fracos&gt;');
+    expect(um.html).not.toContain('<fracos>');
+    expect(um.text).toContain('https://app.exemplo.com/dashboard');
+
+    const tres = alertasDigestTemplate(
+      [
+        { titulo: 'A', corpo: 'a' },
+        { titulo: 'B', corpo: 'b' },
+        { titulo: 'C', corpo: 'c' },
+      ],
+      'https://app.exemplo.com',
+    );
+    expect(tres.subject).toContain('3');
+    expect(tres.html).toContain('<li>');
+  });
+});
+
+describe('autoGeracaoPausadaTemplate', () => {
+  it('inclui nome e id da org, escapando HTML', async () => {
+    const { autoGeracaoPausadaTemplate } = await import('@/modules/notifications/templates');
+    const t = autoGeracaoPausadaTemplate('Loja <X>', 'org-123');
+    expect(t.subject).toContain('Geração automática pausada');
+    expect(t.html).toContain('&lt;X&gt;');
+    expect(t.text).toContain('org-123');
+  });
+
+  it('instrui a reprocessar/gerar manualmente e avisa que só religar NÃO resolve', async () => {
+    const { autoGeracaoPausadaTemplate } = await import('@/modules/notifications/templates');
+    const t = autoGeracaoPausadaTemplate('Loja Y', 'org-456');
+    // A pausa é re-aplicada pelo cron enquanto os 3 últimos relatórios forem
+    // failed — a copy NÃO pode dizer que religar em Conexões resolve.
+    expect(t.text).toContain('reprocesse o último relatório no painel admin');
+    expect(t.text).toContain('não resolve enquanto os últimos relatórios forem falhas');
+    expect(t.html).toContain('reprocesse o último relatório no painel admin');
+    expect(t.html).toContain('não resolve enquanto os últimos relatórios forem falhas');
+    expect(t.text).not.toContain('o cliente pode religar em Conexões');
+  });
+});

@@ -1,4 +1,4 @@
-import { and, between, eq, ne } from 'drizzle-orm';
+import { and, between, eq, gte, lt, ne } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { marketSnapshots, orders, reports, trackedProducts } from '@/db/schema';
@@ -254,8 +254,11 @@ export async function computeMetrics(
       ? benchmarkParcialOverride
       : rawSnapshots.length === 0;
 
-  // Truth Score — total do período anterior (mesma duração, imediatamente antes)
-  const duracaoMs = periodo.fim.getTime() - periodo.inicio.getTime();
+  // Truth Score — total do período anterior (mesma duração, imediatamente antes).
+  // G0: fim é 23:59:59.999 → +1ms fecha o dia (duração = N dias exatos) e a
+  // janela anterior vira [inicio − N dias, inicio) SEM incluir a fronteira —
+  // um pedido exatamente em periodo.inicio pertence só ao período atual.
+  const duracaoMs = periodo.fim.getTime() - periodo.inicio.getTime() + 1;
   const inicioAnterior = new Date(periodo.inicio.getTime() - duracaoMs);
   const [temDoneAnterior] = await db
     .select({ id: reports.id })
@@ -269,7 +272,11 @@ export async function computeMetrics(
       .select({ valor_total: orders.valor_total })
       .from(orders)
       .where(
-        and(eq(orders.org_id, orgId), between(orders.data, inicioAnterior, periodo.inicio)),
+        and(
+          eq(orders.org_id, orgId),
+          gte(orders.data, inicioAnterior),
+          lt(orders.data, periodo.inicio),
+        ),
       );
     totalPeriodoAnterior =
       Math.round(anteriores.reduce((acc, o) => acc + Number(o.valor_total), 0) * 100) / 100;

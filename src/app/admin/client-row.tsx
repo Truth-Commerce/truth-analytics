@@ -37,7 +37,7 @@ const CONEXAO_BADGE: Record<
   { variant: 'success' | 'warn' | 'danger' | 'neutral'; label: string }
 > = {
   ok: { variant: 'success', label: 'Bling ok' },
-  expirado: { variant: 'warn', label: 'Expirada' },
+  expirado: { variant: 'danger', label: 'Expirada' },
   erro: { variant: 'danger', label: 'Com erro' },
   nenhuma: { variant: 'neutral', label: 'Sem conexão' },
 };

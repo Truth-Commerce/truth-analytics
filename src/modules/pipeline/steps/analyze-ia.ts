@@ -7,22 +7,73 @@ import { getAnthropic } from '@/modules/ai/claude';
 import { AnaliseIaSchema, type AnaliseIa, type Metricas } from '@/modules/pipeline/contracts';
 
 // Build the JSON schema once at module load — pure, no I/O.
-// $refStrategy:'none' inlines all $refs so the API gets a flat, self-contained schema.
-// We defensively delete $schema if present (the API expects a plain JSON Schema object).
 const _rawSchema = zodToJsonSchema(AnaliseIaSchema, { $refStrategy: 'none' });
 if ('$schema' in _rawSchema) {
   delete (_rawSchema as Record<string, unknown>)['$schema'];
 }
 const ANALISE_JSON_SCHEMA: Record<string, unknown> = _rawSchema as Record<string, unknown>;
 
+/** Orçamento padrão da 1ª tentativa. */
+const MAX_TOKENS_PADRAO = 16000;
+/** Orçamento da retentativa (via stream — max_tokens alto exige streaming). */
+const MAX_TOKENS_RETENTATIVA = 32000;
+
+// ---------------------------------------------------------------------------
+// Usage (Task 5 — persistido em reports.ia_usage)
+// ---------------------------------------------------------------------------
+
+/** Usage somado das tentativas da chamada Claude — persistido em reports.ia_usage. */
+export type IaUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  tentativas: number;
+};
+
+type UsageLike = {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+};
+
+function acumularUsage(acc: IaUsage, usage: UsageLike | undefined | null): void {
+  acc.input_tokens += usage?.input_tokens ?? 0;
+  acc.output_tokens += usage?.output_tokens ?? 0;
+  acc.cache_read_input_tokens += usage?.cache_read_input_tokens ?? 0;
+  acc.cache_creation_input_tokens += usage?.cache_creation_input_tokens ?? 0;
+  acc.tentativas += 1;
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(benchmarkParcial: boolean, truthScore?: number): string {
-  const aviso = benchmarkParcial
-    ? `\n\nATENÇÃO: O benchmark de mercado está INCOMPLETO (benchmarkParcial=true). NÃO infira nem invente conclusões sobre concorrentes, participação de mercado ou posição relativa a partir de dados ausentes. Em recomendações de preço, deixe claro explicitamente que a base comparativa é limitada e evite afirmações categóricas sobre competitividade.`
-    : '';
+/**
+ * Aviso de benchmark em 3 casos (G0/Task 4):
+ * (a) sem benchmark NENHUM → focar mix/canais/regularidade, recomendacoesPreco vazio;
+ * (b) parcial (provider ATIVO falhou) → cautela explícita;
+ * (c) fonte única completa → analisar preço normalmente citando a fonte.
+ */
+function avisoBenchmark(metricas: Metricas): string {
+  const comMercado = metricas.posicaoPreco.filter((p) => p.precoMercadoMediano > 0);
+  if (comMercado.length === 0) {
+    return `\n\nATENÇÃO: NENHUM benchmark de mercado está disponível neste período. NÃO invente preços de concorrentes nem posição competitiva. Deixe "recomendacoesPreco" como lista vazia e concentre a análise no mix de produtos, nos canais de venda e na regularidade das vendas — há muito valor nesses dados.`;
+  }
+  if (metricas.benchmarkParcial) {
+    return `\n\nATENÇÃO: O benchmark de mercado está INCOMPLETO (benchmarkParcial=true). NÃO infira nem invente conclusões sobre concorrentes, participação de mercado ou posição relativa a partir de dados ausentes. Em recomendações de preço, deixe claro explicitamente que a base comparativa é limitada e evite afirmações categóricas sobre competitividade.`;
+  }
+  const fontes = [...new Set(comMercado.map((p) => p.fonte).filter((f) => f !== ''))];
+  if (fontes.length === 1) {
+    return `\n\nO benchmark de mercado vem de uma única fonte (${fontes[0]}). Analise preços normalmente e cite essa fonte nas recomendações de preço.`;
+  }
+  return '';
+}
+
+function buildSystemPrompt(metricas: Metricas): string {
+  const aviso = avisoBenchmark(metricas);
+  const truthScore = metricas.truth_score?.score;
 
   const scoreTexto =
     truthScore === undefined
@@ -54,20 +105,58 @@ function extractTextBlock(content: unknown[]): string | null {
   return block?.text ?? null;
 }
 
+type RespostaClaude = {
+  stop_reason?: string | null;
+  usage?: UsageLike;
+  content: unknown[];
+};
+
+function logTentativa(tentativa: number, r: RespostaClaude): void {
+  logger.info('analise_ia.tentativa', {
+    tentativa,
+    stopReason: r.stop_reason ?? null,
+    inputTokens: r.usage?.input_tokens ?? 0,
+    outputTokens: r.usage?.output_tokens ?? 0,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
- * Analisa as métricas usando Claude com saídas estruturadas (JSON Schema via output_config).
- * Em caso de falha de parse/validação, faz UMA re-tentativa. Após duas falhas → lança 'analise_ia_invalida'.
+ * Analisa as métricas usando Claude com saídas estruturadas (JSON Schema via
+ * output_config) e devolve também o usage somado (Task 5).
+ *
+ * Robustez (G0/Task 6) — `stop_reason` é checado ANTES do parse:
+ * - 'refusal'    → Error('analise_ia_recusada') — sem retry (repetir o mesmo
+ *                  prompt tende a ser recusado de novo).
+ * - 'max_tokens' → resposta TRUNCADA (thinking pode consumir o orçamento):
+ *                  retentativa com as MESMAS mensagens via messages.stream()
+ *                  + finalMessage() e max_tokens 32000. Truncou de novo →
+ *                  Error('analise_ia_truncada').
+ * - parse/validação inválidos → retentativa de correção CURTA (erro truncado
+ *   + instrução), também via stream/32000. Falhou de novo →
+ *   Error('analise_ia_invalida').
+ *
+ * O orquestrador mapeia a mensagem do Error para report.erro — contrato
+ * preservado. O prefixo (system + métricas) tem cache_control: o retry paga
+ * só o delta.
  */
-export async function analyzeWithIA(metricas: Metricas, nicho: string | null): Promise<AnaliseIa> {
-  const system = buildSystemPrompt(metricas.benchmarkParcial, metricas.truth_score?.score);
+export async function analyzeWithIA(
+  metricas: Metricas,
+  nicho: string | null,
+): Promise<{ analise: AnaliseIa; usage: IaUsage }> {
+  const system = buildSystemPrompt(metricas);
   const userText = buildUserMessage(metricas, nicho);
+  const usage: IaUsage = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    tentativas: 0,
+  };
 
-  // Bloco de métricas marcado p/ prompt caching: o retry reaproveita o prefixo
-  // inteiro (system + métricas) do cache e paga só o delta da correção.
   const userBlock = {
     type: 'text' as const,
     text: userText,
@@ -77,7 +166,7 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
 
   const callParams = {
     model: serverEnv.ANALYSIS_MODEL,
-    max_tokens: 16000,
+    max_tokens: MAX_TOKENS_PADRAO,
     thinking: { type: 'adaptive' as const },
     output_config: {
       effort: 'high' as const,
@@ -86,8 +175,6 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
         schema: ANALISE_JSON_SCHEMA,
       },
     },
-    // Bloco system estável marcado p/ prompt caching: toda geração (e o retry)
-    // reaproveita o prefixo — reduz custo/latência da chamada Opus.
     system: [
       {
         type: 'text' as const,
@@ -98,62 +185,89 @@ export async function analyzeWithIA(metricas: Metricas, nicho: string | null): P
     messages,
   };
 
-  // First attempt
-  const response = await getAnthropic().messages.create(callParams);
-  const text1 = extractTextBlock(response.content as unknown[]);
+  // ---- Tentativa 1 (create) ------------------------------------------------
+  const response = (await getAnthropic().messages.create(callParams)) as RespostaClaude;
+  acumularUsage(usage, response.usage);
+  logTentativa(1, response);
+
+  if (response.stop_reason === 'refusal') {
+    throw new Error('analise_ia_recusada');
+  }
+
+  const truncou1 = response.stop_reason === 'max_tokens';
+  const text1 = truncou1 ? null : extractTextBlock(response.content);
 
   let parseError: string | null = null;
   if (text1 !== null) {
     try {
       const parsed = JSON.parse(text1);
-      return AnaliseIaSchema.parse(parsed);
+      return { analise: AnaliseIaSchema.parse(parsed), usage };
     } catch (err) {
       parseError = err instanceof Error ? err.message : String(err);
     }
-  } else {
+  } else if (!truncou1) {
     parseError = 'Nenhum bloco de texto encontrado na resposta';
   }
 
-  // Retry de correção CURTO: em vez de refazer a chamada inteira (dobrando
-  // latência e tokens de thinking), o turno final envia apenas o erro de
-  // validação truncado + a instrução de corrigir. O prefixo (system + métricas)
-  // vem do cache — o retry paga só o delta.
-  const erroCurto = (parseError ?? 'resposta sem bloco de texto').slice(0, 500);
-  logger.warn('análise IA: primeira tentativa inválida, re-tentando', { parseError: erroCurto });
+  // ---- Retentativa ÚNICA (stream + orçamento maior) ------------------------
+  // Truncamento → MESMAS mensagens (a resposta era incompleta, não inválida).
+  // Parse inválido → correção curta (prefixo cacheado + erro + instrução).
+  let retryMessages: MessageParam[];
+  if (truncou1) {
+    logger.warn('análise IA: resposta truncada (max_tokens), re-tentando com orçamento maior', {
+      maxTokens: MAX_TOKENS_RETENTATIVA,
+    });
+    retryMessages = messages;
+  } else {
+    const erroCurto = (parseError ?? 'resposta sem bloco de texto').slice(0, 500);
+    logger.warn('análise IA: primeira tentativa inválida, re-tentando', { parseError: erroCurto });
+    const correcao = `A resposta anterior falhou na validação do schema: ${erroCurto}. Responda APENAS com o objeto JSON válido conforme o schema, sem texto adicional.`;
+    retryMessages =
+      text1 !== null
+        ? [
+            { role: 'user', content: [userBlock] },
+            { role: 'assistant', content: text1 },
+            { role: 'user', content: correcao },
+          ]
+        : [
+            { role: 'user', content: [userBlock] },
+            { role: 'user', content: correcao },
+          ];
+  }
 
-  const correcao = `A resposta anterior falhou na validação do schema: ${erroCurto}. Responda APENAS com o objeto JSON válido conforme o schema, sem texto adicional.`;
+  const response2 = (await getAnthropic()
+    .messages.stream({
+      ...callParams,
+      max_tokens: MAX_TOKENS_RETENTATIVA,
+      messages: retryMessages,
+    })
+    .finalMessage()) as RespostaClaude;
+  acumularUsage(usage, response2.usage);
+  logTentativa(2, response2);
 
-  // Quando a 1ª resposta não trouxe bloco de texto (ex.: só thinking), NÃO enviar
-  // um turno assistant vazio (a API pode rejeitar content '') — basta o bloco de
-  // métricas cacheado + o turno user de correção. Caso contrário, espelhamos a
-  // resposta inválida + correção.
-  const retryMessages: MessageParam[] =
-    text1 !== null
-      ? [
-          { role: 'user', content: [userBlock] }, // prefixo cacheado — não paga de novo
-          { role: 'assistant', content: text1 },
-          { role: 'user', content: correcao },
-        ]
-      : [
-          { role: 'user', content: [userBlock] },
-          { role: 'user', content: correcao },
-        ];
+  if (response2.stop_reason === 'refusal') {
+    throw new Error('analise_ia_recusada');
+  }
+  if (response2.stop_reason === 'max_tokens') {
+    logger.error('análise IA truncada após retentativa com orçamento maior', {
+      maxTokens: MAX_TOKENS_RETENTATIVA,
+    });
+    throw new Error('analise_ia_truncada');
+  }
 
-  const response2 = await getAnthropic().messages.create({
-    ...callParams,
-    messages: retryMessages,
-  });
-
-  const text2 = extractTextBlock(response2.content as unknown[]);
+  const text2 = extractTextBlock(response2.content);
+  let parseError2: string | null = null;
   if (text2 !== null) {
     try {
       const parsed2 = JSON.parse(text2);
-      return AnaliseIaSchema.parse(parsed2);
-    } catch {
-      // fall through
+      return { analise: AnaliseIaSchema.parse(parsed2), usage };
+    } catch (err) {
+      parseError2 = err instanceof Error ? err.message : String(err);
     }
   }
 
-  logger.error('análise IA inválida após retry', { parseError: erroCurto });
+  logger.error('analise_ia.retentativa_invalida', {
+    parseError: (parseError2 ?? 'resposta sem bloco de texto').slice(0, 500),
+  });
   throw new Error('analise_ia_invalida');
 }

@@ -100,7 +100,7 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
 
   it('Bearer correto → cria queda_vendas(crítico) + concorrente_preco:A e notifica', async () => {
     const notifySpy = vi.spyOn(notificationRepo, 'notify').mockResolvedValue();
-    const emailSpy = vi.spyOn(emailModule, 'sendAlertaEmail').mockResolvedValue();
+    const emailSpy = vi.spyOn(emailModule, 'sendAlertasDigestEmail').mockResolvedValue();
     try {
       const res = await GET(req(`Bearer ${CRON_SECRET_TEST}`));
       expect(res.status).toBe(200);
@@ -127,10 +127,58 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
       // (asserção escopada ao meu userId/email: a suíte roda em paralelo e
       // outras orgs de outros arquivos podem coexistir na branch de teste).
       expect(notifySpy.mock.calls.some(([id]) => id === userId)).toBe(true);
-      expect(emailSpy.mock.calls.some(([to]) => to === userEmail)).toBe(true);
+      // Digest: exatamente UMA chamada de e-mail para o meu usuário, com >= 2 alertas
+      const chamadasMinhas = emailSpy.mock.calls.filter(([to]) => to === userEmail);
+      expect(chamadasMinhas.length).toBe(1);
+      expect(chamadasMinhas[0][1].length).toBeGreaterThanOrEqual(2);
     } finally {
       notifySpy.mockRestore();
       emailSpy.mockRestore();
+    }
+  });
+
+  it('frescor: org com pedidos ANTIGOS não gera falso "queda de 100%" (agora efetivo = MAX(orders.data))', async () => {
+    // Org com vendas regulares que PARARAM de sincronizar há 31 dias: com o
+    // relógio de parede seria queda de 100%; com o agora efetivo, razão = 1.0.
+    const [org2] = await db
+      .insert(organizations)
+      .values({ name: `${PREFIX}org-velha-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    const org2Id = org2!.id;
+    await db.insert(reports).values({
+      org_id: org2Id,
+      status: 'done',
+      periodo_inicio: new Date(agora.getTime() - 40 * DIA),
+      periodo_fim: new Date(agora.getTime() - 31 * DIA),
+      metricas: { posicaoPreco: [] },
+    });
+    const vendaVelha = (offsetDias: number) => ({
+      org_id: org2Id,
+      bling_order_id: `${PREFIX}velha-${RUN}-${offsetDias}`,
+      canal: 'bling',
+      data: new Date(agora.getTime() - offsetDias * DIA),
+      valor_total: '1000.00',
+      itens: [],
+    });
+    await db.insert(orders).values([31, 38, 45, 52, 59].map(vendaVelha));
+
+    const notifySpy = vi.spyOn(notificationRepo, 'notify').mockResolvedValue();
+    const emailSpy = vi.spyOn(emailModule, 'sendAlertasDigestEmail').mockResolvedValue();
+    try {
+      const res = await GET(req(`Bearer ${CRON_SECRET_TEST}`));
+      expect(res.status).toBe(200);
+      const criados = await db
+        .select({ tipo: alerts.tipo })
+        .from(alerts)
+        .where(eq(alerts.org_id, org2Id));
+      expect(criados.some((a) => a.tipo === 'queda_vendas')).toBe(false);
+    } finally {
+      notifySpy.mockRestore();
+      emailSpy.mockRestore();
+      await db.delete(alerts).where(eq(alerts.org_id, org2Id));
+      await db.delete(orders).where(eq(orders.org_id, org2Id));
+      await db.delete(reports).where(eq(reports.org_id, org2Id));
+      await db.delete(organizations).where(eq(organizations.id, org2Id));
     }
   });
 
@@ -140,7 +188,7 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
 
     const antes = await countOrg();
     const notifySpy = vi.spyOn(notificationRepo, 'notify').mockResolvedValue();
-    const emailSpy = vi.spyOn(emailModule, 'sendAlertaEmail').mockResolvedValue();
+    const emailSpy = vi.spyOn(emailModule, 'sendAlertasDigestEmail').mockResolvedValue();
     try {
       const res = await GET(req(`Bearer ${CRON_SECRET_TEST}`));
       expect(res.status).toBe(200);

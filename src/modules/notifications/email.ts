@@ -4,6 +4,8 @@ import type { Plano } from '@/modules/auth/user.types';
 import {
   accountActivatedTemplate,
   alertaTemplate,
+  alertasDigestTemplate,
+  autoGeracaoPausadaTemplate,
   blingConnectionFailedTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
@@ -85,6 +87,18 @@ export async function sendPipelineFailedEmail(
 }
 
 /**
+ * Avisa o admin interno que a auto-geração de uma org foi pausada. Nunca lança.
+ */
+export async function sendAutoGeracaoPausadaEmail(
+  to: string,
+  orgName: string,
+  orgId: string,
+): Promise<void> {
+  const content = autoGeracaoPausadaTemplate(orgName, orgId);
+  await sendEmail({ to, ...content });
+}
+
+/**
  * Notifica o cliente que sua conexão com o Bling expirou.
  * Nunca lança.
  */
@@ -139,5 +153,18 @@ export async function sendTaskAprovadaEmail(to: string, titulo: string, url: str
  */
 export async function sendAlertaEmail(to: string, titulo: string, corpo: string): Promise<void> {
   const content = alertaTemplate(titulo, corpo, serverEnv.APP_URL);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Digest: notifica o cliente sobre TODOS os alertas novos da execução em um
+ * único e-mail. Nunca lança.
+ */
+export async function sendAlertasDigestEmail(
+  to: string,
+  alertas: { titulo: string; corpo: string }[],
+): Promise<void> {
+  if (alertas.length === 0) return;
+  const content = alertasDigestTemplate(alertas, serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }

@@ -1,8 +1,9 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, or } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { alerts } from '@/db/schema';
 import type { AlertaCandidato } from './alert-detectors';
+import { ALERTA_COOLDOWN_DIAS } from './alerts.constants';
 
 export type AlertaAberto = {
   id: string;
@@ -39,6 +40,10 @@ export async function listAlertasAbertos(orgId: string): Promise<AlertaAberto[]>
 /**
  * Insere candidatos para uma org (chaveDedup vai para `dados.chave_dedup`).
  * Retorna os ids criados na mesma ordem. Lista vazia → nenhum insert.
+ *
+ * Corrida entre execuções: o índice único parcial
+ * `alerts_org_tipo_dedup_aberto_uq` faz o segundo insert ser ignorado
+ * (ON CONFLICT DO NOTHING) — retorna só os ids realmente inseridos.
  */
 export async function criarAlertas(
   orgId: string,
@@ -57,8 +62,34 @@ export async function criarAlertas(
         dados: { ...c.dados, chave_dedup: c.chaveDedup },
       })),
     )
+    .onConflictDoNothing()
     .returning({ id: alerts.id });
   return rows.map((r) => r.id);
+}
+
+/**
+ * Base de dedup dos detectores: alertas ABERTOS + alertas RESOLVIDOS dentro do
+ * cooldown (resolvido_em >= agora − cooldownDias). Escopado por org_id.
+ */
+export async function listAlertasParaDedup(
+  orgId: string,
+  agora: Date,
+  cooldownDias: number = ALERTA_COOLDOWN_DIAS,
+): Promise<{ tipo: string; chaveDedup: string }[]> {
+  const corte = new Date(agora.getTime() - cooldownDias * 86_400_000);
+  const rows = await db
+    .select({ tipo: alerts.tipo, dados: alerts.dados })
+    .from(alerts)
+    .where(
+      and(
+        eq(alerts.org_id, orgId),
+        or(eq(alerts.resolvido, false), gte(alerts.resolvido_em, corte)),
+      ),
+    );
+  return rows.map((r) => ({
+    tipo: r.tipo,
+    chaveDedup: String((r.dados as Record<string, unknown>)?.chave_dedup ?? ''),
+  }));
 }
 
 /**

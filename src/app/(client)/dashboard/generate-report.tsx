@@ -50,12 +50,19 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
 export function GenerateReport({
   disabled,
   motivo,
+  emAndamentoReportId,
 }: {
   disabled?: boolean;
   motivo?: string;
+  /** Report queued/running vindo do server: retoma o stepper após reload/cron (G0). */
+  emAndamentoReportId?: string | null;
 }) {
   const [state, action] = useFormState(generateReportAction, initial);
   const isDisabled = !!disabled;
+
+  // Prioridade: geração disparada AGORA pelo form (state) > retomada do server.
+  const progressoReportId =
+    state.reportId && !state.error ? state.reportId : emAndamentoReportId ?? null;
 
   return (
     <div>
@@ -70,8 +77,8 @@ export function GenerateReport({
           {errorLabel(state.error)}
         </p>
       ) : null}
-      {state.reportId && !state.error ? (
-        <GenerationProgress key={state.reportId} reportId={state.reportId} />
+      {progressoReportId ? (
+        <GenerationProgress key={progressoReportId} reportId={progressoReportId} />
       ) : null}
     </div>
   );

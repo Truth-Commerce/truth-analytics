@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
+import { periodoDoPlano } from '@/modules/admin/periodo-plano';
 import { dispatchPipelineRun } from '@/modules/pipeline/dispatch';
-import { diasDoPlano } from '@/modules/pipeline/plan-lock';
 import { createQueuedReport, markReportFailed } from '@/modules/reports/report.repository';
 
 export type EnqueueResult =
@@ -35,12 +35,13 @@ export async function enqueueReport(orgId: string): Promise<EnqueueResult> {
   if (!org) return { ok: false, motivo: 'org_nao_encontrada' };
   if (!org.plano) return { ok: false, motivo: 'sem_plano' };
 
-  const agora = new Date();
-  const inicio = new Date(agora.getTime() - diasDoPlano(org.plano) * 24 * 60 * 60 * 1000);
+  // G0: janela em dias FECHADOS no calendário America/Sao_Paulo (fonte única
+  // compartilhada com o disparo manual do admin — periodoDoPlano).
+  const periodo = periodoDoPlano(org.plano, new Date());
 
   let reportId: string;
   try {
-    reportId = await createQueuedReport(orgId, { inicio, fim: agora });
+    reportId = await createQueuedReport(orgId, periodo);
   } catch (err) {
     if (err instanceof Error && err.message === 'relatorio_em_andamento') {
       return { ok: false, motivo: 'relatorio_em_andamento' };

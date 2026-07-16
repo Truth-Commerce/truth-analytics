@@ -109,7 +109,7 @@ describe.skipIf(!url)('connection.repository — notificação de falha de refre
     await sql2.end();
   });
 
-  it('falha de refresh → notifica cliente e mantém comportamento de erro', async () => {
+  it('falha PERMANENTE de refresh (bling_refresh_invalido) → status expirado + notifica cliente', async () => {
     const repo = await import('@/modules/connections/connection.repository');
     const provider = await import('@/modules/providers/bling/provider');
     const emailMod = await import('@/modules/notifications/email');
@@ -121,8 +121,10 @@ describe.skipIf(!url)('connection.repository — notificação de falha de refre
       expiresInSeconds: 0,
     });
 
-    // Spy: refresh falha
-    vi.spyOn(provider.blingProvider, 'refresh').mockRejectedValueOnce(new Error('bling 500'));
+    // Spy: refresh falha PERMANENTE (400/401 classificado pelo oauth.ts)
+    vi.spyOn(provider.blingProvider, 'refresh').mockRejectedValueOnce(
+      new Error('bling_refresh_invalido'),
+    );
     // Spy: captura chamada de e-mail (live binding ESM — mesmo padrão do blingProvider)
     const emailSpy = vi
       .spyOn(emailMod, 'sendBlingConnectionFailedEmail')
@@ -142,6 +144,45 @@ describe.skipIf(!url)('connection.repository — notificação de falha de refre
     // Assert: e-mail enviado ao cliente
     expect(emailSpy).toHaveBeenCalledOnce();
     expect(emailSpy).toHaveBeenCalledWith(CLIENT_EMAIL);
+
+    emailSpy.mockRestore();
+  });
+
+  it('falha TRANSIENTE de refresh (bling_refresh_transiente) → rethrow SEM tocar o status e SEM e-mail', async () => {
+    const repo = await import('@/modules/connections/connection.repository');
+    const provider = await import('@/modules/providers/bling/provider');
+    const emailMod = await import('@/modules/notifications/email');
+
+    // Seed: conexão com tokens expirados (força refresh) — status volta a 'ok'
+    await repo.saveBlingConnection(notifyOrgId, {
+      accessToken: 'velho-t',
+      refreshToken: 'refresh-velho-t',
+      expiresInSeconds: 0,
+    });
+
+    // Spy: refresh falha TRANSIENTE (429/5xx/rede classificado pelo oauth.ts)
+    vi.spyOn(provider.blingProvider, 'refresh').mockRejectedValueOnce(
+      new Error('bling_refresh_transiente'),
+    );
+    const emailSpy = vi
+      .spyOn(emailMod, 'sendBlingConnectionFailedEmail')
+      .mockResolvedValueOnce(undefined);
+
+    // Ação: rethrow do erro transiente ORIGINAL (não refresh_bling_falhou)
+    await expect(repo.getValidAccessToken(notifyOrgId)).rejects.toThrow(
+      'bling_refresh_transiente',
+    );
+
+    // Assert: status permanece 'ok' — refresh-on-use tenta de novo no próximo uso
+    const [row] = await tdb2
+      .select({ status: connections.status })
+      .from(connections)
+      .where(eq(connections.org_id, notifyOrgId))
+      .limit(1);
+    expect(row.status).toBe('ok');
+
+    // Assert: ZERO e-mail em falha transitória
+    expect(emailSpy).not.toHaveBeenCalled();
 
     emailSpy.mockRestore();
   });

@@ -18,6 +18,7 @@ import { listAlertasAbertos } from '@/modules/alerts/alert.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { progressoMeta } from '@/modules/reports/compare';
 import { formatData, formatPeriodo } from '@/lib/format';
+import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -54,11 +55,17 @@ export default async function DashboardPage() {
 
   const blingOk = !!conn?.connected;
   const gate = org ? podeGerar(org) : { ok: false as const, motivo: 'org_nao_encontrada' };
-  const canGenerate = blingOk && gate.ok;
+  // G0/Task 9: relatório em andamento (inclusive gerado pelo cron/admin) →
+  // remonta o stepper do server e trava o botão.
+  const emAndamentoReportId =
+    latest && (latest.status === 'queued' || latest.status === 'running') ? latest.id : null;
+  const canGenerate = blingOk && gate.ok && !emAndamentoReportId;
 
   let motivo: string | undefined;
   if (!canGenerate) {
-    if (!org) {
+    if (emAndamentoReportId) {
+      motivo = 'Um relatório está sendo gerado agora.';
+    } else if (!org) {
       motivo = 'Organização não encontrada. Recarregue a página.';
     } else if (!blingOk) {
       motivo = 'Conecte o Bling em Conexões.';
@@ -82,6 +89,16 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Dashboard</h1>
+
+      {/* Conexão expirada — persistente até reconectar (G0/Task 7) */}
+      {conn && conn.status === 'expirado' ? (
+        <Alert variant="danger" title="Sua conexão com o Bling expirou">
+          Seus dados de vendas pararam de atualizar e os relatórios automáticos foram pausados.{' '}
+          <a href="/conexoes" className="font-medium underline underline-offset-2">
+            Reconectar em Conexões →
+          </a>
+        </Alert>
+      ) : null}
 
       <OnboardingChecklist
         blingOk={blingOk}
@@ -128,7 +145,11 @@ export default async function DashboardPage() {
             <CardTitle as="h2" className="text-base">Gerar relatório</CardTitle>
           </CardHeader>
           <CardContent>
-            <GenerateReport disabled={!canGenerate} motivo={motivo} />
+            <GenerateReport
+              disabled={!canGenerate}
+              motivo={motivo}
+              emAndamentoReportId={emAndamentoReportId}
+            />
           </CardContent>
         </Card>
 

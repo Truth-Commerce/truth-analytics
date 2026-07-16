@@ -40,3 +40,17 @@ describe('formatPeriodo', () => {
     expect(result).toContain(' – ');
   });
 });
+
+describe('fusos (G0)', () => {
+  it('formatData usa America/Sao_Paulo: 01:00Z cai no dia anterior BRT', async () => {
+    const { formatData } = await import('@/lib/format');
+    expect(formatData(new Date('2026-06-25T01:00:00Z'))).toBe('24/06/2026');
+  });
+
+  it('formatPeriodo formata fronteiras (dias-calendário em UTC) sem deslocar o dia', async () => {
+    const { formatPeriodo } = await import('@/lib/format');
+    expect(
+      formatPeriodo(new Date('2026-06-01T00:00:00.000Z'), new Date('2026-06-30T23:59:59.999Z')),
+    ).toBe('01/06/2026 – 30/06/2026');
+  });
+});

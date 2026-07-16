@@ -4,11 +4,17 @@ import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.
 import { getOrgSettings } from '@/modules/organizations/organization-settings.repository';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
 import { DisconnectBling } from './disconnect-bling';
 import { TrackedProducts } from './tracked-products';
 import { GeracaoAutomaticaToggle } from './geracao-automatica-toggle';
+import { feedbackDeCallback } from './callback-feedback';
 
-export default async function ConexoesPage() {
+export default async function ConexoesPage({
+  searchParams,
+}: {
+  searchParams?: { ok?: string; erro?: string };
+}) {
   const access = await requireActiveOrg();
   const [conn, produtos, settings] = await Promise.all([
     getConnection(access.orgId),
@@ -19,6 +25,16 @@ export default async function ConexoesPage() {
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Conexões</h1>
+
+      {/* Retorno do OAuth Bling (G0/Task 8) */}
+      {(() => {
+        const feedback = feedbackDeCallback(searchParams);
+        return feedback ? (
+          <Alert variant={feedback.variante} title={feedback.titulo}>
+            {feedback.mensagem}
+          </Alert>
+        ) : null;
+      })()}
 
       {/* Bling */}
       <Card>

@@ -12,7 +12,7 @@
  * A cobertura do orquestrador + plan-lock é a prioridade desta suite.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -20,6 +20,7 @@ import postgres from 'postgres';
 import {
   connections,
   marketSnapshots,
+  notifications,
   orders,
   organizations,
   reports,
@@ -66,6 +67,14 @@ const MOCK_ANALISE: AnaliseIa = {
       justificativa: 'Levemente abaixo da mediana do mercado para ganhar buy box',
     },
   ],
+};
+
+const MOCK_IA_USAGE = {
+  input_tokens: 100,
+  output_tokens: 200,
+  cache_read_input_tokens: 0,
+  cache_creation_input_tokens: 0,
+  tentativas: 1,
 };
 
 // ---------------------------------------------------------------------------
@@ -125,6 +134,14 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     await tdb.delete(reports).where(eq(reports.org_id, orgId));
     await tdb.delete(trackedProducts).where(eq(trackedProducts.org_id, orgId));
     await tdb.delete(connections).where(eq(connections.org_id, orgId));
+    // Notificações do(s) usuário(s) da org: finalize agora cria 'relatorio_pronto'
+    // in-app (best-effort) — filhos de users, precisam ser removidos antes.
+    await tdb.delete(notifications).where(
+      inArray(
+        notifications.user_id,
+        tdb.select({ id: users.id }).from(users).where(eq(users.org_id, orgId)),
+      ),
+    );
     await tdb.delete(users).where(eq(users.org_id, orgId));
     await tdb.delete(organizations).where(eq(organizations.id, orgId));
     await sql.end();
@@ -146,7 +163,9 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     // Mock analyzeWithIA (evita chamada real ao Claude — sem ANTHROPIC_API_KEY necessária)
     const analyzeMod = await import('@/modules/pipeline/steps/analyze-ia');
-    const analyzeSpyHappy = vi.spyOn(analyzeMod, 'analyzeWithIA').mockResolvedValueOnce(MOCK_ANALISE);
+    const analyzeSpyHappy = vi
+      .spyOn(analyzeMod, 'analyzeWithIA')
+      .mockResolvedValueOnce({ analise: MOCK_ANALISE, usage: MOCK_IA_USAGE });
 
     // Mock e-mail (no-op spies)
     const emailMod = await import('@/modules/notifications/email');
@@ -184,6 +203,13 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     // Analise IA: vinda do mock
     const analise = reportRow.analise_ia as AnaliseIa;
     expect(analise.resumoExecutivo).toBe(MOCK_ANALISE.resumoExecutivo);
+
+    // ia_usage persistido no caminho de sucesso
+    const [rowUsage] = await tdb
+      .select({ ia_usage: reports.ia_usage })
+      .from(reports)
+      .where(eq(reports.id, result.reportId));
+    expect(rowUsage!.ia_usage).toEqual(MOCK_IA_USAGE);
 
     // Trava do plano: proximo_relatorio_liberado_em ≈ agora + 7d (weekly)
     const [orgRow] = await tdb
@@ -234,7 +260,9 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     // Mock analyzeWithIA (não deve ser chamado)
     const analyzeMod = await import('@/modules/pipeline/steps/analyze-ia');
-    const analyzeSpyFail = vi.spyOn(analyzeMod, 'analyzeWithIA').mockResolvedValue(MOCK_ANALISE);
+    const analyzeSpyFail = vi
+      .spyOn(analyzeMod, 'analyzeWithIA')
+      .mockResolvedValue({ analise: MOCK_ANALISE, usage: MOCK_IA_USAGE });
 
     // Mock e-mail
     const emailMod = await import('@/modules/notifications/email');

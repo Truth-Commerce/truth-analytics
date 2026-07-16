@@ -10,6 +10,15 @@ describe('friendlyReportError', () => {
     expect(friendlyReportError('refresh_bling_falhou')).toContain('Reconecte');
   });
 
+  it('mapeia os códigos novos do refresh classificado (invalido/transiente)', () => {
+    // Permanente: exige re-OAuth do cliente
+    expect(friendlyReportError('bling_refresh_invalido')).toContain('Reconecte');
+    // Transiente: NÃO manda reconectar — só tentar de novo
+    const transiente = friendlyReportError('bling_refresh_transiente');
+    expect(transiente).toContain('novamente');
+    expect(transiente).not.toContain('Reconecte');
+  });
+
   it('NUNCA ecoa código desconhecido (stack/objeto técnico não vaza)', () => {
     const cru = 'TypeError: fetch failed at orchestrator.ts:42';
     const msg = friendlyReportError(cru);
