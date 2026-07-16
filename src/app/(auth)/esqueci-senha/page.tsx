@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useFormState } from 'react-dom';
 
 import {
@@ -48,9 +49,9 @@ export default function EsqueciSenhaPage() {
           )}
           <p className="mt-4 text-center text-sm text-muted">
             Lembrou a senha?{' '}
-            <a href="/sign-in" className="text-brand hover:underline">
+            <Link href="/sign-in" className="text-brand hover:underline">
               Entrar
-            </a>
+            </Link>
           </p>
         </CardContent>
       </Card>

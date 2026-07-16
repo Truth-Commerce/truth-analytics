@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useFormState } from 'react-dom';
 
 import { signInAction, type ActionState } from '@/actions/auth.actions';
@@ -41,15 +42,15 @@ export default function SignInPage() {
             </Button>
           </form>
           <p className="mt-3 text-center text-sm">
-            <a href="/esqueci-senha" className="text-muted hover:text-brand hover:underline" data-testid="esqueci-senha-link">
+            <Link href="/esqueci-senha" className="text-muted hover:text-brand hover:underline" data-testid="esqueci-senha-link">
               Esqueci minha senha
-            </a>
+            </Link>
           </p>
           <p className="mt-4 text-center text-sm text-muted">
             Não tem conta?{' '}
-            <a href="/sign-up" className="text-brand hover:underline">
+            <Link href="/sign-up" className="text-brand hover:underline">
               Criar conta
-            </a>
+            </Link>
           </p>
         </CardContent>
       </Card>

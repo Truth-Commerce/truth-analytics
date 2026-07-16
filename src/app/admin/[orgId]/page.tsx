@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { listAnalistas } from '@/modules/analista/analista.repository';
@@ -47,9 +48,9 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
-      <a href="/admin" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/admin" className="text-sm text-muted transition-colors hover:text-white">
         ← Clientes
-      </a>
+      </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { AchadosCards } from '@/components/tasks/AchadosCards';
@@ -47,9 +48,9 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
 
   return (
     <main className="mx-auto max-w-6xl p-6 md:p-8">
-      <a href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
         ← Voltar
-      </a>
+      </Link>
 
       {/* Hero editorial */}
       <header className="relative mt-4 overflow-hidden rounded-2xl border border-line bg-bg-surface p-8">

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDashboardData } from '@/modules/reports/dashboard-data';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
@@ -97,9 +99,9 @@ export default async function DashboardPage() {
       {conn && conn.status === 'expirado' ? (
         <Alert variant="danger" title="Sua conexão com o Bling expirou">
           Seus dados de vendas pararam de atualizar e os relatórios automáticos foram pausados.{' '}
-          <a href="/conexoes" className="font-medium underline underline-offset-2">
+          <Link href="/conexoes" className="font-medium underline underline-offset-2">
             Reconectar em Conexões →
-          </a>
+          </Link>
         </Alert>
       ) : null}
 
@@ -196,13 +198,13 @@ export default async function DashboardPage() {
                   <p className="text-sm text-muted">{formatPeriodo(latest.periodoInicio, latest.periodoFim)}</p>
                   <p className="text-xs text-dim">{formatData(latest.createdAt)}</p>
                 </div>
-                <a
+                <Link
                   data-testid="ver-relatorio"
                   href={`/dashboard/relatorios/${latest.id}`}
                   className="inline-flex items-center gap-1 text-sm text-brand hover:underline"
                 >
                   Ver relatório →
-                </a>
+                </Link>
               </div>
             ) : (
               <p className="text-muted">Nenhum relatório ainda.</p>
@@ -215,13 +217,13 @@ export default async function DashboardPage() {
       <section id="historico" data-testid="reports-list">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="font-heading text-base font-semibold text-white">Histórico</h2>
-          <a
+          <Link
             data-testid="comparar-periodos-link"
             href="/dashboard/relatorios/comparar"
             className="text-sm text-brand hover:underline"
           >
             Comparar períodos →
-          </a>
+          </Link>
         </div>
         {historico.length > 0 ? (
           <Card className="!p-0">
@@ -265,12 +267,12 @@ export default async function DashboardPage() {
                       )}
                     </TD>
                     <TD>
-                      <a
+                      <Link
                         href={`/dashboard/relatorios/${r.id}`}
                         className="text-sm text-brand hover:underline"
                       >
                         Ver
-                      </a>
+                      </Link>
                     </TD>
                   </TR>
                 ))}

@@ -1,4 +1,7 @@
 import React from 'react';
+import Link from 'next/link';
+
+import { isInternalHref } from './href';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md';
@@ -52,9 +55,16 @@ export function Button({ variant = 'primary', size = 'md', className = '', child
   const base = `inline-flex items-center justify-center rounded-full font-medium transition-all duration-150 outline-none focus-visible:outline-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
 
   if (rest.as === 'a') {
-    const { as: _as, ...anchorRest } = rest as ButtonAsAnchor;
+    const { as: _as, href, ...anchorRest } = rest as ButtonAsAnchor;
+    if (isInternalHref(href)) {
+      return (
+        <Link href={href} className={base} {...anchorRest}>
+          {children}
+        </Link>
+      );
+    }
     return (
-      <a className={base} {...anchorRest}>
+      <a href={href} className={base} {...anchorRest}>
         {children}
       </a>
     );

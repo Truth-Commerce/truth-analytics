@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -40,13 +42,13 @@ export default function LandingPage() {
       {/* ── Top Bar ── */}
       <header className="relative z-10 border-b border-line bg-bg-surface/60 backdrop-blur-sm">
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <a
+          <Link
             href="/"
             aria-label="Truth Analytics — página inicial"
             className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             <Logo withMark size="sm" />
-          </a>
+          </Link>
 
           <div className="flex items-center gap-2">
             <Button as="a" href="/sign-in" variant="secondary" size="sm">

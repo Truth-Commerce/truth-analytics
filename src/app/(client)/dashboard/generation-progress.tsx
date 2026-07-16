@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { Alert } from '@/components/ui/Alert';
@@ -26,12 +27,12 @@ export function GenerationProgress({ reportId }: { reportId: string }) {
       {view.done ? (
         <p className="mt-2 text-sm text-brand">
           Relatório pronto.{' '}
-          <a
+          <Link
             href={`/dashboard/relatorios/${reportId}`}
             className="underline underline-offset-2 hover:text-white"
           >
             Ver relatório →
-          </a>
+          </Link>
         </p>
       ) : null}
       {view.failed ? (

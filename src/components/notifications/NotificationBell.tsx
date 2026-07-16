@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -218,12 +219,12 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
               </button>
             </form>
             {verTodasHref ? (
-              <a
+              <Link
                 href={verTodasHref}
                 className="block w-full rounded-lg px-3 py-2 text-left text-sm text-brand outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 Ver todas
-              </a>
+              </Link>
             ) : null}
           </div>
         </div>

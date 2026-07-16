@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { ScoreGauge } from '@/components/ui/charts/ScoreGauge';
 import { Sparkline } from '@/components/ui/charts/Sparkline';
@@ -39,9 +41,9 @@ export function TruthScoreCard({
             </div>
           ) : null}
           <div className="flex flex-wrap gap-4">
-            <a href={atual ? `/dashboard/relatorios/${atual.id}` : '#'} className="text-sm text-brand hover:underline">
+            <Link href={atual ? `/dashboard/relatorios/${atual.id}` : '#'} className="text-sm text-brand hover:underline">
               Ver breakdown →
-            </a>
+            </Link>
             <a href="#historico" className="text-sm text-brand hover:underline">
               Ver histórico →
             </a>

@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 
 import type { ChipRelatorio } from '@/modules/reports/dashboard-model';
 
@@ -12,13 +13,13 @@ export function InsightChips({ chips }: { chips: ChipRelatorio[] }) {
       className="flex flex-wrap gap-2"
     >
       {chips.map((c) => (
-        <a
+        <Link
           key={c.href}
           href={c.href}
           className="rounded-full border border-line bg-glass px-4 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
         >
           {c.label} →
-        </a>
+        </Link>
       ))}
     </nav>
   );

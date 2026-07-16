@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDoneAnterior, getReportById, listDoneReports } from '@/modules/reports/report.repository';
 import { compararMetricas, compararTopProdutos, leituraComparacao } from '@/modules/reports/compare';
@@ -74,9 +76,9 @@ export default async function CompararPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
-      <a href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
         ← Voltar
-      </a>
+      </Link>
       <h1 className="font-heading text-2xl font-bold text-white">Comparar períodos</h1>
       <CompararForm
         relatorios={dones.map((r) => ({

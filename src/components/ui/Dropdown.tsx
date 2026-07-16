@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+
+import { isInternalHref } from './href';
 
 interface DropdownProps {
   trigger: React.ReactNode;
@@ -67,6 +70,13 @@ export function DropdownItem({ href, onSelect, danger = false, children }: Dropd
     danger ? 'text-danger-fg hover:bg-danger-tint' : 'text-muted hover:bg-white/5 hover:text-white'
   }`;
   if (href) {
+    if (isInternalHref(href)) {
+      return (
+        <Link role="menuitem" href={href} className={cls}>
+          {children}
+        </Link>
+      );
+    }
     return (
       <a role="menuitem" href={href} className={cls}>
         {children}
