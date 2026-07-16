@@ -18,6 +18,7 @@ import {
   taskComentarioTemplate,
   taskCriadaTemplate,
   taskDevolvidaTemplate,
+  taskRevisaoTemplate,
 } from './templates';
 
 /**
@@ -149,6 +150,12 @@ export async function sendTaskDevolvidaEmail(to: string, titulo: string, url: st
  */
 export async function sendTaskAprovadaEmail(to: string, titulo: string, url: string): Promise<void> {
   const content = taskAprovadaTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/** Task aguardando ação da consultoria (analista ou fallback admin). Nunca lança. */
+export async function sendTaskRevisaoEmail(to: string, titulo: string, url: string): Promise<void> {
+  const content = taskRevisaoTemplate(titulo, url);
   await sendEmail({ to, ...content });
 }
 

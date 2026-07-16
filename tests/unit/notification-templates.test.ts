@@ -12,6 +12,7 @@ import {
   taskComentarioTemplate,
   taskCriadaTemplate,
   taskDevolvidaTemplate,
+  taskRevisaoTemplate,
 } from '@/modules/notifications/templates';
 
 describe('escapeHtml', () => {
@@ -294,6 +295,31 @@ describe('notification templates (puro)', () => {
       expect(result.html).toContain('&lt;img');
       expect(result.html).toContain('&quot;quotes&quot;');
       expect(result.html).toContain('&#39;apostrophes&#39;');
+      expect(result.text).toContain(titulo);
+    });
+  });
+
+  describe('taskRevisaoTemplate', () => {
+    it('retorna subject, html e text não-vazios, em pt-BR com Truth Analytics', () => {
+      const result = taskRevisaoTemplate('Revisar catálogo', 'http://app/analista/o1/tasks/t1');
+      expect(result.subject.length).toBeGreaterThan(0);
+      expect(result.html.length).toBeGreaterThan(0);
+      expect(result.text.length).toBeGreaterThan(0);
+      expect(result.subject).toContain('Truth Analytics');
+    });
+
+    it('text e html contêm o título da tarefa e a url', () => {
+      const result = taskRevisaoTemplate('Revisar catálogo', 'http://app/analista/o1/tasks/t1');
+      expect(result.text).toContain('Revisar catálogo');
+      expect(result.text).toContain('http://app/analista/o1/tasks/t1');
+      expect(result.html).toContain('http://app/analista/o1/tasks/t1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)>';
+      const result = taskRevisaoTemplate(titulo, 'http://app/analista/o1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
       expect(result.text).toContain(titulo);
     });
   });

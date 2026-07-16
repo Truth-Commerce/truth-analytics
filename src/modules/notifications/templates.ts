@@ -258,6 +258,31 @@ export function taskAprovadaTemplate(titulo: string, url: string): EmailContent 
 }
 
 /**
+ * Template: task aguardando ação da consultoria (revisão pelo cliente, nova
+ * task criada pelo cliente ou conversão de achados). Genérico de propósito —
+ * serve tanto ao analista da org quanto ao e-mail de fallback do admin.
+ */
+export function taskRevisaoTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Tarefa aguardando sua atenção — Truth Analytics';
+  const text = [
+    'Uma tarefa precisa da atenção da consultoria.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Uma tarefa precisa da atenção da consultoria.</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(titulo)}</p>
+<p><a href="${escapeHtml(url)}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
  * Template: alerta de inteligência (queda de vendas, concorrente abaixo do
  * preço, produto parado). Enviado ao cliente quando o cron detecta um novo
  * alerta. `titulo`/`corpo` vêm dos detectores (texto já pt-BR).

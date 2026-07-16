@@ -79,6 +79,12 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
                 >
                   Consultoria
                 </a>
+                <a
+                  href="/analista"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  Carteira
+                </a>
               </>
             )}
             {variant === 'analista' && (
@@ -199,6 +205,13 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
                     className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
                   >
                     Consultoria
+                  </a>
+                  <a
+                    href="/analista"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                  >
+                    Carteira
                   </a>
                 </>
               )}

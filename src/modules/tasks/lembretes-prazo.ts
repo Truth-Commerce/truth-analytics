@@ -6,7 +6,11 @@ import { logger } from '@/lib/logger';
 import { hojeBrt } from '@/lib/timezone';
 import { sendLembretePrazoEmail } from '@/modules/notifications/email';
 import { notify } from '@/modules/notifications/notification.repository';
-import { getOrgAnalistaUser, getOrgPrimaryUser } from '@/modules/notifications/recipients';
+import {
+  getAdminAlertEmail,
+  getOrgAnalistaUser,
+  getOrgPrimaryUser,
+} from '@/modules/notifications/recipients';
 
 import { labelPrazo, somarDias, statusPrazo, VENCE_EM_BREVE_DIAS } from './sla';
 
@@ -100,6 +104,13 @@ export async function processarLembretesDePrazo(agora: Date = new Date()): Promi
             href: `/analista/${t.orgId}/tasks/${t.taskId}`,
           });
           await sendLembretePrazoEmail(analista.email, { titulo: t.titulo, prazoLabel, tipo: t.tipo });
+        } else {
+          // Org sem analista: fallback de e-mail ao admin (Task 10 — G3);
+          // sem in-app (não há user determinístico). Env ausente → descarta.
+          const adminEmail = getAdminAlertEmail();
+          if (adminEmail) {
+            await sendLembretePrazoEmail(adminEmail, { titulo: t.titulo, prazoLabel, tipo: t.tipo });
+          }
         }
       }
       // Ledger de dedup — só grava se notificou (ou tentou) sem lançar.

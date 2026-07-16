@@ -1,12 +1,17 @@
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { notify } from '@/modules/notifications/notification.repository';
-import { getOrgAnalistaUser, getOrgPrimaryUser } from '@/modules/notifications/recipients';
+import {
+  getAdminAlertEmail,
+  getOrgAnalistaUser,
+  getOrgPrimaryUser,
+} from '@/modules/notifications/recipients';
 import {
   sendTaskAprovadaEmail,
   sendTaskComentarioEmail,
   sendTaskCriadaEmail,
   sendTaskDevolvidaEmail,
+  sendTaskRevisaoEmail,
 } from '@/modules/notifications/email';
 
 type Destinatario = { id: string; email: string };
@@ -35,10 +40,24 @@ async function dispatch(input: {
   href: string;
   getDestinatario: () => Promise<Destinatario | null>;
   enviarEmail?: EmailSender;
+  /**
+   * Sem destinatário (org sem analista): manda o e-mail para
+   * getAdminAlertEmail() — sem in-app (não há user determinístico). Se a env
+   * não estiver configurada, comporta-se como antes (descarte).
+   */
+  fallbackEmailAdmin?: boolean;
 }): Promise<void> {
   try {
     const destinatario = await input.getDestinatario();
-    if (!destinatario) return;
+    const url = `${serverEnv.APP_URL}${input.href}`;
+
+    if (!destinatario) {
+      if (input.fallbackEmailAdmin && input.enviarEmail) {
+        const adminEmail = getAdminAlertEmail();
+        if (adminEmail) await input.enviarEmail(adminEmail, input.corpo, url);
+      }
+      return;
+    }
 
     await notify(destinatario.id, {
       tipo: input.tipo,
@@ -48,7 +67,6 @@ async function dispatch(input: {
     });
 
     if (input.enviarEmail) {
-      const url = `${serverEnv.APP_URL}${input.href}`;
       await input.enviarEmail(destinatario.email, input.corpo, url);
     }
   } catch (e) {
@@ -69,7 +87,7 @@ export async function notifyTaskCriada(orgId: string, taskId: string, titulo: st
   });
 }
 
-/** Task movida para em_revisao pelo cliente → notifica o analista da org (sem e-mail dedicado). */
+/** Task movida para em_revisao pelo cliente → notifica o analista da org (fallback: e-mail admin). */
 export async function notifyTaskEmRevisao(orgId: string, taskId: string, titulo: string): Promise<void> {
   await dispatch({
     taskId,
@@ -78,6 +96,26 @@ export async function notifyTaskEmRevisao(orgId: string, taskId: string, titulo:
     corpo: titulo,
     href: hrefAnalista(orgId, taskId),
     getDestinatario: () => getOrgAnalistaUser(orgId),
+    enviarEmail: sendTaskRevisaoEmail,
+    fallbackEmailAdmin: true,
+  });
+}
+
+/** Task criada PELO CLIENTE → notifica o analista da org (fallback: e-mail admin). */
+export async function notifyTaskCriadaPeloCliente(
+  orgId: string,
+  taskId: string,
+  titulo: string,
+): Promise<void> {
+  await dispatch({
+    taskId,
+    tipo: 'task_criada_cliente',
+    tituloNotificacao: 'Cliente criou uma tarefa',
+    corpo: titulo,
+    href: hrefAnalista(orgId, taskId),
+    getDestinatario: () => getOrgAnalistaUser(orgId),
+    enviarEmail: sendTaskRevisaoEmail,
+    fallbackEmailAdmin: true,
   });
 }
 
@@ -126,8 +164,32 @@ export async function notifyTasksDoRelatorio(orgId: string, reportId: string, cr
 }
 
 /**
+ * Cliente converteu achados do relatório em N tasks → notifica o analista da
+ * org (fallback: e-mail admin). Espelho de notifyTasksDoRelatorio para o outro
+ * lado da conversa (Task 10 — G3).
+ */
+export async function notifyTasksDoRelatorioParaAnalista(
+  orgId: string,
+  reportId: string,
+  criadas: number,
+): Promise<void> {
+  const texto = `Cliente criou ${criadas} tarefa(s) a partir do relatório`;
+  await dispatch({
+    taskId: reportId,
+    tipo: 'tasks_do_relatorio_cliente',
+    tituloNotificacao: texto,
+    corpo: texto,
+    href: `/analista/${orgId}`,
+    getDestinatario: () => getOrgAnalistaUser(orgId),
+    enviarEmail: sendTaskRevisaoEmail,
+    fallbackEmailAdmin: true,
+  });
+}
+
+/**
  * Novo comentário em uma task → notifica o outro lado da conversa:
  * autor cliente → analista da org; autor analista/admin → cliente da org.
+ * Fallback de e-mail admin só quando o alvo é a consultoria (autor cliente).
  */
 export async function notifyTaskComentario(
   orgId: string,
@@ -143,5 +205,6 @@ export async function notifyTaskComentario(
     href: autorEhCliente ? hrefAnalista(orgId, taskId) : hrefCliente(taskId),
     getDestinatario: () => (autorEhCliente ? getOrgAnalistaUser(orgId) : getOrgPrimaryUser(orgId)),
     enviarEmail: sendTaskComentarioEmail,
+    fallbackEmailAdmin: autorEhCliente,
   });
 }

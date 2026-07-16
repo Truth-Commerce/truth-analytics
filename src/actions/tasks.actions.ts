@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { logger } from '@/lib/logger';
+import { hojeBrt } from '@/lib/timezone';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { requireSession } from '@/modules/auth/require-session';
@@ -15,7 +16,7 @@ import type { UserAccess } from '@/modules/auth/user.types';
 import { CHECKLIST_UNCHECKED, toggleChecklistLine } from '@/modules/tasks/checklist-line';
 import { FONTES_ANALISE } from '@/modules/tasks/report-to-task';
 import { createTasksFromReport } from '@/modules/tasks/report-to-task.repository';
-import { prazoDefault } from '@/modules/tasks/sla';
+import { prazoDefault, somarDias } from '@/modules/tasks/sla';
 import { recordTaskActivity } from '@/modules/tasks/task-activity.repository';
 import { addTaskComment } from '@/modules/tasks/task-comment.repository';
 import { getTemplateById } from '@/modules/tasks/task-template.repository';
@@ -31,9 +32,11 @@ import {
   notifyTaskAprovada,
   notifyTaskComentario,
   notifyTaskCriada,
+  notifyTaskCriadaPeloCliente,
   notifyTaskDevolvida,
   notifyTaskEmRevisao,
   notifyTasksDoRelatorio,
+  notifyTasksDoRelatorioParaAnalista,
 } from '@/modules/tasks/task-notifications';
 import { proximoStatusAoConcluir } from '@/modules/tasks/task-transitions';
 import {
@@ -42,6 +45,7 @@ import {
   TASK_TIPOS,
   type TaskAtor,
   type TaskCriadoPor,
+  type TaskPrioridade,
 } from '@/modules/tasks/task.types';
 
 export type TaskActionState = { error?: string; ok?: boolean; taskId?: string };
@@ -107,7 +111,9 @@ function revalidateTaskRoutes(orgId: string): void {
 const createTaskSchema = z.object({
   titulo: z.string().trim().min(3).max(200),
   tipo: z.enum(TASK_TIPOS),
-  prioridade: z.enum(TASK_PRIORIDADES),
+  // default: o form de template (Task 10) não envia prioridade — ela vem do
+  // playbook; os demais forms continuam enviando o select explicitamente.
+  prioridade: z.enum(TASK_PRIORIDADES).default('media'),
   descricao: z.string().max(5000).optional().default(''),
   prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   templateId: z.string().min(1).optional(),
@@ -124,7 +130,7 @@ export async function createTaskAction(
   const parsed = createTaskSchema.safeParse({
     titulo: formData.get('titulo'),
     tipo: formData.get('tipo'),
-    prioridade: formData.get('prioridade'),
+    prioridade: formData.get('prioridade') || undefined,
     descricao: formData.get('descricao') ?? '',
     prazo: formData.get('prazo') || undefined,
     templateId: formData.get('templateId') || undefined,
@@ -134,18 +140,27 @@ export async function createTaskAction(
   let { titulo, tipo, descricao } = parsed.data;
   const { prioridade, prazo, templateId } = parsed.data;
 
+  let prioridadeFinal: TaskPrioridade = prioridade;
+  let prazoFinal: string | null = prazo ?? null;
+
   // templateId é um recurso do analista/admin — cliente nunca copia template.
   if (templateId && ator !== 'cliente') {
     const template = await getTemplateById(templateId);
-    if (template && template.ativo) {
-      titulo = template.titulo;
-      tipo = template.tipo;
-      descricao = template.descricao;
-      if (template.checklist.length > 0) {
-        const checklistLines = template.checklist.map((item) => `${CHECKLIST_UNCHECKED}${item}`).join('\n');
-        descricao = descricao ? `${descricao}\n${checklistLines}` : checklistLines;
-      }
+    if (!template || !template.ativo) {
+      // Antes: caía no fluxo normal e criava a task placeholder "Task de
+      // template" (o form envia titulo oculto). Agora: erro honesto.
+      return { error: 'Template indisponível. Atualize a página e tente novamente.' };
     }
+    titulo = template.titulo;
+    tipo = template.tipo;
+    descricao = template.descricao;
+    if (template.checklist.length > 0) {
+      const checklistLines = template.checklist.map((item) => `${CHECKLIST_UNCHECKED}${item}`).join('\n');
+      descricao = descricao ? `${descricao}\n${checklistLines}` : checklistLines;
+    }
+    prioridadeFinal = template.prioridade;
+    prazoFinal =
+      prazo ?? (template.prazoDias != null ? somarDias(hojeBrt(), template.prazoDias) : null);
   }
 
   const criadoPor: TaskCriadoPor = ator === 'cliente' ? 'cliente' : 'analista';
@@ -155,17 +170,18 @@ export async function createTaskAction(
     titulo,
     descricao,
     tipo,
-    prioridade,
+    prioridade: prioridadeFinal,
     criadoPor,
-    prazo: prazo ?? prazoDefault(prioridade),
+    prazo: prazoFinal ?? prazoDefault(prioridadeFinal),
     actorUserId: access.id,
   });
 
-  // Gatilho: só quando quem criou foi analista/admin — o cliente é notificado
-  // de novas tasks para o seu próprio Plano de Ação; ele mesmo criando não gera
-  // notificação para si mesmo.
+  // Gatilho simétrico (Task 10 — G3): analista/admin criou → avisa o cliente;
+  // cliente criou → avisa o analista da org (fallback: e-mail admin).
   if (ator !== 'cliente') {
     await notifyTaskCriada(orgId, taskId, titulo);
+  } else {
+    await notifyTaskCriadaPeloCliente(orgId, taskId, titulo);
   }
 
   await recordAudit({ orgId, userId: access.id, acao: 'task.criada', detalhes: { taskId, titulo } });
@@ -659,9 +675,12 @@ export async function createTasksFromReportAction(
       acao: 'task.criadas_de_relatorio',
       detalhes: { reportId, criadas },
     });
-    // Cliente convertendo os próprios achados não se auto-notifica.
+    // Gatilho simétrico (Task 10 — G3): analista/admin converteu → avisa o
+    // cliente; cliente converteu → avisa o analista (fallback: e-mail admin).
     if (ator !== 'cliente') {
       await notifyTasksDoRelatorio(orgId, reportId, criadas);
+    } else {
+      await notifyTasksDoRelatorioParaAnalista(orgId, reportId, criadas);
     }
     revalidatePath('/dashboard'); // card "Ação nº 1" (G2) — refresca o jaExiste
     revalidatePath('/dashboard/plano-de-acao');

@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Sem contexto de request nos testes de action: revalidatePath e a sessão
@@ -11,8 +11,10 @@ vi.mock('@/modules/auth/require-session', () => ({
 }));
 
 import { db } from '@/db/client';
-import { organizations, taskActivities, tasks, users } from '@/db/schema';
-import { deleteTaskFormAction, updateTaskAction } from '@/actions/tasks.actions';
+import { organizations, taskActivities, tasks, taskTemplates, users } from '@/db/schema';
+import { createTaskAction, deleteTaskFormAction, updateTaskAction } from '@/actions/tasks.actions';
+import { hojeBrt } from '@/lib/timezone';
+import { somarDias } from '@/modules/tasks/sla';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -131,5 +133,91 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
 
     const rows = await db.select().from(tasks).where(eq(tasks.id, t3!.id));
     expect(rows).toHaveLength(0);
+  });
+
+  describe('createTaskAction com template (integração)', () => {
+    it('template desativado → erro, NÃO cria task placeholder', async () => {
+      sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+      const [tpl] = await db
+        .insert(taskTemplates)
+        .values({ titulo: `${PREFIX}tpl-off-${RUN}`, tipo: 'preco', ativo: false })
+        .returning({ id: taskTemplates.id });
+      try {
+        const r = await createTaskAction(
+          {},
+          form({ orgId, titulo: 'Task de template', tipo: 'outro', prioridade: 'media', templateId: tpl!.id }),
+        );
+        expect(r.error).toBe('Template indisponível. Atualize a página e tente novamente.');
+        const criadas = await db
+          .select()
+          .from(tasks)
+          .where(and(eq(tasks.org_id, orgId), eq(tasks.titulo, 'Task de template')));
+        expect(criadas).toHaveLength(0);
+      } finally {
+        await db.delete(taskTemplates).where(eq(taskTemplates.id, tpl!.id));
+      }
+    });
+
+    it('template inexistente → mesmo erro honesto', async () => {
+      sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+      const r = await createTaskAction(
+        {},
+        form({
+          orgId,
+          titulo: 'Task de template',
+          tipo: 'outro',
+          prioridade: 'media',
+          templateId: '00000000-0000-0000-0000-000000000000',
+        }),
+      );
+      expect(r.error).toBe('Template indisponível. Atualize a página e tente novamente.');
+    });
+
+    it('template ativo aplica prioridade e prazo_dias do playbook', async () => {
+      sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+      const [tpl] = await db
+        .insert(taskTemplates)
+        .values({ titulo: `${PREFIX}tpl-on-${RUN}`, tipo: 'preco', ativo: true, prioridade: 'alta', prazo_dias: 5 })
+        .returning({ id: taskTemplates.id });
+      try {
+        const r = await createTaskAction(
+          {},
+          form({ orgId, titulo: 'Task de template', tipo: 'outro', prioridade: 'media', templateId: tpl!.id }),
+        );
+        expect(r.ok).toBe(true);
+        const [t] = await db.select().from(tasks).where(eq(tasks.id, r.taskId!));
+        expect(t!.titulo).toBe(`${PREFIX}tpl-on-${RUN}`);
+        expect(t!.prioridade).toBe('alta');
+        expect(t!.prazo).toBe(somarDias(hojeBrt(), 5));
+      } finally {
+        await db.delete(taskTemplates).where(eq(taskTemplates.id, tpl!.id));
+      }
+    });
+
+    it('prazo do form vence o prazo_dias do playbook', async () => {
+      sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+      const [tpl] = await db
+        .insert(taskTemplates)
+        .values({ titulo: `${PREFIX}tpl-form-${RUN}`, tipo: 'preco', ativo: true, prioridade: 'alta', prazo_dias: 5 })
+        .returning({ id: taskTemplates.id });
+      try {
+        const r = await createTaskAction(
+          {},
+          form({
+            orgId,
+            titulo: 'Task de template',
+            tipo: 'outro',
+            prioridade: 'media',
+            prazo: '2027-01-15',
+            templateId: tpl!.id,
+          }),
+        );
+        expect(r.ok).toBe(true);
+        const [t] = await db.select().from(tasks).where(eq(tasks.id, r.taskId!));
+        expect(t!.prazo).toBe('2027-01-15');
+      } finally {
+        await db.delete(taskTemplates).where(eq(taskTemplates.id, tpl!.id));
+      }
+    });
   });
 });
