@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { organizations, users } from '@/db/schema';
@@ -97,4 +97,52 @@ export async function getUserAuthById(
 
 export async function setUserPasswordHash(userId: string, senha_hash: string): Promise<void> {
   await db.update(users).set({ senha_hash }).where(eq(users.id, userId));
+}
+
+export const MAX_USERS_CLIENT_POR_ORG = 3;
+
+export async function listOrgUsers(
+  orgId: string,
+): Promise<Array<{ id: string; email: string; role: string; created_at: Date }>> {
+  return db
+    .select({ id: users.id, email: users.email, role: users.role, created_at: users.created_at })
+    .from(users)
+    .where(eq(users.org_id, orgId))
+    .orderBy(asc(users.created_at), asc(users.id));
+}
+
+/**
+ * Cria um usuário adicional role='client' na org (fluxo do admin Truth).
+ * Lança 'email_em_uso' (inclusive na corrida via unique 23505) e
+ * 'limite_usuarios' (MAX_USERS_CLIENT_POR_ORG).
+ */
+export async function createOrgClientUser(input: {
+  orgId: string;
+  email: string;
+  senha: string;
+}): Promise<{ userId: string }> {
+  const email = normalizeEmail(input.email);
+
+  const existing = await getUserByEmail(email);
+  if (existing) throw new Error('email_em_uso');
+
+  const [{ n }] = await db
+    .select({ n: count() })
+    .from(users)
+    .where(and(eq(users.org_id, input.orgId), eq(users.role, 'client')));
+  if (Number(n) >= MAX_USERS_CLIENT_POR_ORG) throw new Error('limite_usuarios');
+
+  const senha_hash = await hashPassword(input.senha);
+  try {
+    const [user] = await db
+      .insert(users)
+      .values({ org_id: input.orgId, email, senha_hash, role: 'client' })
+      .returning({ id: users.id });
+    return { userId: user.id };
+  } catch (e: unknown) {
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+      throw new Error('email_em_uso');
+    }
+    throw e;
+  }
 }

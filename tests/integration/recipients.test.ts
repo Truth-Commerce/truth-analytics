@@ -31,9 +31,19 @@ describe.skipIf(!url)('recipients — integração', () => {
         email: `cliente-${RUN}@ta-test.com`,
         senha_hash: 'hash_placeholder',
         role: 'client',
+        created_at: new Date('2026-01-01T00:00:00Z'),
       })
       .returning({ id: users.id });
     userAId = userA.id;
+
+    // 2º usuário MAIS NOVO na org A — o "primário" deve continuar sendo o mais antigo
+    await tdb.insert(users).values({
+      org_id: orgAId,
+      email: `cliente-segundo-${RUN}@ta-test.com`,
+      senha_hash: 'hash_placeholder',
+      role: 'client',
+      created_at: new Date('2026-06-01T00:00:00Z'),
+    });
 
     // Org B com um usuário diferente (isolamento)
     const [orgB] = await tdb
@@ -98,5 +108,14 @@ describe.skipIf(!url)('recipients — integração', () => {
     const { getOrgPrimaryEmail } = await import('@/modules/notifications/recipients');
     const email = await getOrgPrimaryEmail('00000000-0000-0000-0000-000000000000');
     expect(email).toBeNull();
+  });
+
+  it('com 2 usuários na org, o primário é o mais antigo (determinístico)', async () => {
+    const { getOrgPrimaryEmail, getOrgPrimaryUser } = await import(
+      '@/modules/notifications/recipients'
+    );
+    expect(await getOrgPrimaryEmail(orgAId)).toBe(`cliente-${RUN}@ta-test.com`);
+    const user = await getOrgPrimaryUser(orgAId);
+    expect(user?.id).toBe(userAId);
   });
 });

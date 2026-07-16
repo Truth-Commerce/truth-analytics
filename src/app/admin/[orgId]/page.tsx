@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { listAnalistas } from '@/modules/analista/analista.repository';
 import { requireAdmin } from '@/modules/auth/require-admin';
+import { listOrgUsers } from '@/modules/auth/user.repository';
 import {
   getOrgConnectionHealth,
   getOrganizationById,
@@ -23,6 +24,7 @@ import { PageHeader } from '@/components/page-header';
 import { Reveal } from '@/components/reveal';
 import { AtribuirAnalista } from './atribuir-analista';
 import { MetaMensalForm } from './meta-mensal-form';
+import { OrgUsers } from './org-users';
 import { ReportActions } from './report-actions';
 import { GenerateNow } from './generate-now';
 
@@ -45,14 +47,16 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
   const org = await getOrganizationById(params.orgId);
   if (!org) notFound();
 
-  const [relatorios, saude, produtos, analistas, analistaAtual, settings] = await Promise.all([
-    listOrgReports(org.id),
-    getOrgConnectionHealth(org.id),
-    listTrackedProducts(org.id),
-    listAnalistas(),
-    getOrgAnalistaUser(org.id),
-    getOrgSettings(org.id),
-  ]);
+  const [relatorios, saude, produtos, analistas, analistaAtual, settings, usuarios] =
+    await Promise.all([
+      listOrgReports(org.id),
+      getOrgConnectionHealth(org.id),
+      listTrackedProducts(org.id),
+      listAnalistas(),
+      getOrgAnalistaUser(org.id),
+      getOrgSettings(org.id),
+      listOrgUsers(org.id),
+    ]);
 
   const saudeInfo = SAUDE_BADGE[saude?.saude ?? 'nenhuma'];
 
@@ -79,6 +83,26 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
           </CardHeader>
           <CardContent>
             <AtribuirAnalista orgId={org.id} analistas={analistas} analistaAtual={analistaAtual} />
+          </CardContent>
+        </Card>
+      </Reveal>
+
+      <Reveal>
+        <Card data-testid="org-users-card">
+          <CardHeader>
+            <CardTitle as="h2" className="text-base">
+              Usuários ({usuarios.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OrgUsers
+              orgId={org.id}
+              usuarios={usuarios.map((u) => ({
+                id: u.id,
+                email: u.email,
+                createdAt: formatData(u.created_at),
+              }))}
+            />
           </CardContent>
         </Card>
       </Reveal>
