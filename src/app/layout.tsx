@@ -35,7 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR" className={`${sora.variable} ${inter.variable} ${spaceMono.variable}`}>
       <body className="font-sans">
         <MotionProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <div id="app-content">{children}</div>
+          </ToastProvider>
         </MotionProvider>
       </body>
     </html>

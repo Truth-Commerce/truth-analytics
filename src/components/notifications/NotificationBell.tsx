@@ -47,6 +47,8 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   const fetchNotifications = useCallback(async () => {
@@ -95,6 +97,19 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
     };
   }, [open]);
 
+  // Foco: entra no popover ao abrir; volta ao sino ao fechar (a11y do "dialog" não-modal).
+  const abertoAntes = useRef(false);
+  useEffect(() => {
+    if (open) {
+      abertoAntes.current = true;
+      const primeiro = popRef.current?.querySelector<HTMLElement>('button, a[href]');
+      primeiro?.focus();
+    } else if (abertoAntes.current) {
+      abertoAntes.current = false;
+      btnRef.current?.focus();
+    }
+  }, [open]);
+
   async function handleItemClick(item: NotificationItem) {
     const fd = new FormData();
     fd.set('notificationId', item.id);
@@ -118,13 +133,14 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
   return (
     <div ref={rootRef} className="relative inline-block">
       <button
+        ref={btnRef}
         type="button"
         data-testid="notification-bell"
         aria-label="Notificações"
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="relative rounded-full p-2 text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+        className="relative rounded-full p-2.5 text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -153,7 +169,9 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
 
       {open && (
         <div
-          role="menu"
+          ref={popRef}
+          role="dialog"
+          aria-label="Notificações"
           className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-bg-surface/95 p-1.5 backdrop-blur-md"
         >
           <div className="max-h-96 overflow-y-auto">
