@@ -1,0 +1,49 @@
+# Todos os crons rodam aqui: o plano Hobby da Vercel limita a 2 crons por
+# projeto, 1x/dia e com janela de ±1h. O GitHub Actions não tem essas
+# restrições e dá horário exato. Cada schedule mapeia para uma rota
+# /api/cron/* via github.event.schedule (horários em UTC, como na Vercel).
+# Watchdog a cada 30 min (billing mínimo de 1 min/job → */10 estouraria os
+# 2000 min/mês grátis da org); detecção de relatório travado em até ~30 min.
+name: Crons
+
+on:
+  schedule:
+    - cron: "*/30 * * * *" # watchdog
+    - cron: "0 7 * * *" # sincronizar-pedidos
+    - cron: "0 9 * * *" # gerar-relatorios
+    - cron: "30 9 * * *" # verificar-alertas
+    - cron: "0 12 * * 1" # digest-semanal
+  workflow_dispatch:
+    inputs:
+      rota:
+        description: "Rota de cron a chamar (ex.: watchdog)"
+        required: true
+        default: "watchdog"
+
+jobs:
+  chamar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Resolver rota pelo agendamento
+        id: rota
+        env:
+          ROTA_MANUAL: ${{ inputs.rota }}
+        run: |
+          case "${{ github.event.schedule }}" in
+            "*/30 * * * *") rota=watchdog ;;
+            "0 7 * * *") rota=sincronizar-pedidos ;;
+            "0 9 * * *") rota=gerar-relatorios ;;
+            "30 9 * * *") rota=verificar-alertas ;;
+            "0 12 * * 1") rota=digest-semanal ;;
+            *) rota="$ROTA_MANUAL" ;;
+          esac
+          echo "rota=$rota" >> "$GITHUB_OUTPUT"
+      - name: Chamar rota de cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ROTA: ${{ steps.rota.outputs.rota }}
+        run: |
+          curl --fail --silent --show-error --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://truth-analytics.vercel.app/api/cron/$ROTA"

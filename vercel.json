@@ -1,8 +1,0 @@
-{
-  "crons": [
-    { "path": "/api/cron/sincronizar-pedidos", "schedule": "0 7 * * *" },
-    { "path": "/api/cron/gerar-relatorios", "schedule": "0 9 * * *" },
-    { "path": "/api/cron/verificar-alertas", "schedule": "30 9 * * *" },
-    { "path": "/api/cron/digest-semanal", "schedule": "0 12 * * 1" }
-  ]
-}
