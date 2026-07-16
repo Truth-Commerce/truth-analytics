@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useFormState } from 'react-dom';
 
 import { signUpAction, type ActionState } from '@/actions/auth.actions';
+import { Alert } from '@/components/ui/Alert';
 import { Logo } from '@/components/ui/Logo';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
@@ -35,11 +36,7 @@ export default function SignUpPage() {
             <Field label="Senha" htmlFor="senha">
               <Input id="senha" name="senha" type="password" placeholder="••••••••" autoComplete="new-password" />
             </Field>
-            {state.error ? (
-              <p className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-sm text-red-400">
-                {state.error}
-              </p>
-            ) : null}
+            {state.error ? <Alert variant="danger">{state.error}</Alert> : null}
             <Button type="submit" variant="primary" className="mt-2 w-full justify-center">
               Cadastrar
             </Button>

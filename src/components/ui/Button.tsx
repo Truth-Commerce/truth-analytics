@@ -35,15 +35,17 @@ interface ButtonAsAnchor extends ButtonBaseProps {
 
 type ButtonProps = ButtonAsButton | ButtonAsAnchor;
 
+const FOCUS_RING =
+  'focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base';
+
+const FOCUS_RING_DANGER =
+  'focus-visible:ring-2 focus-visible:ring-danger/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base';
+
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    'bg-brand text-[#04150a] font-semibold hover:shadow-glow focus-visible:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none',
-  secondary:
-    'border border-strong bg-white/5 text-white hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed',
-  ghost:
-    'text-muted hover:text-white focus-visible:ring-1 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed',
-  danger:
-    'border border-red-500/40 text-red-400 hover:bg-red-500/10 focus-visible:ring-1 focus-visible:ring-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed',
+  primary: `bg-brand text-[#04150a] font-semibold hover:shadow-glow focus-visible:shadow-glow ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none`,
+  secondary: `border border-strong bg-white/5 text-white hover:bg-white/10 ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
+  ghost: `text-muted hover:text-white ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
+  danger: `border border-danger-border text-danger-fg hover:bg-danger-tint ${FOCUS_RING_DANGER} disabled:opacity-50 disabled:cursor-not-allowed`,
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

@@ -7,6 +7,7 @@ import {
   requestPasswordResetAction,
   type ResetRequestState,
 } from '@/actions/password-reset.actions';
+import { Alert } from '@/components/ui/Alert';
 import { Logo } from '@/components/ui/Logo';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
@@ -29,19 +30,15 @@ export default function EsqueciSenhaPage() {
         <CardContent>
           <h1 className="mb-6 font-heading text-lg font-semibold text-white">Esqueci minha senha</h1>
           {state.ok ? (
-            <p className="rounded-lg bg-brand/10 border border-brand/30 px-3 py-2 text-sm text-brand" data-testid="reset-solicitado">
+            <Alert variant="success" data-testid="reset-solicitado">
               Se existir uma conta com este e-mail, enviamos as instruções de redefinição.
-            </p>
+            </Alert>
           ) : (
             <form action={action} className="flex flex-col gap-4">
               <Field label="E-mail" htmlFor="email">
                 <Input id="email" name="email" type="email" placeholder="voce@empresa.com" autoComplete="email" />
               </Field>
-              {state.error ? (
-                <p className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-sm text-red-400">
-                  {state.error}
-                </p>
-              ) : null}
+              {state.error ? <Alert variant="danger">{state.error}</Alert> : null}
               <Button type="submit" variant="primary" className="mt-2 w-full justify-center" data-testid="reset-request-button">
                 Enviar instruções
               </Button>

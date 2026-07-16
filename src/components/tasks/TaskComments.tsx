@@ -77,6 +77,7 @@ export function TaskComments({
           rows={3}
           maxLength={2000}
           required
+          aria-label="Escreva um comentário"
           placeholder="Escreva um comentário..."
           className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-white outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
         />

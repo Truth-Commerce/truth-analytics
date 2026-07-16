@@ -17,6 +17,13 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
 
   return (
     <div className="min-h-screen bg-bg-base">
+      {/* Skip-link — primeiro foco tabulável, revela ao focar */}
+      <a
+        href="#conteudo"
+        className="sr-only rounded-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-[#04150a] focus:outline-none focus:ring-2 focus:ring-brand/60 focus:ring-offset-2 focus:ring-offset-bg-base"
+      >
+        Pular para o conteúdo
+      </a>
       {/* Top navigation */}
       <header className="sticky top-0 z-40 border-b border-line bg-bg-surface/80 backdrop-blur-sm">
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -242,7 +249,9 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
       {/* Page content — div (not main) so each page provides the single <main> landmark */}
       {/* Gutter único: TODA página roteada tem p-6 md:p-8 próprio (verificado) —
           o px-4 daqui dobrava a margem no mobile (40px por lado no QA). */}
-      <div className="py-8">{children}</div>
+      <div id="conteudo" tabIndex={-1} className="py-8 outline-none">
+        {children}
+      </div>
 
       <CommandPalette variant={variant} />
     </div>
