@@ -4,6 +4,7 @@ import { Document, Page, Path, StyleSheet, Svg, Text, View, renderToBuffer } fro
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 import { deltaNumero, totalPedidos, totalVendas } from '@/modules/reports/compare';
 import { PRIORIDADE_LABEL, ordenarAchados, recomendacaoCards } from '@/modules/reports/report-view-model';
+import { corDoCanal } from '@/lib/canal-visual';
 
 import { GAUGE_INICIO, anguloDoScore, arcoPath, barrasEvolucao } from './pdf-gauge';
 import { registerPdfFonts } from './fonts';
@@ -331,7 +332,18 @@ export function ReportPdf({ orgName, periodo, geradoEm, metricas, analise, anali
         </View>
         {metricas.vendasPorCanal.map((v, i) => (
           <View key={i} style={s.row} wrap={false}>
-            <Text style={{ width: '50%' }}>{v.canal}</Text>
+            <View style={{ width: '50%', flexDirection: 'row', alignItems: 'center' }}>
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  marginRight: 4,
+                  backgroundColor: corDoCanal(v.canal),
+                }}
+              />
+              <Text>{v.canal}</Text>
+            </View>
             <Text style={[s.mono, { width: '25%', textAlign: 'right' }]}>{BRL(v.total)}</Text>
             <Text style={[s.mono, { width: '25%', textAlign: 'right' }]}>{v.pedidos}</Text>
           </View>
