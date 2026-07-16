@@ -13,7 +13,7 @@ import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { requireSession } from '@/modules/auth/require-session';
 import type { UserAccess } from '@/modules/auth/user.types';
-import { CHECKLIST_UNCHECKED, toggleChecklistLine } from '@/modules/tasks/checklist-line';
+import { CHECKLIST_UNCHECKED } from '@/modules/tasks/checklist-line';
 import { FONTES_ANALISE } from '@/modules/tasks/report-to-task';
 import { createTasksFromReport } from '@/modules/tasks/report-to-task.repository';
 import { prazoDefault, somarDias } from '@/modules/tasks/sla';
@@ -26,6 +26,7 @@ import {
   getTaskById,
   moveTask,
   reorderTask,
+  toggleChecklistItemTx,
   updateTask,
 } from '@/modules/tasks/task.repository';
 import {
@@ -588,17 +589,8 @@ export async function toggleChecklistItemFormAction(formData: FormData): Promise
   }
   const { taskId, index } = parsed.data;
 
-  const task = await getTaskById(taskId, orgId);
-  if (!task) {
-    logger.warn('toggleChecklistItemFormAction: task não encontrada', { orgId, taskId });
-    return;
-  }
-
-  const novaDescricao = toggleChecklistLine(task.descricao, index);
-  if (novaDescricao === task.descricao) return; // index fora do range ou linha não-checklist — no-op
-
   try {
-    await updateTask({ taskId, orgId, actorUserId: access.id, patch: { descricao: novaDescricao } });
+    await toggleChecklistItemTx({ taskId, orgId, index, actorUserId: access.id });
   } catch (e) {
     logger.warn('toggleChecklistItemFormAction falhou', { orgId, taskId }, e);
     return;

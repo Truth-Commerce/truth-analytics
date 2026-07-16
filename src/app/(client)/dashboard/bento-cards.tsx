@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { formatBRL } from '@/lib/format';
@@ -47,9 +48,9 @@ export function BentoCards({ latestDone }: { latestDone: ReportDetail | null }) 
           <CardContent className="space-y-2">
             <p className="font-mono text-lg font-bold text-white">{posicao.leitura}</p>
             <p className="text-xs text-dim">{posicao.total} produto(s) comparados com o mercado.</p>
-            <a href={`${base}#metricas`} className="text-sm text-brand hover:underline">
+            <Link href={`${base}#metricas`} className="text-sm text-brand hover:underline">
               Ver comparação →
-            </a>
+            </Link>
           </CardContent>
         </Card>
       ) : null}
@@ -71,9 +72,9 @@ export function BentoCards({ latestDone }: { latestDone: ReportDetail | null }) 
             >
               {resumo}
             </p>
-            <a href={`${base}#resumo`} className="text-sm text-brand hover:underline">
+            <Link href={`${base}#resumo`} className="text-sm text-brand hover:underline">
               Ler análise →
-            </a>
+            </Link>
           </CardContent>
         </Card>
       ) : null}

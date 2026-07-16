@@ -1,6 +1,11 @@
 import { requireAdmin } from '@/modules/auth/require-admin';
 import { listTemplates } from '@/modules/tasks/task-template.repository';
+import { PageHeader } from '@/components/page-header';
 import { PlaybooksManager } from './playbooks-manager';
+
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Playbooks' };
 
 export default async function PlaybooksPage() {
   await requireAdmin();
@@ -8,11 +13,11 @@ export default async function PlaybooksPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
-      <h1 className="font-heading text-2xl font-bold text-white">Playbooks</h1>
-      <p className="text-sm text-muted">
-        Templates de task reutilizáveis pelo analista ao criar uma nova tarefa. Global — não pertence a
-        nenhum cliente específico.
-      </p>
+      <PageHeader
+        eyebrow="Operação Truth"
+        title="Playbooks"
+        description="Templates de task reutilizáveis pelo analista ao criar uma nova tarefa. Global — não pertence a nenhum cliente específico."
+      />
       <PlaybooksManager templates={templates} />
     </main>
   );

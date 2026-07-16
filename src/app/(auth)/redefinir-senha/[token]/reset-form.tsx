@@ -3,6 +3,7 @@
 import { useFormState } from 'react-dom';
 
 import { resetPasswordAction, type ResetState } from '@/actions/password-reset.actions';
+import { Alert } from '@/components/ui/Alert';
 import { Logo } from '@/components/ui/Logo';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
@@ -30,9 +31,9 @@ export function ResetForm({ token }: { token: string }) {
               <Input id="senha" name="senha" type="password" placeholder="••••••••" autoComplete="new-password" />
             </Field>
             {state.error ? (
-              <p className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-sm text-red-400" data-testid="reset-erro">
+              <Alert variant="danger" data-testid="reset-erro">
                 {state.error}
-              </p>
+              </Alert>
             ) : null}
             <Button type="submit" variant="primary" className="mt-2 w-full justify-center" data-testid="reset-submit-button">
               Salvar nova senha

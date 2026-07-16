@@ -2,7 +2,7 @@ import { and, count, desc, eq, inArray, max, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { taskComments, taskActivities, tasks } from '@/db/schema';
-import { parseChecklist } from './checklist-line';
+import { parseChecklist, toggleChecklistLine } from './checklist-line';
 import { normalizarTexto } from './report-to-task';
 import type {
   TaskAtor, TaskCriadoPor, TaskDetail, TaskPrioridade, TaskStatus, TaskSummary, TaskTipo,
@@ -137,6 +137,41 @@ export async function updateTask(input: {
       para: input.patch.assigneeUserId,
     });
   }
+}
+
+/**
+ * Toggle atômico de item de checklist: transação + SELECT ... FOR UPDATE
+ * serializa toggles concorrentes — o read-modify-write via updateTask podia
+ * perder um update quando dois cliques chegavam juntos. Devolve true se a
+ * descrição mudou (índice válido de linha checklist).
+ */
+export async function toggleChecklistItemTx(input: {
+  taskId: string;
+  orgId: string;
+  index: number;
+  actorUserId: string | null;
+}): Promise<boolean> {
+  const mudou = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ descricao: tasks.descricao })
+      .from(tasks)
+      .where(and(eq(tasks.id, input.taskId), eq(tasks.org_id, input.orgId)))
+      .for('update')
+      .limit(1);
+    if (!row) throw new Error('task_nao_encontrada');
+    const nova = toggleChecklistLine(row.descricao, input.index);
+    if (nova === row.descricao) return false;
+    await tx
+      .update(tasks)
+      .set({ descricao: nova })
+      .where(and(eq(tasks.id, input.taskId), eq(tasks.org_id, input.orgId)));
+    return true;
+  });
+  if (mudou) {
+    // Paridade com o fluxo antigo (updateTask registrava 'editada').
+    await recordTaskActivity({ taskId: input.taskId, userId: input.actorUserId, evento: 'editada' });
+  }
+  return mudou;
 }
 
 export async function moveTask(input: {

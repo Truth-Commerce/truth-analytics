@@ -32,9 +32,9 @@ export function TBody({ className = '', children }: TableWrapperProps) {
   return <tbody className={className}>{children}</tbody>;
 }
 
-export function TR({ className = '', children }: TableWrapperProps) {
+export function TR({ className = '', children, ...rest }: TableWrapperProps) {
   return (
-    <tr className={`border-b border-line/50 last:border-0 ${className}`}>
+    <tr className={`border-b border-line/50 last:border-0 ${className}`} {...rest}>
       {children}
     </tr>
   );

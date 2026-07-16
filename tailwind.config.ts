@@ -15,8 +15,11 @@ export default {
           glow: '#07dd2b1f',
         },
         muted: '#a1a1aa',
-        // era #888888 — abaixo de AA; mínimo agora é #a1a1aa
-        dim: '#a1a1aa',
+        // Hierarquia tipográfica de 2 níveis: muted (corpo secundário) > dim
+        // (metadados). Contraste do #8b8b94 verificado (WCAG AA ≥ 4.5:1):
+        // 6.0:1 sobre bg-base #040507 · 5.8:1 sobre bg-surface #0a0c10 ·
+        // 5.7:1 sobre bg-elevated #0d0d10.
+        dim: '#8b8b94',
         line: '#ffffff0f',
         strong: 'rgba(255,255,255,0.15)',
         glass: 'rgba(255,255,255,0.03)',

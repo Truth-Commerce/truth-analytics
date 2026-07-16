@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { addToast, removeToast, type ToastItem } from '@/components/ui/toast-store';
+import {
+  AUTO_DISMISS_MS,
+  addToast,
+  duracaoDoToast,
+  removeToast,
+  type ToastItem,
+} from '@/components/ui/toast-store';
 
 describe('toast-store', () => {
   it('addToast adiciona com defaults e id fornecido', () => {
@@ -19,5 +25,17 @@ describe('toast-store', () => {
   it('removeToast remove por id', () => {
     const list = addToast(addToast([], { title: 'a' }, 1), { title: 'b' }, 2);
     expect(removeToast(list, 1).map((t) => t.id)).toEqual([2]);
+  });
+
+  it('duracaoDoToast: success/info expiram em AUTO_DISMISS_MS; error é persistente (null)', () => {
+    expect(duracaoDoToast('success')).toBe(AUTO_DISMISS_MS);
+    expect(duracaoDoToast('info')).toBe(AUTO_DISMISS_MS);
+    expect(duracaoDoToast('error')).toBeNull();
+  });
+
+  it('addToast preserva o slot de ação opcional', () => {
+    const onClick = () => {};
+    const list = addToast([], { title: 'Task movida', action: { label: 'Desfazer', onClick } }, 7);
+    expect(list[0]!.action).toEqual({ label: 'Desfazer', onClick });
   });
 });

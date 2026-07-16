@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 
 import { fadeLift, staggerContainer, useCountUp } from '@/lib/motion';
 import { formatBRL } from '@/lib/format';
@@ -37,14 +37,14 @@ function StatValue({ value, format }: { value: number; format: 'brl' | 'int' | '
 /** Linha de stats do bento: count-up em Space Mono + sparkline. */
 export function StatCards({ items }: { items: StatItem[] }) {
   return (
-    <motion.div
+    <m.div
       variants={staggerContainer}
       initial="hidden"
       animate="visible"
       className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
     >
       {items.map((item) => (
-        <motion.div
+        <m.div
           key={item.label}
           variants={fadeLift}
           className="flex min-w-0 flex-col gap-1 rounded-2xl border border-line bg-bg-surface p-5"
@@ -54,8 +54,8 @@ export function StatCards({ items }: { items: StatItem[] }) {
             <StatValue value={item.value} format={item.format} />
             {item.spark && item.spark.length > 1 ? <Sparkline data={item.spark} /> : null}
           </div>
-        </motion.div>
+        </m.div>
       ))}
-    </motion.div>
+    </m.div>
   );
 }

@@ -1,4 +1,7 @@
 import React from 'react';
+import Link from 'next/link';
+
+import { isInternalHref } from './href';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md';
@@ -32,15 +35,17 @@ interface ButtonAsAnchor extends ButtonBaseProps {
 
 type ButtonProps = ButtonAsButton | ButtonAsAnchor;
 
+const FOCUS_RING =
+  'focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base';
+
+const FOCUS_RING_DANGER =
+  'focus-visible:ring-2 focus-visible:ring-danger/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base';
+
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    'bg-brand text-[#04150a] font-semibold hover:shadow-glow focus-visible:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none',
-  secondary:
-    'border border-strong bg-white/5 text-white hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed',
-  ghost:
-    'text-muted hover:text-white focus-visible:ring-1 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed',
-  danger:
-    'border border-red-500/40 text-red-400 hover:bg-red-500/10 focus-visible:ring-1 focus-visible:ring-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed',
+  primary: `bg-brand text-[#04150a] font-semibold hover:shadow-glow focus-visible:shadow-glow ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none`,
+  secondary: `border border-strong bg-white/5 text-white hover:bg-white/10 ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
+  ghost: `text-muted hover:text-white ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
+  danger: `border border-danger-border text-danger-fg hover:bg-danger-tint ${FOCUS_RING_DANGER} disabled:opacity-50 disabled:cursor-not-allowed`,
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -49,12 +54,19 @@ const sizeClasses: Record<ButtonSize, string> = {
 };
 
 export function Button({ variant = 'primary', size = 'md', className = '', children, ...rest }: ButtonProps) {
-  const base = `inline-flex items-center justify-center rounded-full font-medium transition-all duration-150 outline-none focus-visible:outline-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
+  const base = `inline-flex items-center justify-center rounded-full font-medium transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 ease-truth outline-none focus-visible:outline-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
 
   if (rest.as === 'a') {
-    const { as: _as, ...anchorRest } = rest as ButtonAsAnchor;
+    const { as: _as, href, ...anchorRest } = rest as ButtonAsAnchor;
+    if (isInternalHref(href)) {
+      return (
+        <Link href={href} className={base} {...anchorRest}>
+          {children}
+        </Link>
+      );
+    }
     return (
-      <a className={base} {...anchorRest}>
+      <a href={href} className={base} {...anchorRest}>
         {children}
       </a>
     );

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { formatBRL } from '@/lib/format';
 import {
   detectarConcorrenteAbaixo,
   detectarProdutoParado,
@@ -65,6 +66,29 @@ describe('detectarProdutoParado', () => {
       agora,
     );
     expect(r).toHaveLength(1);
+  });
+});
+
+describe('formatação pt-BR dos corpos de alerta (G4)', () => {
+  it('queda de vendas usa separador de milhar', () => {
+    const a = detectarQuedaVendas({
+      total7dias: 1234.5,
+      totaisSemanasAnteriores: [10000, 10000, 10000, 10000],
+    });
+    expect(a).not.toBeNull();
+    expect(a!.corpo).toContain(formatBRL(1234.5)); // "R$ 1.234,50" (com NBSP do Intl)
+    expect(a!.corpo).toContain(formatBRL(10000));
+  });
+
+  it('produto parado exibe a última venda em dd/mm/aaaa (não ISO)', () => {
+    const ultima = new Date('2026-06-20T12:00:00Z');
+    const [a] = detectarProdutoParado(
+      [{ sku: 'SKU1', nome: 'Caneca' }],
+      new Map([['SKU1', ultima]]),
+      new Date('2026-07-14T12:00:00Z'),
+    );
+    expect(a!.corpo).not.toContain('2026-06-20');
+    expect(a!.corpo).toContain('20/06/2026');
   });
 });
 

@@ -5,6 +5,11 @@ import { getLatestDoneReport } from '@/modules/reports/report.repository';
 import { listTasksKanban } from '@/modules/tasks/task.repository';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { NewTaskForm } from '@/components/tasks/NewTaskForm';
+import { PageHeader } from '@/components/page-header';
+
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Plano de Ação' };
 
 export default async function PlanoDeAcaoPage() {
   const access = await requireActiveOrg();
@@ -15,9 +20,7 @@ export default async function PlanoDeAcaoPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-heading text-2xl font-bold text-white">Plano de Ação</h1>
-      </div>
+      <PageHeader eyebrow="Consultoria Truth" title="Plano de Ação" />
 
       <details className="rounded-2xl border border-line bg-bg-surface p-5">
         <summary className="cursor-pointer font-heading text-sm font-semibold text-white">Nova task</summary>

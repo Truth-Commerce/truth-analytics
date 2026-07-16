@@ -40,7 +40,7 @@ export function AtribuirAnalista({ orgId, analistas, analistaAtual }: Props) {
       <Button type="submit" variant="secondary" size="sm" data-testid="atribuir-analista">
         Atribuir
       </Button>
-      {state.error ? <span className="text-sm text-red-400">{state.error}</span> : null}
+      {state.error ? <span className="text-sm text-danger-fg">{state.error}</span> : null}
     </form>
   );
 }

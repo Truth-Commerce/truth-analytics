@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 
 import {
   onboardingCompleto,
@@ -40,12 +41,12 @@ export function OnboardingChecklist(props: OnboardingInput) {
                   {step.label}
                 </span>
               ) : (
-                <a
+                <Link
                   href={step.href}
                   className="text-sm text-white outline-none transition-colors hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   {step.label} →
-                </a>
+                </Link>
               )}
             </li>
           ))}

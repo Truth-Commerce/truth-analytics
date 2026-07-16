@@ -142,7 +142,7 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
                 Cancelar
               </Button>
             ) : null}
-            {state.error ? <span className="text-sm text-red-400">{state.error}</span> : null}
+            {state.error ? <span className="text-sm text-danger-fg">{state.error}</span> : null}
           </div>
         </form>
       </Card>

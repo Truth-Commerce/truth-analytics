@@ -122,6 +122,13 @@ describe('notification templates (puro)', () => {
       const result = pipelineFailedTemplate('org-x', 'rep-x', 'erro qualquer');
       expect(result.subject.toLowerCase()).toContain('falha');
     });
+
+    it('erro com markup não injeta tag no html (escapa HTML — G4)', () => {
+      const { html } = pipelineFailedTemplate('org-1', 'rep-1', '<script>alert(1)</script> & "x"');
+      expect(html).not.toContain('<script>');
+      expect(html).toContain('&lt;script&gt;');
+      expect(html).toContain('&amp; &quot;x&quot;');
+    });
   });
 
   describe('blingConnectionFailedTemplate', () => {

@@ -8,6 +8,7 @@ import { NewTaskFromTemplateForm } from '@/components/tasks/NewTaskFromTemplateF
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Tabs } from '@/components/ui/Tabs';
+import { PageHeader } from '@/components/page-header';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { requireAnalista } from '@/modules/auth/require-analista';
@@ -15,6 +16,13 @@ import { getLatestDoneReport } from '@/modules/reports/report.repository';
 import { listTemplates } from '@/modules/tasks/task-template.repository';
 import { atorFromRole } from '@/modules/tasks/task.types';
 import { listTaskTitulosAbertos, listTasksKanban } from '@/modules/tasks/task.repository';
+
+import type { Metadata } from 'next';
+
+export async function generateMetadata({ params }: { params: { orgId: string } }): Promise<Metadata> {
+  const org = await getOrganizationById(params.orgId);
+  return { title: org ? `${org.name} · Cliente` : 'Cliente' };
+}
 
 export default async function AnalistaOrgPage({ params }: { params: { orgId: string } }) {
   const access = await requireAnalista();
@@ -50,7 +58,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
         ← Carteira
       </Link>
 
-      <h1 className="font-heading text-2xl font-bold text-white">{org.name}</h1>
+      <PageHeader eyebrow="Cliente da carteira" title={org.name} />
 
       <Tabs
         defaultValue="kanban"

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDoneAnterior, getReportById, listDoneReports } from '@/modules/reports/report.repository';
 import { compararMetricas, compararTopProdutos, leituraComparacao } from '@/modules/reports/compare';
@@ -10,7 +12,7 @@ function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   if (deltaPct === null) return <span className="text-dim">—</span>;
   const positivo = deltaPct >= 0;
   return (
-    <span className={positivo ? 'text-brand' : 'text-red-400'}>
+    <span className={positivo ? 'text-brand' : 'text-danger-fg'}>
       {positivo ? '▲' : '▼'} {positivo ? '+' : ''}
       {deltaPct}%
     </span>
@@ -37,11 +39,15 @@ const SITUACAO_LABEL = {
 
 const SITUACAO_COR = {
   subiu: 'text-brand',
-  caiu: 'text-red-400',
+  caiu: 'text-danger-fg',
   estavel: 'text-muted',
   entrou: 'text-brand',
   saiu: 'text-dim',
 } as const;
+
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Comparar períodos' };
 
 export default async function CompararPage({
   searchParams,
@@ -74,9 +80,9 @@ export default async function CompararPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
-      <a href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
         ← Voltar
-      </a>
+      </Link>
       <h1 className="font-heading text-2xl font-bold text-white">Comparar períodos</h1>
       <CompararForm
         relatorios={dones.map((r) => ({

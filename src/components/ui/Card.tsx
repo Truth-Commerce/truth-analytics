@@ -7,10 +7,12 @@ interface CardProps {
   'data-testid'?: string;
 }
 
-export function Card({ className = '', children, ...rest }: CardProps) {
+export function Card({ className = '', children, lift = true, ...rest }: CardProps & { lift?: boolean }) {
   return (
     <div
-      className={`bg-bg-surface border border-line rounded-2xl p-5 ${className}`}
+      className={`bg-bg-surface border border-line rounded-2xl p-5 transition-[transform,border-color,box-shadow] duration-200 ease-truth ${
+        lift ? 'hover:-translate-y-0.5 hover:border-white/20' : ''
+      } ${className}`}
       {...rest}
     >
       {children}

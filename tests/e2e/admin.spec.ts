@@ -43,7 +43,7 @@ test('admin ativa um cliente pendente definindo plano', async ({ page, browser }
     await row.locator('select[name="plano"]').selectOption('weekly');
     await row.getByRole('button', { name: 'Ativar' }).click();
 
-    await expect(row.getByText('active')).toBeVisible();
+    await expect(row.getByText('Ativo')).toBeVisible();
   } finally {
     await adminCtx.close();
   }

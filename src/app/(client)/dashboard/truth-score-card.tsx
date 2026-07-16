@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { ScoreGauge } from '@/components/ui/charts/ScoreGauge';
 import { Sparkline } from '@/components/ui/charts/Sparkline';
@@ -28,7 +30,7 @@ export function TruthScoreCard({
         <div className="min-w-0 space-y-2">
           <p className="text-sm text-muted">Saúde da operação no último relatório.</p>
           {delta !== null && (
-            <p className={`text-sm font-medium ${delta >= 0 ? 'text-brand' : 'text-red-400'}`} data-testid="score-delta">
+            <p className={`text-sm font-medium ${delta >= 0 ? 'text-brand' : 'text-danger-fg'}`} data-testid="score-delta">
               {delta >= 0 ? '▲' : '▼'} {delta >= 0 ? '+' : ''}{delta} vs relatório anterior
             </p>
           )}
@@ -39,9 +41,9 @@ export function TruthScoreCard({
             </div>
           ) : null}
           <div className="flex flex-wrap gap-4">
-            <a href={atual ? `/dashboard/relatorios/${atual.id}` : '#'} className="text-sm text-brand hover:underline">
+            <Link href={atual ? `/dashboard/relatorios/${atual.id}` : '#'} className="text-sm text-brand hover:underline">
               Ver breakdown →
-            </a>
+            </Link>
             <a href="#historico" className="text-sm text-brand hover:underline">
               Ver histórico →
             </a>

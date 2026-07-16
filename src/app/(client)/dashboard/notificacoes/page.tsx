@@ -8,6 +8,10 @@ import { listNotificationsPage } from '@/modules/notifications/notification.repo
 
 const PAGE_SIZE = 20;
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Notificações' };
+
 export default async function NotificacoesPage({ searchParams }: { searchParams: { pagina?: string } }) {
   const access = await requireActiveOrg();
   const pagina = Math.max(1, Number(searchParams.pagina ?? '1') || 1);

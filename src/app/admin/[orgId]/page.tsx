@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { listAnalistas } from '@/modules/analista/analista.repository';
@@ -11,12 +12,15 @@ import { getOrgAnalistaUser } from '@/modules/notifications/recipients';
 import { getOrgSettings } from '@/modules/organizations/organization-settings.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { formatData, formatPeriodo } from '@/lib/format';
+import { PLANO_LABEL, STATUS_ORG_LABEL } from '@/lib/labels';
 import { STATUS_LABEL, reportStatusVariant, type ReportStatus } from '@/modules/reports/report.types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { Tabs } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PageHeader } from '@/components/page-header';
+import { Reveal } from '@/components/reveal';
 import { AtribuirAnalista } from './atribuir-analista';
 import { MetaMensalForm } from './meta-mensal-form';
 import { ReportActions } from './report-actions';
@@ -28,6 +32,13 @@ const SAUDE_BADGE = {
   erro: { variant: 'danger', label: 'Com erro' },
   nenhuma: { variant: 'neutral', label: 'Nunca conectada' },
 } as const;
+
+import type { Metadata } from 'next';
+
+export async function generateMetadata({ params }: { params: { orgId: string } }): Promise<Metadata> {
+  const org = await getOrganizationById(params.orgId);
+  return { title: org ? `${org.name} · Cliente` : 'Cliente' };
+}
 
 export default async function AdminOrgPage({ params }: { params: { orgId: string } }) {
   await requireAdmin();
@@ -47,47 +58,46 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
-      <a href="/admin" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/admin" className="text-sm text-muted transition-colors hover:text-white">
         ← Clientes
-      </a>
+      </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-white">{org.name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge variant={org.status === 'active' ? 'success' : org.status === 'suspended' ? 'danger' : 'warn'}>
-              {org.status}
-            </Badge>
-            <span className="font-mono text-sm text-muted">{org.plano ?? 'sem plano'}</span>
-            <Badge variant={saudeInfo.variant}>{saudeInfo.label}</Badge>
-          </div>
-        </div>
-        <GenerateNow orgId={org.id} />
-      </div>
+      <PageHeader eyebrow="Cliente" title={org.name} actions={<GenerateNow orgId={org.id} />}>
+        <Badge variant={org.status === 'active' ? 'success' : org.status === 'suspended' ? 'danger' : 'warn'}>
+          {STATUS_ORG_LABEL[org.status]}
+        </Badge>
+        <span className="font-mono text-sm text-muted">{org.plano ? PLANO_LABEL[org.plano] : 'sem plano'}</span>
+        <Badge variant={saudeInfo.variant}>{saudeInfo.label}</Badge>
+      </PageHeader>
 
-      <Card>
-        <CardHeader>
-          <CardTitle as="h2" className="text-base">
-            Consultoria
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AtribuirAnalista orgId={org.id} analistas={analistas} analistaAtual={analistaAtual} />
-        </CardContent>
-      </Card>
+      <Reveal>
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2" className="text-base">
+              Consultoria
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AtribuirAnalista orgId={org.id} analistas={analistas} analistaAtual={analistaAtual} />
+          </CardContent>
+        </Card>
+      </Reveal>
 
-      <Card data-testid="meta-mensal-card">
-        <CardHeader>
-          <CardTitle as="h2" className="text-base">
-            Meta mensal
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MetaMensalForm orgId={org.id} metaAtual={settings?.metaMensal ?? null} />
-        </CardContent>
-      </Card>
+      <Reveal>
+        <Card data-testid="meta-mensal-card">
+          <CardHeader>
+            <CardTitle as="h2" className="text-base">
+              Meta mensal
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MetaMensalForm orgId={org.id} metaAtual={settings?.metaMensal ?? null} />
+          </CardContent>
+        </Card>
+      </Reveal>
 
-      <Tabs
+      <Reveal>
+        <Tabs
         defaultValue="relatorios"
         items={[
           {
@@ -193,7 +203,8 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
               ),
           },
         ]}
-      />
+        />
+      </Reveal>
     </main>
   );
 }

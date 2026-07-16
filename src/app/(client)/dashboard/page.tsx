@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDashboardData } from '@/modules/reports/dashboard-data';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
@@ -16,6 +18,7 @@ import { paceMeta, progressoMeta } from '@/modules/reports/compare';
 import { formatBRL, formatData, formatDataCurta, formatDataUtc, formatPeriodo } from '@/lib/format';
 import { hojeBrt } from '@/lib/timezone';
 import { Alert } from '@/components/ui/Alert';
+import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -31,6 +34,10 @@ import { TruthScoreCard } from './truth-score-card';
 import { AlertasSection } from './alertas-section';
 import { MetaProgress } from './meta-progress';
 import { AcaoPrincipalCard } from './acao-principal';
+
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Dashboard' };
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
@@ -91,15 +98,15 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
-      <h1 className="font-heading text-2xl font-bold text-white">Dashboard</h1>
+      <PageHeader eyebrow="Visão geral" title="Dashboard" description={org?.name ?? undefined} />
 
       {/* 1. Conexão expirada — persistente até reconectar (G0/Task 7) */}
       {conn && conn.status === 'expirado' ? (
         <Alert variant="danger" title="Sua conexão com o Bling expirou">
           Seus dados de vendas pararam de atualizar e os relatórios automáticos foram pausados.{' '}
-          <a href="/conexoes" className="font-medium underline underline-offset-2">
+          <Link href="/conexoes" className="font-medium underline underline-offset-2">
             Reconectar em Conexões →
-          </a>
+          </Link>
         </Alert>
       ) : null}
 
@@ -196,13 +203,13 @@ export default async function DashboardPage() {
                   <p className="text-sm text-muted">{formatPeriodo(latest.periodoInicio, latest.periodoFim)}</p>
                   <p className="text-xs text-dim">{formatData(latest.createdAt)}</p>
                 </div>
-                <a
+                <Link
                   data-testid="ver-relatorio"
                   href={`/dashboard/relatorios/${latest.id}`}
                   className="inline-flex items-center gap-1 text-sm text-brand hover:underline"
                 >
                   Ver relatório →
-                </a>
+                </Link>
               </div>
             ) : (
               <p className="text-muted">Nenhum relatório ainda.</p>
@@ -215,13 +222,13 @@ export default async function DashboardPage() {
       <section id="historico" data-testid="reports-list">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="font-heading text-base font-semibold text-white">Histórico</h2>
-          <a
+          <Link
             data-testid="comparar-periodos-link"
             href="/dashboard/relatorios/comparar"
             className="text-sm text-brand hover:underline"
           >
             Comparar períodos →
-          </a>
+          </Link>
         </div>
         {historico.length > 0 ? (
           <Card className="!p-0">
@@ -265,12 +272,12 @@ export default async function DashboardPage() {
                       )}
                     </TD>
                     <TD>
-                      <a
+                      <Link
                         href={`/dashboard/relatorios/${r.id}`}
                         className="text-sm text-brand hover:underline"
                       >
                         Ver
-                      </a>
+                      </Link>
                     </TD>
                   </TR>
                 ))}

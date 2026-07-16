@@ -26,8 +26,11 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Truth Analytics',
-  description: 'Análise multi-marketplace por IA.',
+  title: {
+    default: 'Truth Analytics',
+    template: '%s — Truth Analytics',
+  },
+  description: 'Inteligência de marketplace por IA para o seu e-commerce.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -35,7 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR" className={`${sora.variable} ${inter.variable} ${spaceMono.variable}`}>
       <body className="font-sans">
         <MotionProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <div id="app-content">{children}</div>
+          </ToastProvider>
         </MotionProvider>
       </body>
     </html>
