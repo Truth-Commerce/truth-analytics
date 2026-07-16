@@ -39,6 +39,7 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
   let orgId = '';
   let adminId = '';
   let taskId = '';
+  let taskAutorId = '';
 
   beforeAll(async () => {
     const [org] = await db
@@ -56,6 +57,12 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
       .values({ org_id: orgId, titulo: `${PREFIX}task-${RUN}`, criado_por: 'analista', prioridade: 'media' })
       .returning({ id: tasks.id });
     taskId = t!.id;
+    // Task própria para o caso de autoria da timeline (não colide com o de exclusão).
+    const [tAutor] = await db
+      .insert(tasks)
+      .values({ org_id: orgId, titulo: `${PREFIX}task-autor-${RUN}`, criado_por: 'analista', prioridade: 'media' })
+      .returning({ id: tasks.id });
+    taskAutorId = tAutor!.id;
   });
 
   afterAll(async () => {
@@ -67,6 +74,23 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
     await db.delete(tasks).where(eq(tasks.org_id, orgId));
     await db.delete(users).where(eq(users.org_id, orgId));
     await db.delete(organizations).where(eq(organizations.id, orgId));
+  });
+
+  it('listTaskActivities devolve o autor (userEmail) e null para eventos de sistema', async () => {
+    const { listTaskActivities, recordTaskActivity } = await import(
+      '@/modules/tasks/task-activity.repository'
+    );
+    await recordTaskActivity({ taskId: taskAutorId, userId: adminId, evento: 'editada' });
+    await recordTaskActivity({
+      taskId: taskAutorId,
+      userId: null,
+      evento: 'lembrete_prazo',
+      de: '2026-08-01',
+      para: 'atrasada',
+    });
+    const acts = await listTaskActivities(taskAutorId, orgId);
+    expect(acts.find((a) => a.evento === 'editada')?.userEmail).toContain('@example.com');
+    expect(acts.find((a) => a.evento === 'lembrete_prazo')?.userEmail).toBeNull();
   });
 
   it('admin edita titulo/prioridade/prazo', async () => {

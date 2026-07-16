@@ -43,6 +43,8 @@ const EVENTO_LABEL: Record<string, string> = {
   devolvida: 'Devolvida para ajustes',
   editada: 'Editada',
   prazo: 'Prazo alterado',
+  assignee: 'Responsável alterado',
+  lembrete_prazo: 'Lembrete de prazo enviado',
   reincidencia: 'Reincidência de recomendação concluída',
 };
 
@@ -85,7 +87,14 @@ export function TaskDetail({
   ator: TaskAtor;
   orgId?: string;
   comments: Array<{ id: string; corpo: string; userEmail: string; createdAt: Date }>;
-  activities: Array<{ id: string; evento: string; de: string | null; para: string | null; createdAt: Date }>;
+  activities: Array<{
+    id: string;
+    evento: string;
+    de: string | null;
+    para: string | null;
+    userEmail: string | null;
+    createdAt: Date;
+  }>;
   impact: TaskImpact;
   backHref: string;
 }) {
@@ -221,7 +230,10 @@ export function TaskDetail({
             <ol data-testid="task-atividades" className="space-y-2">
               {activities.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-white/80">{eventoLabel(a)}</span>
+                  <span className="text-white/80">
+                    {eventoLabel(a)}
+                    {a.userEmail ? <span className="text-xs text-dim"> — {a.userEmail}</span> : null}
+                  </span>
                   <span className="whitespace-nowrap text-xs text-dim">{formatData(a.createdAt)}</span>
                 </li>
               ))}

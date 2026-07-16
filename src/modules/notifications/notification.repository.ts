@@ -42,6 +42,32 @@ export async function listNotifications(userId: string, limit = 10) {
     .limit(limit);
 }
 
+const PAGE_SIZE_DEFAULT = 20;
+
+/** Página de notificações do usuário (mais recentes primeiro) + total p/ paginação. */
+export async function listNotificationsPage(userId: string, page: number, pageSize = PAGE_SIZE_DEFAULT) {
+  const paginaSegura = Math.max(1, Math.floor(page));
+  const [items, [totalRow]] = await Promise.all([
+    db
+      .select({
+        id: notifications.id,
+        tipo: notifications.tipo,
+        titulo: notifications.titulo,
+        corpo: notifications.corpo,
+        href: notifications.href,
+        lida: notifications.lida,
+        createdAt: notifications.created_at,
+      })
+      .from(notifications)
+      .where(eq(notifications.user_id, userId))
+      .orderBy(desc(notifications.created_at))
+      .limit(pageSize)
+      .offset((paginaSegura - 1) * pageSize),
+    db.select({ n: count() }).from(notifications).where(eq(notifications.user_id, userId)),
+  ]);
+  return { items, total: Number(totalRow?.n ?? 0) };
+}
+
 export async function countUnread(userId: string): Promise<number> {
   const [row] = await db
     .select({ n: count() })

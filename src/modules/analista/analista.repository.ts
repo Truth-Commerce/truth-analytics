@@ -291,14 +291,33 @@ async function contarConcluidasDesde(desde: Date): Promise<number> {
   return Number(row?.n ?? 0);
 }
 
-async function tempoMedioConclusaoDias(): Promise<number | null> {
-  const [row] = await db
+export const TEMPO_MEDIO_JANELA_DIAS = 90;
+
+/**
+ * Tempo médio entre a criação da task e a PRIMEIRA transição a concluida,
+ * só para conclusões dos últimos 90 dias (o AVG antigo contava re-conclusões
+ * e a vida inteira do banco — auditoria G3).
+ */
+async function tempoMedioConclusaoDias(agora: Date = new Date()): Promise<number | null> {
+  const corte = new Date(agora.getTime() - TEMPO_MEDIO_JANELA_DIAS * 86_400_000);
+  const primeira = db
     .select({
-      media: sql<string | null>`avg(extract(epoch from (${taskActivities.created_at} - ${tasks.created_at})) / 86400)`,
+      task_id: taskActivities.task_id,
+      concluida_em: sql<Date>`min(${taskActivities.created_at})`.as('concluida_em'),
     })
     .from(taskActivities)
-    .innerJoin(tasks, eq(taskActivities.task_id, tasks.id))
-    .where(and(eq(taskActivities.evento, 'status'), eq(taskActivities.para, 'concluida')));
+    .where(and(eq(taskActivities.evento, 'status'), eq(taskActivities.para, 'concluida')))
+    .groupBy(taskActivities.task_id)
+    .as('primeira_conclusao');
+  const [row] = await db
+    .select({
+      media: sql<string | null>`avg(extract(epoch from (${primeira.concluida_em} - ${tasks.created_at})) / 86400)`,
+    })
+    .from(primeira)
+    .innerJoin(tasks, eq(primeira.task_id, tasks.id))
+    // corte via literal ::timestamptz — a coluna do subselect é um alias de
+    // min() sem mapper de driver, então bindar um Date direto quebra o postgres-js.
+    .where(sql`${primeira.concluida_em} >= ${corte.toISOString()}::timestamptz`);
   return row?.media != null ? Number(row.media) : null;
 }
 

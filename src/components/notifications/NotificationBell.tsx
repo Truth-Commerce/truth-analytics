@@ -42,7 +42,7 @@ function tempoRelativo(iso: string): string {
  * não expõe callback — aqui o contrato pede estado { unread, items, open }
  * controlado pelo próprio componente.
  */
-export function NotificationBell() {
+export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {}) {
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -199,6 +199,14 @@ export function NotificationBell() {
                 Marcar todas como lidas
               </button>
             </form>
+            {verTodasHref ? (
+              <a
+                href={verTodasHref}
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-brand outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-brand/50"
+              >
+                Ver todas
+              </a>
+            ) : null}
           </div>
         </div>
       )}

@@ -1,11 +1,17 @@
+import Link from 'next/link';
+
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
+import { getLatestDoneReport } from '@/modules/reports/report.repository';
 import { listTasksKanban } from '@/modules/tasks/task.repository';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { NewTaskForm } from '@/components/tasks/NewTaskForm';
 
 export default async function PlanoDeAcaoPage() {
   const access = await requireActiveOrg();
-  const tasks = await listTasksKanban(access.orgId);
+  const [tasks, ultimoRelatorio] = await Promise.all([
+    listTasksKanban(access.orgId),
+    getLatestDoneReport(access.orgId),
+  ]);
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
@@ -20,7 +26,21 @@ export default async function PlanoDeAcaoPage() {
         </div>
       </details>
 
-      <KanbanBoard tasks={tasks} ator="cliente" taskHrefBase="/dashboard/plano-de-acao" />
+      <KanbanBoard
+        tasks={tasks}
+        ator="cliente"
+        taskHrefBase="/dashboard/plano-de-acao"
+        emptyCta={
+          ultimoRelatorio ? (
+            <Link
+              href={`/dashboard/relatorios/${ultimoRelatorio.id}`}
+              className="rounded-full bg-brand px-4 py-1.5 text-sm font-semibold text-[#04150a] outline-none hover:shadow-glow focus-visible:shadow-glow"
+            >
+              Ver achados do último relatório
+            </Link>
+          ) : undefined
+        }
+      />
     </main>
   );
 }

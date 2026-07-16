@@ -111,7 +111,7 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
 
           {/* Notificações (desktop) */}
           <div className="hidden sm:block">
-            <NotificationBell />
+            <NotificationBell verTodasHref={variant === 'client' ? '/dashboard/notificacoes' : undefined} />
           </div>
 
           {/* Desktop sign out */}
@@ -149,7 +149,7 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
         {menuOpen && (
           <div id="mobile-nav" className="border-t border-line bg-bg-surface/95 px-4 py-3 sm:hidden">
             <div className="mb-2 flex justify-end">
-              <NotificationBell />
+              <NotificationBell verTodasHref={variant === 'client' ? '/dashboard/notificacoes' : undefined} />
             </div>
             <div className="flex flex-col gap-1">
               <a
