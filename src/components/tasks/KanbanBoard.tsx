@@ -50,15 +50,21 @@ export function KanbanBoard({
       fd.set('taskId', taskId);
       fd.set('para', para);
       if (orgId) fd.set('orgId', orgId);
-      const res = await moveTaskAction(fd);
-      if (res.error) {
-        toast({ variant: 'error', title: 'Não foi possível mover.', description: res.error });
+      try {
+        const res = await moveTaskAction(fd);
+        if (res.error) {
+          toast({ variant: 'error', title: 'Não foi possível mover.', description: res.error });
+        }
+      } finally {
+        // Limpeza do otimismo SEMPRE roda — inclusive se a action rejeitar (erro
+        // de infra re-lançado). Sem o finally, o card ficava preso na coluna
+        // otimista com o select desabilitado.
+        setMovidas((prev) => {
+          const { [taskId]: _, ...resto } = prev;
+          return resto;
+        });
+        setPendenteId(null);
       }
-      setMovidas((prev) => {
-        const { [taskId]: _, ...resto } = prev;
-        return resto;
-      });
-      setPendenteId(null);
     });
   }
 

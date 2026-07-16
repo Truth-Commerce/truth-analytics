@@ -112,6 +112,25 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
     expect(r.error).toBe('Você não tem permissão para editar esta tarefa.');
   });
 
+  it('prazo com data de calendário impossível é recusado (não cria/edita → sem 500 no Postgres)', async () => {
+    sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+    // createTaskSchema.prazo: '2026-13-99' passa no regex mas não é data real.
+    const rCreate = await createTaskAction(
+      {},
+      form({ orgId, titulo: 'Task com data invalida', tipo: 'outro', prioridade: 'media', prazo: '2026-13-99' }),
+    );
+    expect(rCreate.error).toBe('Dados inválidos. Confira os campos e tente novamente.');
+    const criadas = await db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.org_id, orgId), eq(tasks.titulo, 'Task com data invalida')));
+    expect(criadas).toHaveLength(0);
+
+    // updateTaskSchema.prazo: 30 de fevereiro também é recusado.
+    const rUpdate = await updateTaskAction({}, form({ orgId, taskId, prazo: '2026-02-30' }));
+    expect(rUpdate.error).toBe('Dados inválidos. Confira os campos e tente novamente.');
+  });
+
   it('deleteTaskFormAction com redirectTo exclui e redireciona', async () => {
     sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
     let redirecionou = false;

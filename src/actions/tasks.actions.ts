@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { logger } from '@/lib/logger';
-import { hojeBrt } from '@/lib/timezone';
+import { hojeBrt, isDataCalendarioValida } from '@/lib/timezone';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { requireSession } from '@/modules/auth/require-session';
@@ -49,6 +49,14 @@ import {
 } from '@/modules/tasks/task.types';
 
 export type TaskActionState = { error?: string; ok?: boolean; taskId?: string };
+
+// Prazo é dia-calendário 'yyyy-mm-dd'. O regex garante o FORMATO; o refine
+// garante que é uma data REAL — sem ele, '2026-13-99' passava e explodia como
+// erro de `date` no Postgres (500). Reusado por todos os schemas com prazo.
+const prazoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isDataCalendarioValida, { message: 'data_invalida' });
 
 // ---------------------------------------------------------------------------
 // Resolução de contexto — o coração do multi-tenancy desta camada.
@@ -115,7 +123,7 @@ const createTaskSchema = z.object({
   // playbook; os demais forms continuam enviando o select explicitamente.
   prioridade: z.enum(TASK_PRIORIDADES).default('media'),
   descricao: z.string().max(5000).optional().default(''),
-  prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  prazo: prazoDate.optional(),
   templateId: z.string().min(1).optional(),
 });
 
@@ -459,7 +467,7 @@ const updateTaskSchema = z.object({
   descricao: z.string().max(5000).optional(),
   tipo: z.enum(TASK_TIPOS).optional(),
   prioridade: z.enum(TASK_PRIORIDADES).optional(),
-  prazo: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).optional(),
+  prazo: z.union([prazoDate, z.literal('')]).optional(),
   assigneeUserId: z.string().optional(),
 });
 
@@ -614,7 +622,7 @@ export async function toggleChecklistItemFormAction(formData: FormData): Promise
 const createTasksFromReportItemSchema = z.object({
   fonte: z.enum(FONTES_ANALISE),
   indice: z.number().int().min(0),
-  prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  prazo: prazoDate.optional(),
   usarChecklistPlaybook: z.boolean().optional(),
 });
 const createTasksFromReportSchema = z.object({
