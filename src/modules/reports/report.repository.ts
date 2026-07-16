@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, ne } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
@@ -137,6 +137,31 @@ export async function getLatestDoneReportAfter(
         eq(reports.org_id, orgId),
         eq(reports.status, 'done'),
         gt(reports.created_at, afterCreatedAt),
+        ne(reports.id, excludeId),
+      ),
+    )
+    .orderBy(desc(reports.created_at))
+    .limit(1);
+  return row ? rowToDetail(row) : null;
+}
+
+/**
+ * Done imediatamente ANTERIOR a um relatório (por created_at), escopado por
+ * org. Base do hero de KPIs e do default do comparativo.
+ */
+export async function getDoneAnterior(
+  orgId: string,
+  beforeCreatedAt: Date,
+  excludeId: string,
+): Promise<ReportDetail | null> {
+  const [row] = await db
+    .select()
+    .from(reports)
+    .where(
+      and(
+        eq(reports.org_id, orgId),
+        eq(reports.status, 'done'),
+        lt(reports.created_at, beforeCreatedAt),
         ne(reports.id, excludeId),
       ),
     )

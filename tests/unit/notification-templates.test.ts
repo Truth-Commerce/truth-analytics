@@ -63,25 +63,36 @@ describe('notification templates (puro)', () => {
   });
 
   describe('reportReadyTemplate', () => {
+    // Task 5: assinatura mudou para reportReadyTemplate(dados, appUrl). O
+    // reportId agora aparece só embutido no link — não há mais linha "Relatório
+    // ID:" solta (por isso a antiga asserção "text contém o reportId" saiu).
+    const DADOS = {
+      reportId: 'rep-123',
+      periodoInicio: new Date('2026-06-01T00:00:00Z'),
+      periodoFim: new Date('2026-06-30T00:00:00Z'),
+      totalPeriodo: 10880,
+      deltaPct: 12.2,
+      score: 76,
+      primeiroGargalo: 'Frete caro',
+    };
+
     it('retorna subject, html e text não-vazios', () => {
-      const result = reportReadyTemplate('rep-123', 'http://x');
+      const result = reportReadyTemplate(DADOS, 'http://x');
       expect(result.subject.length).toBeGreaterThan(0);
       expect(result.html.length).toBeGreaterThan(0);
       expect(result.text.length).toBeGreaterThan(0);
     });
 
-    it('text contém o reportId', () => {
-      const result = reportReadyTemplate('rep-123', 'http://x');
-      expect(result.text).toContain('rep-123');
-    });
-
     it('html contém o link completo com reportId', () => {
-      const result = reportReadyTemplate('rep-123', 'http://x');
+      const result = reportReadyTemplate(DADOS, 'http://x');
       expect(result.html).toContain('http://x/dashboard/relatorios/rep-123');
     });
 
     it('text contém a URL do relatório', () => {
-      const result = reportReadyTemplate('rep-abc', 'https://app.truthanalytics.com');
+      const result = reportReadyTemplate(
+        { ...DADOS, reportId: 'rep-abc' },
+        'https://app.truthanalytics.com',
+      );
       expect(result.text).toContain('https://app.truthanalytics.com/dashboard/relatorios/rep-abc');
     });
   });

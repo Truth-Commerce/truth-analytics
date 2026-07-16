@@ -10,6 +10,7 @@ import { collectBlingOrders } from '@/modules/pipeline/steps/collect-bling';
 import { collectMarket } from '@/modules/pipeline/steps/collect-market';
 import { computeMetrics } from '@/modules/pipeline/steps/compute-metrics';
 import { analyzeWithIA } from '@/modules/pipeline/steps/analyze-ia';
+import { buildAnalysisContext } from '@/modules/pipeline/steps/analysis-context';
 import { finalize } from '@/modules/pipeline/steps/finalize';
 import type { ReportEtapa } from '@/modules/reports/report.types';
 
@@ -70,6 +71,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     if (!org) throw new Error('org_nao_encontrada');
     const { plano, nicho } = org;
     if (!plano) throw new Error('sem_plano');
+    const orgName = org.name;
 
     // Coleta Bling ∥ mercado (allSettled: nenhuma promessa solta escreve depois do retorno).
     const [blingOutcome, marketOutcome] = await Promise.allSettled([
@@ -89,7 +91,8 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     const metricas = await computeMetrics(orgId, reportId, periodo, benchmarkParcial);
 
     await setEtapa(reportId, 'analisando_ia');
-    const { analise, usage: iaUsage } = await analyzeWithIA(metricas, nicho);
+    const contexto = await buildAnalysisContext({ orgId, orgName, nicho, plano, periodo });
+    const { analise, usage: iaUsage } = await analyzeWithIA(metricas, contexto);
 
     await setEtapa(reportId, 'finalizando');
     let clientEmail: string | null = null;
@@ -98,7 +101,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     } catch {
       // lookup falhou — e-mail pulado, pipeline continua
     }
-    await finalize({ reportId, orgId, metricas, analise, plano, clientEmail, iaUsage });
+    await finalize({ reportId, orgId, metricas, analise, plano, periodo, clientEmail, iaUsage });
 
     log.info('pipeline concluído');
     return { reportId, status: 'done' };

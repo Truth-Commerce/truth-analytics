@@ -68,6 +68,7 @@ describe.skipIf(!url)('finalize — notificação in-app "relatório pronto"', (
       metricas: METRICAS,
       analise: ANALISE,
       plano: 'weekly',
+      periodo: { inicio: new Date('2026-06-01T00:00:00Z'), fim: new Date('2026-06-30T00:00:00Z') },
       clientEmail: null, // sem RESEND no ambiente de teste — e-mail é no-op
       iaUsage: null,
     });

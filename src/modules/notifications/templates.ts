@@ -1,3 +1,4 @@
+import { formatBRL, formatDiaMesUtc } from '@/lib/format';
 import type { Plano } from '@/modules/auth/user.types';
 
 export type EmailContent = {
@@ -53,26 +54,60 @@ export function accountActivatedTemplate(plano: Plano): EmailContent {
   return { subject, html, text };
 }
 
+/** Dados ricos do e-mail "relatório pronto" — montados no finalize (Task 5). */
+export type ReportReadyEmailData = {
+  reportId: string;
+  periodoInicio: Date;
+  periodoFim: Date;
+  totalPeriodo: number;
+  deltaPct: number | null;
+  score: number | null;
+  primeiroGargalo: string | null;
+};
+
 /**
- * Template: relatório pronto (enviado ao cliente após geração bem-sucedida).
+ * Template v2: relatório pronto — assunto com o RESULTADO do período e corpo
+ * branded mínimo (inline styles; e-mail não carrega CSS externo).
  */
-export function reportReadyTemplate(reportId: string, appUrl: string): EmailContent {
-  const url = `${appUrl}/dashboard/relatorios/${reportId}`;
-  const subject = 'Seu relatório está pronto — Truth Analytics';
+export function reportReadyTemplate(dados: ReportReadyEmailData, appUrl: string): EmailContent {
+  const url = `${appUrl}/dashboard/relatorios/${dados.reportId}`;
+  // Fronteiras de período são dias-calendário em UTC — formatar em UTC para
+  // não deslocar o dia de início (meia-noite UTC = 21h BRT do dia anterior).
+  const periodo = `${formatDiaMesUtc(dados.periodoInicio)}–${formatDiaMesUtc(dados.periodoFim)}`;
+  const total = formatBRL(dados.totalPeriodo);
+  const deltaTexto =
+    dados.deltaPct === null
+      ? ''
+      : ` (${dados.deltaPct >= 0 ? '▲' : '▼'} ${dados.deltaPct >= 0 ? '+' : ''}${dados.deltaPct.toLocaleString('pt-BR')}%)`;
+
+  const subject = `Suas vendas de ${periodo}: ${total}${deltaTexto} — relatório Truth pronto`;
+
+  const planoDeAcao =
+    'Cada recomendação do relatório pode virar uma tarefa no seu Plano de Ação com um clique — é lá que a análise vira resultado.';
+
   const text = [
-    'Seu relatório de análise foi gerado com sucesso.',
+    `Suas vendas de ${periodo}: ${total}${deltaTexto}.`,
     '',
-    `Relatório ID: ${reportId}`,
+    ...(dados.score !== null ? [`Truth Score da operação: ${dados.score}/100.`] : []),
+    ...(dados.primeiroGargalo !== null ? [`Principal gargalo identificado: ${dados.primeiroGargalo}`] : []),
     '',
-    `Acesse em: ${url}`,
+    `Veja o relatório completo: ${url}`,
+    '',
+    planoDeAcao,
     '',
     'Atenciosamente,',
     'Equipe Truth Analytics',
   ].join('\n');
-  const html = `<p>Seu relatório de análise foi gerado com sucesso.</p>
-<p><strong>Relatório ID:</strong> ${reportId}</p>
-<p><a href="${url}">Clique aqui para visualizar o relatório</a></p>
-<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111318;max-width:560px">
+<p style="font-size:20px;font-weight:bold;margin:0 0 16px"><span style="color:#07dd2b">Truth</span>Analytics</p>
+<p style="font-size:16px">Suas vendas de <strong>${periodo}</strong>: <strong>${escapeHtml(total)}</strong>${escapeHtml(deltaTexto)}.</p>
+${dados.score !== null ? `<p>Truth Score da operação: <strong>${dados.score}/100</strong>.</p>` : ''}
+${dados.primeiroGargalo !== null ? `<p>Principal gargalo identificado: <strong>${escapeHtml(dados.primeiroGargalo)}</strong></p>` : ''}
+<p style="margin:24px 0"><a href="${escapeHtml(url)}" style="background:#07dd2b;color:#04150a;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block">Ver relatório completo</a></p>
+<p style="color:#5b5b66;font-size:13px">${planoDeAcao}</p>
+<p style="color:#5b5b66;font-size:13px">Atenciosamente,<br>Equipe Truth Analytics</p>
+</div>`;
 
   return { subject, html, text };
 }

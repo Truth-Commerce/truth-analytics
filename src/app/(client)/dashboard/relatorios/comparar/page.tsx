@@ -1,6 +1,6 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
-import { getReportById, listDoneReports } from '@/modules/reports/report.repository';
-import { compararMetricas } from '@/modules/reports/compare';
+import { getDoneAnterior, getReportById, listDoneReports } from '@/modules/reports/report.repository';
+import { compararMetricas, compararTopProdutos, leituraComparacao } from '@/modules/reports/compare';
 import { formatBRL, formatPeriodo } from '@/lib/format';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
@@ -17,6 +17,32 @@ function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   );
 }
 
+/** Δ absoluto em R$ ao lado do badge de % (só para linhas monetárias). */
+function DeltaBRL({ deltaAbs }: { deltaAbs: number }) {
+  return (
+    <span className="ml-2 font-mono text-xs text-muted">
+      {deltaAbs >= 0 ? '+' : ''}
+      {formatBRL(deltaAbs)}
+    </span>
+  );
+}
+
+const SITUACAO_LABEL = {
+  subiu: '▲ subiu',
+  caiu: '▼ caiu',
+  estavel: '→ estável',
+  entrou: '★ entrou',
+  saiu: '— saiu',
+} as const;
+
+const SITUACAO_COR = {
+  subiu: 'text-brand',
+  caiu: 'text-red-400',
+  estavel: 'text-muted',
+  entrou: 'text-brand',
+  saiu: 'text-dim',
+} as const;
+
 export default async function CompararPage({
   searchParams,
 }: {
@@ -27,16 +53,24 @@ export default async function CompararPage({
 
   // Escopado por org: um id de outra org (forjado na URL) resolve para null,
   // e a página cai na mensagem neutra — nenhum dado de outra org é exibido.
-  const [relA, relB] =
-    searchParams.a && searchParams.b && searchParams.a !== searchParams.b
-      ? await Promise.all([
-          getReportById(searchParams.a, access.orgId),
-          getReportById(searchParams.b, access.orgId),
-        ])
-      : [null, null];
+  // Sem `b` (ou b === a), o default é o done imediatamente anterior a A.
+  let relA = null as Awaited<ReturnType<typeof getReportById>>;
+  let relB = null as Awaited<ReturnType<typeof getReportById>>;
+  if (searchParams.a) {
+    relA = await getReportById(searchParams.a, access.orgId);
+    if (relA) {
+      relB =
+        searchParams.b && searchParams.b !== searchParams.a
+          ? await getReportById(searchParams.b, access.orgId)
+          : await getDoneAnterior(access.orgId, relA.createdAt, relA.id);
+    }
+  }
 
+  const usouDefaultAnterior = !searchParams.b || searchParams.b === searchParams.a;
   const comp =
     relA?.metricas && relB?.metricas ? compararMetricas(relA.metricas, relB.metricas) : null;
+  const produtos =
+    relA?.metricas && relB?.metricas ? compararTopProdutos(relA.metricas, relB.metricas) : [];
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
@@ -50,84 +84,122 @@ export default async function CompararPage({
           label: formatPeriodo(r.periodoInicio, r.periodoFim),
         }))}
         a={searchParams.a}
-        b={searchParams.b}
+        b={relB?.id ?? searchParams.b}
       />
       {comp && relA && relB ? (
-        <Card className="!p-0" data-testid="comparacao">
-          <Table>
-            <THead>
-              <TR>
-                <TH>Métrica</TH>
-                <TH>{formatPeriodo(relA.periodoInicio, relA.periodoFim)}</TH>
-                <TH>{formatPeriodo(relB.periodoInicio, relB.periodoFim)}</TH>
-                <TH>Δ</TH>
-              </TR>
-            </THead>
-            <TBody>
-              <TR>
-                <TD>Total de vendas</TD>
-                <TD numeric>{formatBRL(comp.totalVendas.atual)}</TD>
-                <TD numeric className="text-muted">
-                  {formatBRL(comp.totalVendas.anterior)}
-                </TD>
-                <TD>
-                  <DeltaBadge deltaPct={comp.totalVendas.deltaPct} />
-                </TD>
-              </TR>
-              <TR>
-                <TD>Pedidos</TD>
-                <TD numeric>{comp.pedidos.atual}</TD>
-                <TD numeric className="text-muted">
-                  {comp.pedidos.anterior}
-                </TD>
-                <TD>
-                  <DeltaBadge deltaPct={comp.pedidos.deltaPct} />
-                </TD>
-              </TR>
-              <TR>
-                <TD>Ticket médio</TD>
-                <TD numeric>{formatBRL(comp.ticketMedio.atual)}</TD>
-                <TD numeric className="text-muted">
-                  {formatBRL(comp.ticketMedio.anterior)}
-                </TD>
-                <TD>
-                  <DeltaBadge deltaPct={comp.ticketMedio.deltaPct} />
-                </TD>
-              </TR>
-              {comp.truthScore && (
+        <>
+          <p className="text-sm text-white/90" data-testid="leitura-comparacao">
+            {leituraComparacao(comp)}
+          </p>
+          <Card className="!p-0" data-testid="comparacao">
+            <Table>
+              <THead>
                 <TR>
-                  <TD>Truth Score</TD>
-                  <TD numeric>{comp.truthScore.atual}</TD>
+                  <TH>Métrica</TH>
+                  <TH>{formatPeriodo(relA.periodoInicio, relA.periodoFim)}</TH>
+                  <TH>{formatPeriodo(relB.periodoInicio, relB.periodoFim)}</TH>
+                  <TH>Δ</TH>
+                </TR>
+              </THead>
+              <TBody>
+                <TR>
+                  <TD>Total de vendas</TD>
+                  <TD numeric>{formatBRL(comp.totalVendas.atual)}</TD>
                   <TD numeric className="text-muted">
-                    {comp.truthScore.anterior}
+                    {formatBRL(comp.totalVendas.anterior)}
                   </TD>
                   <TD>
-                    <DeltaBadge deltaPct={comp.truthScore.deltaPct} />
+                    <DeltaBadge deltaPct={comp.totalVendas.deltaPct} />
+                    <DeltaBRL deltaAbs={comp.totalVendas.deltaAbs} />
                   </TD>
                 </TR>
-              )}
-              {comp.porCanal.map((c) => (
-                <TR key={c.canal}>
-                  <TD className="text-muted">Canal: {c.canal}</TD>
-                  <TD numeric>{formatBRL(c.delta.atual)}</TD>
+                <TR>
+                  <TD>Pedidos</TD>
+                  <TD numeric>{comp.pedidos.atual}</TD>
                   <TD numeric className="text-muted">
-                    {formatBRL(c.delta.anterior)}
+                    {comp.pedidos.anterior}
                   </TD>
                   <TD>
-                    <DeltaBadge deltaPct={c.delta.deltaPct} />
+                    <DeltaBadge deltaPct={comp.pedidos.deltaPct} />
                   </TD>
                 </TR>
-              ))}
-            </TBody>
-          </Table>
-        </Card>
+                <TR>
+                  <TD>Ticket médio</TD>
+                  <TD numeric>{formatBRL(comp.ticketMedio.atual)}</TD>
+                  <TD numeric className="text-muted">
+                    {formatBRL(comp.ticketMedio.anterior)}
+                  </TD>
+                  <TD>
+                    <DeltaBadge deltaPct={comp.ticketMedio.deltaPct} />
+                    <DeltaBRL deltaAbs={comp.ticketMedio.deltaAbs} />
+                  </TD>
+                </TR>
+                {comp.truthScore && (
+                  <TR>
+                    <TD>Truth Score</TD>
+                    <TD numeric>{comp.truthScore.atual}</TD>
+                    <TD numeric className="text-muted">
+                      {comp.truthScore.anterior}
+                    </TD>
+                    <TD>
+                      <DeltaBadge deltaPct={comp.truthScore.deltaPct} />
+                    </TD>
+                  </TR>
+                )}
+                {comp.porCanal.map((c) => (
+                  <TR key={c.canal}>
+                    <TD className="text-muted">Canal: {c.canal}</TD>
+                    <TD numeric>{formatBRL(c.delta.atual)}</TD>
+                    <TD numeric className="text-muted">
+                      {formatBRL(c.delta.anterior)}
+                    </TD>
+                    <TD>
+                      <DeltaBadge deltaPct={c.delta.deltaPct} />
+                      <DeltaBRL deltaAbs={c.delta.deltaAbs} />
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </Card>
+          {produtos.length > 0 && (
+            <Card className="!p-0" data-testid="comparacao-produtos">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Produto</TH>
+                    <TH className="text-right">Receita (A)</TH>
+                    <TH className="text-right">Receita (B)</TH>
+                    <TH>Situação</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {produtos.map((p) => (
+                    <TR key={p.sku || p.nome}>
+                      <TD>
+                        {p.nome} <span className="font-mono text-xs text-dim">{p.sku}</span>
+                      </TD>
+                      <TD numeric>{formatBRL(p.receitaAtual)}</TD>
+                      <TD numeric className="text-muted">
+                        {formatBRL(p.receitaAnterior)}
+                      </TD>
+                      <TD className={SITUACAO_COR[p.situacao]}>{SITUACAO_LABEL[p.situacao]}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </Card>
+          )}
+        </>
       ) : (
         <Card>
           <CardContent>
             <p className="text-muted">
-              {dones.length < 2
-                ? 'Você precisa de pelo menos 2 relatórios concluídos para comparar.'
-                : 'Selecione dois relatórios diferentes acima.'}
+              {searchParams.a && relA && !relB && usouDefaultAnterior
+                ? 'Este é o primeiro relatório concluído — não há período anterior para comparar.'
+                : dones.length < 2
+                  ? 'Você precisa de pelo menos 2 relatórios concluídos para comparar.'
+                  : 'Selecione dois relatórios diferentes acima.'}
             </p>
           </CardContent>
         </Card>

@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation';
 
+import { AchadosCards } from '@/components/tasks/AchadosCards';
 import { AchadosParaTasks } from '@/components/tasks/AchadosParaTasks';
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
-import { getReportById } from '@/modules/reports/report.repository';
+import { getDoneAnterior, getReportById } from '@/modules/reports/report.repository';
+import { heroKpis } from '@/modules/reports/report-view-model';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { friendlyReportError } from '@/modules/reports/report-errors';
 import { listTaskTitulosByReport } from '@/modules/tasks/task.repository';
@@ -10,19 +12,24 @@ import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Stat } from '@/components/ui/Stat';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { Alert } from '@/components/ui/Alert';
 import { ScoreGauge } from '@/components/ui/charts/ScoreGauge';
 import { Reveal } from './reveal';
 import { Toc } from './toc';
-import { EvolucaoChart } from './evolucao-chart';
+import { MetricasSection } from './metricas-section';
+import { HeroKpisFaixa } from './hero-kpis';
 
 export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
   const access = await requireActiveOrg();
   const rel = await getReportById(params.id, access.orgId);
 
   if (!rel) notFound();
+
+  const anterior =
+    rel.status === 'done' && rel.metricas
+      ? await getDoneAnterior(access.orgId, rel.createdAt, rel.id)
+      : null;
 
   const titulosExistentes = rel.analiseIa
     ? await listTaskTitulosByReport(rel.id, access.orgId)
@@ -83,6 +90,13 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
             </span>
           </div>
         </div>
+
+        {rel.status === 'done' && rel.metricas ? (
+          <HeroKpisFaixa
+            kpis={heroKpis(rel.metricas, anterior?.metricas ?? null)}
+            destaques={rel.analiseIa?.destaques}
+          />
+        ) : null}
       </header>
 
       {rel.status === 'done' && rel.metricas ? (
@@ -93,145 +107,23 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
               ...(rel.metricas.truth_score
                 ? [{ href: '#score-breakdown', label: 'Truth Score' }]
                 : []),
-              ...(rel.analiseIa
-                ? [
-                    { href: '#resumo', label: 'Resumo executivo' },
-                    { href: '#recomendacoes', label: 'Recomendações' },
-                    { href: '#precos', label: 'Preços sugeridos' },
-                  ]
+              ...(rel.analiseIa ? [{ href: '#resumo', label: 'Resumo executivo' }] : []),
+              ...(rel.analiseIa &&
+              ((rel.analiseIa.achados?.length ?? 0) > 0 ||
+                rel.analiseIa.gargalos.length > 0 ||
+                rel.analiseIa.sugestoesMelhoria.length > 0 ||
+                rel.analiseIa.ideiasVenda.length > 0)
+                ? [{ href: '#recomendacoes', label: 'Recomendações' }]
+                : []),
+              ...(rel.analiseIa && rel.analiseIa.recomendacoesPreco.length > 0
+                ? [{ href: '#precos', label: 'Preços sugeridos' }]
                 : []),
             ]}
           />
 
           <div className="min-w-0 flex-1 space-y-10">
             <Reveal id="metricas" data-testid="metricas" className="space-y-6 scroll-mt-24">
-              <h2 className="font-heading text-xl font-semibold text-white">Métricas</h2>
-
-              {/* Ticket médio como Stat */}
-              <Card className="inline-flex">
-                <Stat label="Ticket médio" value={formatBRL(rel.metricas.ticketMedio)} />
-              </Card>
-
-              {rel.metricas.benchmarkParcial && (
-                <Badge variant="warn" className="flex w-fit gap-1.5">
-                  Benchmark de mercado parcial — dados de concorrência incompletos.
-                </Badge>
-              )}
-
-              {/* Evolução agora como chart + tabela */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Evolução</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <EvolucaoChart
-                    data={rel.metricas.evolucao.map((e) => ({ x: e.data, y: e.total }))}
-                  />
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>Data</TH>
-                        <TH className="text-right">Total</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.evolucao.map((e, i) => (
-                        <TR key={i}>
-                          <TD className="font-mono text-sm">{e.data}</TD>
-                          <TD numeric>{formatBRL(e.total)}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Vendas por canal */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Vendas por canal</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>Canal</TH>
-                        <TH className="text-right">Total</TH>
-                        <TH className="text-right">Pedidos</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.vendasPorCanal.map((v, i) => (
-                        <TR key={i}>
-                          <TD>{v.canal}</TD>
-                          <TD numeric>{formatBRL(v.total)}</TD>
-                          <TD numeric>{v.pedidos}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Top produtos */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Top produtos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>Nome</TH>
-                        <TH>SKU</TH>
-                        <TH className="text-right">Qtd.</TH>
-                        <TH className="text-right">Receita</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.topProdutos.map((p, i) => (
-                        <TR key={i}>
-                          <TD>{p.nome}</TD>
-                          <TD className="font-mono text-sm">{p.sku}</TD>
-                          <TD numeric>{p.quantidade}</TD>
-                          <TD numeric>{formatBRL(p.receita)}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Posição de preço */}
-              <Card>
-                <CardHeader>
-                  <CardTitle as="h3" className="text-sm">Posição de preço</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <THead>
-                      <TR>
-                        <TH>SKU</TH>
-                        <TH>Nome</TH>
-                        <TH className="text-right">Nosso preço</TH>
-                        <TH className="text-right">Mercado (mediana)</TH>
-                        <TH>Fonte</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {rel.metricas.posicaoPreco.map((pp, i) => (
-                        <TR key={i}>
-                          <TD className="font-mono text-sm">{pp.sku}</TD>
-                          <TD>{pp.nome}</TD>
-                          <TD numeric>{formatBRL(pp.nossoPreco)}</TD>
-                          <TD numeric>{formatBRL(pp.precoMercadoMediano)}</TD>
-                          <TD>{pp.fonte}</TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                </CardContent>
-              </Card>
+              <MetricasSection metricas={rel.metricas} anterior={anterior?.metricas ?? null} />
             </Reveal>
 
             {rel.metricas.truth_score && (
@@ -285,11 +177,19 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                   </Card>
                 </Reveal>
 
-                {rel.analiseIa.gargalos.length > 0 ||
+                {(rel.analiseIa.achados?.length ?? 0) > 0 ||
+                rel.analiseIa.gargalos.length > 0 ||
                 rel.analiseIa.sugestoesMelhoria.length > 0 ||
                 rel.analiseIa.ideiasVenda.length > 0 ? (
                   <Reveal id="recomendacoes" className="space-y-4 scroll-mt-24">
                     <h2 className="font-heading text-xl font-semibold text-white">Recomendações</h2>
+                    {rel.analiseIa.achados && rel.analiseIa.achados.length > 0 ? (
+                      <AchadosCards
+                        reportId={rel.id}
+                        achados={rel.analiseIa.achados}
+                        titulosExistentes={titulosExistentes}
+                      />
+                    ) : (
                     <div className="space-y-4">
                       {rel.analiseIa.gargalos.length > 0 ? (
                         <Card className="flex flex-col gap-3">
@@ -336,6 +236,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                         </Card>
                       ) : null}
                     </div>
+                    )}
                   </Reveal>
                 ) : null}
 

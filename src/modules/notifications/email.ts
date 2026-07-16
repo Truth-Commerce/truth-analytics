@@ -10,6 +10,7 @@ import {
   passwordResetTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
+  type ReportReadyEmailData,
   taskAprovadaTemplate,
   taskComentarioTemplate,
   taskCriadaTemplate,
@@ -62,8 +63,8 @@ export async function sendAccountActivatedEmail(to: string, plano: Plano): Promi
  * Notifica o cliente que seu relatório está pronto.
  * Nunca lança.
  */
-export async function sendReportReadyEmail(to: string, reportId: string): Promise<void> {
-  const content = reportReadyTemplate(reportId, serverEnv.APP_URL);
+export async function sendReportReadyEmail(to: string, dados: ReportReadyEmailData): Promise<void> {
+  const content = reportReadyTemplate(dados, serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }
 

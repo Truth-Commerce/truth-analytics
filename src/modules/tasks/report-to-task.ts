@@ -1,12 +1,16 @@
+import { formatBRL } from '@/lib/format';
+import type { Achado } from '@/modules/pipeline/contracts';
+import { CHECKLIST_UNCHECKED } from './checklist-line';
 import type { TaskPrioridade, TaskTipo } from './task.types';
 
-export const FONTES_ANALISE = ['gargalos', 'sugestoesMelhoria', 'ideiasVenda'] as const;
+export const FONTES_ANALISE = ['gargalos', 'sugestoesMelhoria', 'ideiasVenda', 'achados'] as const;
 export type FonteAnalise = (typeof FONTES_ANALISE)[number];
 
 export const PRIORIDADE_POR_FONTE: Record<FonteAnalise, TaskPrioridade> = {
   gargalos: 'alta',
   sugestoesMelhoria: 'media',
   ideiasVenda: 'baixa',
+  achados: 'media', // fallback formal — a prioridade REAL vem do próprio achado
 };
 
 export function normalizarTexto(s: string): string {
@@ -47,5 +51,34 @@ export function itemToTaskInput(input: { fonte: FonteAnalise; texto: string; rep
     prioridade: PRIORIDADE_POR_FONTE[input.fonte],
     criadoPor: 'ia',
     reportId: input.reportId,
+  };
+}
+
+/**
+ * Conversão achado estruturado → task: usa o título direto (sem heurística de
+ * slice), o tipo e a prioridade que a própria IA atribuiu, e transforma os
+ * passos de `comoFazer` em um checklist markdown. Impacto e SKUs entram na
+ * descrição só quando presentes.
+ */
+export function achadoToTaskInput(
+  achado: Achado,
+  reportId: string,
+): { titulo: string; descricao: string; tipo: TaskTipo; prioridade: TaskPrioridade; criadoPor: 'ia'; reportId: string } {
+  const linhas: string[] = [achado.descricao.trim()];
+  if (achado.impactoEstimadoMensalBRL !== null) {
+    linhas.push(`Impacto estimado: ${formatBRL(achado.impactoEstimadoMensalBRL)}/mês`);
+  }
+  if (achado.skus.length > 0) linhas.push(`SKUs: ${achado.skus.join(', ')}`);
+  linhas.push('', '_Origem: análise IA do relatório._');
+  if (achado.comoFazer.length > 0) {
+    linhas.push(...achado.comoFazer.map((p) => `${CHECKLIST_UNCHECKED}${p}`));
+  }
+  return {
+    titulo: tituloFromItem(achado.titulo),
+    descricao: linhas.join('\n'),
+    tipo: achado.tipo,
+    prioridade: achado.prioridade,
+    criadoPor: 'ia',
+    reportId,
   };
 }
