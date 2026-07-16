@@ -589,14 +589,17 @@ export async function toggleChecklistItemFormAction(formData: FormData): Promise
   }
   const { taskId, index } = parsed.data;
 
+  let mudou = false;
   try {
-    await toggleChecklistItemTx({ taskId, orgId, index, actorUserId: access.id });
+    mudou = await toggleChecklistItemTx({ taskId, orgId, index, actorUserId: access.id });
   } catch (e) {
     logger.warn('toggleChecklistItemFormAction falhou', { orgId, taskId }, e);
     return;
   }
 
-  revalidateTaskRoutes(orgId);
+  // No-op (índice inexistente / linha não-checkbox) não muda nada: não paga o
+  // custo de revalidar as rotas de task.
+  if (mudou) revalidateTaskRoutes(orgId);
 }
 
 // ---------------------------------------------------------------------------

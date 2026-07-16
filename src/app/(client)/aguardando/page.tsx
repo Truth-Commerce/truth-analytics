@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { requireSession } from '@/modules/auth/require-session';
@@ -11,8 +12,6 @@ const passos = [
   { titulo: 'Ativação', texto: 'Você recebe um e-mail assim que a conta for ativada — normalmente em até 1 dia útil.' },
   { titulo: 'Primeiro relatório', texto: 'Com a conta ativa, você conecta o Bling e gera sua primeira análise em minutos.' },
 ];
-
-import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Conta em análise' };
 
