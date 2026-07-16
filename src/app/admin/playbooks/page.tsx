@@ -3,6 +3,10 @@ import { listTemplates } from '@/modules/tasks/task-template.repository';
 import { PageHeader } from '@/components/page-header';
 import { PlaybooksManager } from './playbooks-manager';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Playbooks' };
+
 export default async function PlaybooksPage() {
   await requireAdmin();
   const templates = await listTemplates(false);

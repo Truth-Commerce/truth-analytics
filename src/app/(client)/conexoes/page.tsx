@@ -11,6 +11,10 @@ import { TrackedProducts } from './tracked-products';
 import { GeracaoAutomaticaToggle } from './geracao-automatica-toggle';
 import { feedbackDeCallback } from './callback-feedback';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Conexões' };
+
 export default async function ConexoesPage({
   searchParams,
 }: {

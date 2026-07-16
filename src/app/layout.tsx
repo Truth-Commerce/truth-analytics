@@ -26,8 +26,11 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Truth Analytics',
-  description: 'Análise multi-marketplace por IA.',
+  title: {
+    default: 'Truth Analytics',
+    template: '%s — Truth Analytics',
+  },
+  description: 'Inteligência de marketplace por IA para o seu e-commerce.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

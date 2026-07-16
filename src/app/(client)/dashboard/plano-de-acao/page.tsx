@@ -7,6 +7,10 @@ import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { NewTaskForm } from '@/components/tasks/NewTaskForm';
 import { PageHeader } from '@/components/page-header';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Plano de Ação' };
+
 export default async function PlanoDeAcaoPage() {
   const access = await requireActiveOrg();
   const [tasks, ultimoRelatorio] = await Promise.all([

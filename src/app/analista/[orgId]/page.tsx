@@ -17,6 +17,13 @@ import { listTemplates } from '@/modules/tasks/task-template.repository';
 import { atorFromRole } from '@/modules/tasks/task.types';
 import { listTaskTitulosAbertos, listTasksKanban } from '@/modules/tasks/task.repository';
 
+import type { Metadata } from 'next';
+
+export async function generateMetadata({ params }: { params: { orgId: string } }): Promise<Metadata> {
+  const org = await getOrganizationById(params.orgId);
+  return { title: org ? `${org.name} · Cliente` : 'Cliente' };
+}
+
 export default async function AnalistaOrgPage({ params }: { params: { orgId: string } }) {
   const access = await requireAnalista();
 

@@ -45,6 +45,10 @@ const SITUACAO_COR = {
   saiu: 'text-dim',
 } as const;
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Comparar períodos' };
+
 export default async function CompararPage({
   searchParams,
 }: {

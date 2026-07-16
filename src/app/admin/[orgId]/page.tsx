@@ -33,6 +33,13 @@ const SAUDE_BADGE = {
   nenhuma: { variant: 'neutral', label: 'Nunca conectada' },
 } as const;
 
+import type { Metadata } from 'next';
+
+export async function generateMetadata({ params }: { params: { orgId: string } }): Promise<Metadata> {
+  const org = await getOrganizationById(params.orgId);
+  return { title: org ? `${org.name} · Cliente` : 'Cliente' };
+}
+
 export default async function AdminOrgPage({ params }: { params: { orgId: string } }) {
   await requireAdmin();
   const org = await getOrganizationById(params.orgId);

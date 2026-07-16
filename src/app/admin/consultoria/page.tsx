@@ -7,6 +7,10 @@ import { Reveal } from '@/components/reveal';
 import { Stat } from '@/components/ui/Stat';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Consultoria' };
+
 export default async function ConsultoriaPage() {
   const admin = await requireAdmin();
   const [metrics, impactoTodos] = await Promise.all([getConsultoriaMetrics(), getImpactoPorOrg(admin)]);

@@ -12,6 +12,10 @@ import { STATUS_TASK_LABEL, TASK_STATUSES } from '@/modules/tasks/task.types';
 
 import { MeuDiaFaixa } from './meu-dia';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Carteira' };
+
 export default async function AnalistaPage() {
   const access = await requireAnalista();
 

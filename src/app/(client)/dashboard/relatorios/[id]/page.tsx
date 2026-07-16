@@ -23,6 +23,15 @@ import { Toc } from './toc';
 import { MetricasSection } from './metricas-section';
 import { HeroKpisFaixa } from './hero-kpis';
 
+import type { Metadata } from 'next';
+
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  const access = await requireActiveOrg();
+  const rel = await getReportById(params.id, access.orgId);
+  if (!rel) return { title: 'Relatório' };
+  return { title: `Relatório ${formatPeriodo(rel.periodoInicio, rel.periodoFim)}` };
+}
+
 export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
   const access = await requireActiveOrg();
   const rel = await getReportById(params.id, access.orgId);

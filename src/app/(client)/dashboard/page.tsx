@@ -35,6 +35,10 @@ import { AlertasSection } from './alertas-section';
 import { MetaProgress } from './meta-progress';
 import { AcaoPrincipalCard } from './acao-principal';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Dashboard' };
+
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
 

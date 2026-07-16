@@ -12,6 +12,10 @@ import { SystemStatusCard } from './system-status-card';
 
 const PAGE_SIZE = 20;
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Admin · Clientes' };
+
 export default async function AdminPage({
   searchParams,
 }: {

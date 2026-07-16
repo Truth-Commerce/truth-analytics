@@ -1,9 +1,19 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
+import { LandingStats } from './landing-stats';
+import { LandingMock } from './landing-mock';
+import { LandingMarquee } from './landing-marquee';
+
+export const metadata: Metadata = {
+  title: { absolute: 'Truth Analytics — Inteligência de marketplace por IA' },
+  description:
+    'Relatórios periódicos gerados por IA a partir do seu Bling: métricas de vendas, benchmark de mercado e recomendações de preço.',
+};
 
 const steps = [
   {
@@ -77,13 +87,28 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Button as="a" href="/sign-up" variant="primary">
+          <Button as="a" href="/sign-up" variant="primary" className="shadow-glow-3">
             Começar gratuitamente
           </Button>
           <Button as="a" href="/sign-in" variant="secondary">
             Já tenho conta
           </Button>
         </div>
+      </section>
+
+      {/* ── Números do produto ── */}
+      <section className="relative z-10 mx-auto max-w-4xl px-4 pb-16 sm:px-6">
+        <LandingStats />
+      </section>
+
+      {/* ── Mock do dashboard ── */}
+      <section className="relative z-10 mx-auto max-w-5xl px-4 pb-16 sm:px-6">
+        <LandingMock />
+      </section>
+
+      {/* ── Canais ── */}
+      <section className="relative z-10 mx-auto max-w-5xl px-4 pb-20 sm:px-6">
+        <LandingMarquee />
       </section>
 
       {/* ── Como funciona ── */}
