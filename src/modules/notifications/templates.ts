@@ -1,16 +1,11 @@
 import { formatBRL, formatDiaMesUtc } from '@/lib/format';
+import { PLANO_LABEL } from '@/lib/labels';
 import type { Plano } from '@/modules/auth/user.types';
 
 export type EmailContent = {
   subject: string;
   html: string;
   text: string;
-};
-
-const PLANO_LABELS: Record<Plano, string> = {
-  weekly: 'Semanal',
-  biweekly: 'Quinzenal',
-  monthly: 'Mensal',
 };
 
 /**
@@ -34,7 +29,7 @@ export function escapeHtml(s: string): string {
  * Template: conta ativada (enviado ao cliente após ativação da organização).
  */
 export function accountActivatedTemplate(plano: Plano): EmailContent {
-  const planoLabel = PLANO_LABELS[plano] ?? plano;
+  const planoLabel = PLANO_LABEL[plano] ?? plano;
   const subject = 'Sua conta foi ativada — Truth Analytics';
   const text = [
     'Parabéns! Sua conta no Truth Analytics foi ativada com sucesso.',

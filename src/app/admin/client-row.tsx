@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Link from 'next/link';
 import { useFormState } from 'react-dom';
 
 import {
@@ -14,6 +15,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Select } from '@/components/ui/Select';
+import { TD, TR } from '@/components/ui/Table';
+import { PLANO_LABEL, STATUS_ORG_LABEL } from '@/lib/labels';
+import type { Plano } from '@/modules/auth/user.types';
 
 const initial: AdminActionState = {};
 
@@ -65,20 +69,20 @@ export function ClientRow({ orgId, name, status, plano, conexao }: Props) {
   const err = actState.error || suspState.error || reactState.error || planoState.error;
 
   return (
-    <tr className="border-b border-line/50 last:border-0" data-testid={`org-${orgId}`}>
-      <td className="px-4 py-3 text-white/90">
-        <a href={`/admin/${orgId}`} className="hover:text-brand hover:underline">
+    <TR data-testid={`org-${orgId}`}>
+      <TD>
+        <Link href={`/admin/${orgId}`} className="text-white/90 hover:text-brand hover:underline">
           {name}
-        </a>
-      </td>
-      <td className="px-4 py-3" data-testid={`status-${orgId}`}>
-        <Badge variant={statusVariant(status)}>{status}</Badge>
-      </td>
-      <td className="px-4 py-3 font-mono text-sm text-muted">{plano ?? '—'}</td>
-      <td className="px-4 py-3" data-testid={`conexao-${orgId}`}>
+        </Link>
+      </TD>
+      <TD data-testid={`status-${orgId}`}>
+        <Badge variant={statusVariant(status)}>{STATUS_ORG_LABEL[status]}</Badge>
+      </TD>
+      <TD className="font-mono text-muted">{plano ? (PLANO_LABEL[plano as Plano] ?? plano) : '—'}</TD>
+      <TD data-testid={`conexao-${orgId}`}>
         <Badge variant={CONEXAO_BADGE[conexao].variant}>{CONEXAO_BADGE[conexao].label}</Badge>
-      </td>
-      <td className="px-4 py-3">
+      </TD>
+      <TD>
         <div className="flex flex-wrap items-center gap-2">
           {status === 'pending' ? (
             <form action={activate} className="flex items-center gap-2">
@@ -125,9 +129,9 @@ export function ClientRow({ orgId, name, status, plano, conexao }: Props) {
               </Button>
             </form>
           ) : null}
-          {err ? <span className="text-sm text-red-400">{err}</span> : null}
+          {err ? <span className="text-sm text-danger-fg">{err}</span> : null}
         </div>
-      </td>
-    </tr>
+      </TD>
+    </TR>
   );
 }

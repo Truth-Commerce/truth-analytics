@@ -12,6 +12,7 @@ import { getOrgAnalistaUser } from '@/modules/notifications/recipients';
 import { getOrgSettings } from '@/modules/organizations/organization-settings.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { formatData, formatPeriodo } from '@/lib/format';
+import { PLANO_LABEL, STATUS_ORG_LABEL } from '@/lib/labels';
 import { STATUS_LABEL, reportStatusVariant, type ReportStatus } from '@/modules/reports/report.types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -56,9 +57,9 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
 
       <PageHeader eyebrow="Cliente" title={org.name} actions={<GenerateNow orgId={org.id} />}>
         <Badge variant={org.status === 'active' ? 'success' : org.status === 'suspended' ? 'danger' : 'warn'}>
-          {org.status}
+          {STATUS_ORG_LABEL[org.status]}
         </Badge>
-        <span className="font-mono text-sm text-muted">{org.plano ?? 'sem plano'}</span>
+        <span className="font-mono text-sm text-muted">{org.plano ? PLANO_LABEL[org.plano] : 'sem plano'}</span>
         <Badge variant={saudeInfo.variant}>{saudeInfo.label}</Badge>
       </PageHeader>
 
