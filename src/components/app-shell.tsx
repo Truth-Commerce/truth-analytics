@@ -227,7 +227,9 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
       </header>
 
       {/* Page content — div (not main) so each page provides the single <main> landmark */}
-      <div className="px-4 py-8">{children}</div>
+      {/* Gutter único: TODA página roteada tem p-6 md:p-8 próprio (verificado) —
+          o px-4 daqui dobrava a margem no mobile (40px por lado no QA). */}
+      <div className="py-8">{children}</div>
 
       <CommandPalette variant={variant} />
     </div>

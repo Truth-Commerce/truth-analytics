@@ -1,23 +1,20 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
-import {
-  getLatestDoneReport,
-  getLatestReport,
-  getUltimosDoneDetalhados,
-  listReports,
-} from '@/modules/reports/report.repository';
+import { getDashboardData } from '@/modules/reports/dashboard-data';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
-import { dashboardStats, insightsFromAnalise } from '@/modules/reports/dashboard-model';
-import { getConnection } from '@/modules/connections/connection.repository';
-import { getOrganizationById } from '@/modules/admin/admin.repository';
 import {
-  getOrgSettings,
-  getTotalVendasMesCorrente,
-} from '@/modules/organizations/organization-settings.repository';
-import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
-import { listAlertasAbertos } from '@/modules/alerts/alert.repository';
+  acaoNumeroUm,
+  chipsDoRelatorio,
+  copyProximaAnalise,
+  historicoComDeltas,
+  linhaDoTempoScore,
+  proximaAnaliseInfo,
+  srSummaryEvolucao,
+  statCardsModel,
+} from '@/modules/reports/dashboard-model';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
-import { progressoMeta } from '@/modules/reports/compare';
-import { formatData, formatPeriodo } from '@/lib/format';
+import { paceMeta, progressoMeta } from '@/modules/reports/compare';
+import { formatBRL, formatData, formatDataCurta, formatDataUtc, formatPeriodo } from '@/lib/format';
+import { hojeBrt } from '@/lib/timezone';
 import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -26,32 +23,31 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { GenerateReport } from './generate-report';
 import { StatCards } from './stat-cards';
-import { InsightsMarquee } from './insights-marquee';
+import { InsightChips } from './insight-chips';
 import { DashboardCharts } from './dashboard-charts';
+import { BentoCards } from './bento-cards';
 import { OnboardingChecklist } from './onboarding-checklist';
 import { TruthScoreCard } from './truth-score-card';
 import { AlertasSection } from './alertas-section';
 import { MetaProgress } from './meta-progress';
+import { AcaoPrincipalCard } from './acao-principal';
 
 export default async function DashboardPage() {
   const access = await requireActiveOrg();
 
-  const [latest, reports, conn, org, latestDone, produtos, donesRecentes, alertas, settings, totalMes] =
-    await Promise.all([
-      getLatestReport(access.orgId),
-      listReports(access.orgId),
-      getConnection(access.orgId),
-      getOrganizationById(access.orgId),
-      getLatestDoneReport(access.orgId),
-      listTrackedProducts(access.orgId),
-      getUltimosDoneDetalhados(access.orgId, 2),
-      listAlertasAbertos(access.orgId),
-      getOrgSettings(access.orgId),
-      getTotalVendasMesCorrente(access.orgId),
-    ]);
+  const data = await getDashboardData(access.orgId);
+  const { alertas, conn, doneAnterior, historico, latest, latestDone, org, settings, totalMes } = data;
 
   const metaAtual = settings?.metaMensal ?? null;
   const progresso = progressoMeta(totalMes, metaAtual);
+  const pace = paceMeta(totalMes, metaAtual, hojeBrt());
+  // Ancoragem temporal: last_sync_at (instante real → BRT) ou MAX(orders.data)
+  // (data pura → UTC) — disponíveis via G0.
+  const dadosAte = conn?.last_sync_at
+    ? formatData(conn.last_sync_at)
+    : data.ultimaDataPedido
+      ? formatDataUtc(data.ultimaDataPedido)
+      : null;
 
   const blingOk = !!conn?.connected;
   const gate = org ? podeGerar(org) : { ok: false as const, motivo: 'org_nao_encontrada' };
@@ -72,9 +68,14 @@ export default async function DashboardPage() {
     } else if (!gate.ok) {
       if (gate.motivo === 'ciclo_em_andamento') {
         const proxData = org.proximo_relatorio_liberado_em;
-        motivo = proxData
-          ? `Próximo relatório liberado em ${formatData(proxData)}.`
-          : 'O próximo relatório ainda não foi liberado.';
+        const info = proximaAnaliseInfo(settings?.geracaoAutomatica ?? false, proxData);
+        // Countdown POSITIVO quando a geração automática cuida do ciclo;
+        // fallback neutro quando o cliente desligou a automática.
+        motivo = info
+          ? copyProximaAnalise(info)
+          : proxData
+            ? `Próximo relatório liberado em ${formatData(proxData)}.`
+            : 'O próximo relatório ainda não foi liberado.';
       } else if (gate.motivo === 'sem_plano') {
         motivo = 'Nenhum plano definido.';
       } else {
@@ -83,14 +84,16 @@ export default async function DashboardPage() {
     }
   }
 
-  const stats = latestDone?.metricas ? dashboardStats(latestDone.metricas) : null;
-  const insights = insightsFromAnalise(latestDone?.analiseIa ?? null);
+  const chips = chipsDoRelatorio(latestDone);
+  const timeline = linhaDoTempoScore(historico);
+  const acao = latestDone ? acaoNumeroUm(latestDone.analiseIa) : null;
+  const linhas = historicoComDeltas(historico);
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Dashboard</h1>
 
-      {/* Conexão expirada — persistente até reconectar (G0/Task 7) */}
+      {/* 1. Conexão expirada — persistente até reconectar (G0/Task 7) */}
       {conn && conn.status === 'expirado' ? (
         <Alert variant="danger" title="Sua conexão com o Bling expirou">
           Seus dados de vendas pararam de atualizar e os relatórios automáticos foram pausados.{' '}
@@ -100,44 +103,69 @@ export default async function DashboardPage() {
         </Alert>
       ) : null}
 
-      <OnboardingChecklist
-        blingOk={blingOk}
-        temProdutos={produtos.length > 0}
-        temRelatorio={reports.length > 0}
-      />
-
-      {/* Marquee de insights do último relatório */}
-      <InsightsMarquee insights={insights} />
-
-      {/* Stats do último relatório done */}
-      {stats ? (
-        <StatCards
-          items={[
-            { label: 'Faturamento do período', value: stats.faturamento, format: 'brl', spark: stats.evolucaoTotais },
-            { label: 'Pedidos', value: stats.pedidos, format: 'int' },
-            { label: 'Ticket médio', value: stats.ticketMedio, format: 'brl' },
-            { label: 'Relatórios gerados', value: reports.length, format: 'int' },
-          ]}
-        />
-      ) : null}
-
-      {/* Charts do último relatório done */}
-      {latestDone?.metricas ? (
-        <DashboardCharts
-          evolucao={latestDone.metricas.evolucao.map((e) => ({ x: e.data, y: e.total }))}
-          canais={latestDone.metricas.vendasPorCanal.map((v) => ({ label: v.canal, value: v.total }))}
-        />
-      ) : null}
-
-      {/* Truth Score hero — some quando não há relatório done com score */}
-      <TruthScoreCard atual={donesRecentes[0] ?? null} anterior={donesRecentes[1] ?? null} />
-
-      {/* Meta do mês — some quando o admin não definiu meta */}
-      <MetaProgress progresso={progresso} meta={metaAtual} totalMes={totalMes} />
-
-      {/* Alertas abertos — some quando não há alertas */}
+      {/* 2. Alertas abertos — a decisão mais urgente primeiro (some sem alertas) */}
       <AlertasSection alertas={alertas} />
 
+      {/* 3. Como está minha loja: Truth Score + Ação nº 1 da IA */}
+      {latestDone?.metricas?.truth_score || acao ? (
+        <section data-testid="como-esta-minha-loja" className="grid gap-4 lg:grid-cols-2">
+          <TruthScoreCard
+            atual={latestDone}
+            anterior={doneAnterior}
+            serie={timeline.serie}
+            timelineTexto={timeline.texto}
+          />
+          {acao && latestDone ? (
+            <AcaoPrincipalCard
+              reportId={latestDone.id}
+              acao={acao}
+              jaExiste={data.titulosTasksUltimoDone.includes(acao.titulo)}
+            />
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* 4. Meta do mês — só depois da primeira análise (org nova = onboarding) */}
+      {historico.length > 0 ? (
+        <MetaProgress
+          progresso={progresso}
+          meta={metaAtual}
+          totalMes={totalMes}
+          pace={pace}
+          dadosAte={dadosAte}
+        />
+      ) : null}
+
+      {/* 5. Primeiros passos — o componente se esconde sozinho quando completo */}
+      <OnboardingChecklist
+        blingOk={blingOk}
+        temProdutos={data.temProdutos}
+        temRelatorio={historico.length > 0}
+      />
+
+      {/* 6. Números do último período + atalhos para o relatório */}
+      <InsightChips chips={chips} />
+      {latestDone?.metricas ? (
+        <section aria-label="Números do último período" className="space-y-2">
+          <p className="text-xs text-dim" data-testid="stats-periodo">
+            Período analisado: {formatPeriodo(latestDone.periodoInicio, latestDone.periodoFim)}
+          </p>
+          <StatCards items={statCardsModel(latestDone.metricas, doneAnterior?.metricas ?? null)} />
+        </section>
+      ) : null}
+      {latestDone?.metricas ? (
+        <DashboardCharts
+          evolucao={latestDone.metricas.evolucao.map((e) => ({
+            x: formatDataCurta(e.data), // '2026-07-06' → '06/07' (fim das datas ISO no eixo)
+            y: e.total,
+          }))}
+          canais={latestDone.metricas.vendasPorCanal.map((v) => ({ label: v.canal, value: v.total }))}
+          srSummary={srSummaryEvolucao(latestDone.metricas.evolucao)}
+        />
+      ) : null}
+      <BentoCards latestDone={latestDone} />
+
+      {/* 7. Gerar relatório + último relatório */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Gerar relatório (âncora do ⌘K) */}
         <Card id="gerar-relatorio">
@@ -183,8 +211,8 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Histórico */}
-      <section data-testid="reports-list">
+      {/* 8. Histórico */}
+      <section id="historico" data-testid="reports-list">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="font-heading text-base font-semibold text-white">Histórico</h2>
           <a
@@ -195,18 +223,20 @@ export default async function DashboardPage() {
             Comparar períodos →
           </a>
         </div>
-        {reports.length > 0 ? (
+        {historico.length > 0 ? (
           <Card className="!p-0">
             <Table>
               <THead>
                 <TR>
                   <TH>Status</TH>
                   <TH>Período</TH>
+                  <TH>Faturamento</TH>
+                  <TH>Score</TH>
                   <TH><span className="sr-only">Ações</span></TH>
                 </TR>
               </THead>
               <TBody>
-                {reports.map((r) => (
+                {linhas.map((r) => (
                   <TR key={r.id}>
                     <TD>
                       <Badge variant={reportStatusVariant(r.status)}>
@@ -214,6 +244,26 @@ export default async function DashboardPage() {
                       </Badge>
                     </TD>
                     <TD className="text-muted">{formatPeriodo(r.periodoInicio, r.periodoFim)}</TD>
+                    <TD className="font-mono">
+                      {r.totalPeriodo !== null ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {formatBRL(r.totalPeriodo)}
+                          <DeltaSeta delta={r.deltaFaturamento} />
+                        </span>
+                      ) : (
+                        <span className="text-dim">—</span>
+                      )}
+                    </TD>
+                    <TD className="font-mono">
+                      {r.score !== null ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.score}
+                          <DeltaSeta delta={r.deltaScore} />
+                        </span>
+                      ) : (
+                        <span className="text-dim">—</span>
+                      )}
+                    </TD>
                     <TD>
                       <a
                         href={`/dashboard/relatorios/${r.id}`}
@@ -240,5 +290,18 @@ export default async function DashboardPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function DeltaSeta({ delta }: { delta: number | null }) {
+  if (delta === null || delta === 0) return null;
+  const subiu = delta > 0;
+  return (
+    <span
+      aria-label={subiu ? 'subiu vs relatório anterior' : 'caiu vs relatório anterior'}
+      className={`text-xs ${subiu ? 'text-brand' : 'text-danger-fg'}`}
+    >
+      {subiu ? '▲' : '▼'}
+    </span>
   );
 }

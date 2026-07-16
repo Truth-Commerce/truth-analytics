@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import { orders, organizations } from '@/db/schema';
+import { hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -69,8 +70,8 @@ describe.skipIf(!url)('organization-settings.repository — integração', () =>
       '@/modules/organizations/organization-settings.repository'
     );
     const agora = new Date();
-    const inicioMesCorrente = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1));
-    const mesAnterior = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() - 1, 15));
+    const inicioMesCorrente = inicioDeDiaUtc(`${hojeBrt(agora).slice(0, 7)}-01`);
+    const mesAnterior = new Date(inicioMesCorrente.getTime() - 15 * 86_400_000);
 
     await tdb.insert(orders).values([
       {

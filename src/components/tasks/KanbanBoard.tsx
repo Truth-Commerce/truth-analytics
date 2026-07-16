@@ -37,7 +37,7 @@ export function KanbanBoard({
   const grupos = agruparPorStatus(tasks);
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-5 md:overflow-visible md:pb-0">
+    <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible md:pb-0 xl:grid-cols-5">
       {TASK_STATUSES.map((status) => {
         const itens = grupos[status];
         return (
