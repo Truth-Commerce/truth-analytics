@@ -10,6 +10,8 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   senha_hash: varchar('senha_hash', { length: 255 }).notNull(),
   role: varchar('role', { length: 32 }).notNull().default('client'),
+  /** Carimbo do aceite de Termos de Uso + Política de Privacidade no signup (LGPD). Null p/ contas pré-G5. */
+  aceitou_termos_em: timestamp('aceitou_termos_em', { withTimezone: true, mode: 'date' }),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' })
     .defaultNow()
     .notNull(),

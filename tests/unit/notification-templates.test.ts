@@ -6,6 +6,7 @@ import {
   blingConnectionFailedTemplate,
   escapeHtml,
   lembretePrazoTemplate,
+  passwordChangedTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
   taskAprovadaTemplate,
@@ -152,6 +153,15 @@ describe('notification templates (puro)', () => {
     it('subject menciona "expirou"', () => {
       const result = blingConnectionFailedTemplate('http://app');
       expect(result.subject.toLowerCase()).toContain('expirou');
+    });
+  });
+
+  describe('passwordChangedTemplate', () => {
+    it('inclui link de redefinição e canal de suporte', () => {
+      const { subject, html, text } = passwordChangedTemplate('https://app.exemplo.com');
+      expect(subject).toBe('Sua senha foi alterada — Truth Analytics');
+      expect(html).toContain('https://app.exemplo.com/esqueci-senha');
+      expect(text).toContain('suporte@truthcommerce.com.br');
     });
   });
 

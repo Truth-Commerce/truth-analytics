@@ -8,11 +8,17 @@ describe('buildCommands', () => {
     expect(cmds.map((c) => c.id)).toEqual([
       'nav-dashboard',
       'nav-conexoes',
+      'nav-configuracoes',
       'nav-plano-de-acao',
       'acao-gerar-relatorio',
       'acao-adicionar-produto',
       'acao-comparar-periodos',
     ]);
+    expect(cmds.find((c) => c.id === 'nav-configuracoes')).toMatchObject({
+      label: 'Ir para Configurações',
+      href: '/configuracoes',
+      group: 'Navegação',
+    });
     expect(cmds.find((c) => c.id === 'nav-plano-de-acao')).toMatchObject({
       label: 'Ir para o Plano de Ação',
       href: '/dashboard/plano-de-acao',

@@ -18,7 +18,8 @@
     "db:migrate:test": "node --env-file=.env.local --import tsx scripts/migrate-test.ts",
     "db:seed-admin": "node --env-file=.env.local --import tsx scripts/seed-admin.ts",
     "db:seed-analista": "node --env-file=.env.local --import tsx scripts/seed-analista.ts",
-    "db:reencrypt": "node --env-file=.env.local --import tsx scripts/reencrypt-connections.ts"
+    "db:reencrypt": "node --env-file=.env.local --import tsx scripts/reencrypt-connections.ts",
+    "db:purge-org": "node --env-file=.env.local --import tsx scripts/purge-org.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

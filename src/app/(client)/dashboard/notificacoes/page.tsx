@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { Card } from '@/components/ui/Card';
@@ -7,8 +8,6 @@ import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { listNotificationsPage } from '@/modules/notifications/notification.repository';
 
 const PAGE_SIZE = 20;
-
-import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Notificações' };
 

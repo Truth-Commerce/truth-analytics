@@ -74,3 +74,15 @@ export async function consumeResetToken(token: string, novaSenha: string): Promi
     return true;
   });
 }
+
+/**
+ * Invalida TODOS os tokens de reset ainda abertos do usuário. Chamado após a
+ * troca de senha autenticada — nenhum link antigo deve continuar válido
+ * (mesma invariante do consumeResetToken).
+ */
+export async function invalidateUserResetTokens(userId: string): Promise<void> {
+  await db
+    .update(passwordResetTokens)
+    .set({ usado_em: new Date() })
+    .where(and(eq(passwordResetTokens.user_id, userId), isNull(passwordResetTokens.usado_em)));
+}

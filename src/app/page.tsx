@@ -136,6 +136,15 @@ export default function LandingPage() {
         <p className="text-xs text-dim">
           &copy; {new Date().getFullYear()} Truth Commerce. Todos os direitos reservados.
         </p>
+        <p className="mt-2 text-xs text-dim">
+          <Link href="/termos" className="transition-colors hover:text-muted hover:underline">
+            Termos de Uso
+          </Link>
+          <span className="mx-2">·</span>
+          <Link href="/privacidade" className="transition-colors hover:text-muted hover:underline">
+            Política de Privacidade
+          </Link>
+        </p>
       </footer>
     </main>
   );

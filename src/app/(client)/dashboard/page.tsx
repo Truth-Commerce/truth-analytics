@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
@@ -34,8 +35,6 @@ import { TruthScoreCard } from './truth-score-card';
 import { AlertasSection } from './alertas-section';
 import { MetaProgress } from './meta-progress';
 import { AcaoPrincipalCard } from './acao-principal';
-
-import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 

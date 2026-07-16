@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { listAnalistas } from '@/modules/analista/analista.repository';
 import { requireAdmin } from '@/modules/auth/require-admin';
+import { listOrgUsers } from '@/modules/auth/user.repository';
 import {
   getOrgConnectionHealth,
   getOrganizationById,
@@ -11,6 +12,7 @@ import {
 import { getOrgAnalistaUser } from '@/modules/notifications/recipients';
 import { getOrgSettings } from '@/modules/organizations/organization-settings.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { StaffTrackedProducts } from '@/components/tracked-products/StaffTrackedProducts';
 import { formatData, formatPeriodo } from '@/lib/format';
 import { PLANO_LABEL, STATUS_ORG_LABEL } from '@/lib/labels';
 import { STATUS_LABEL, reportStatusVariant, type ReportStatus } from '@/modules/reports/report.types';
@@ -23,6 +25,7 @@ import { PageHeader } from '@/components/page-header';
 import { Reveal } from '@/components/reveal';
 import { AtribuirAnalista } from './atribuir-analista';
 import { MetaMensalForm } from './meta-mensal-form';
+import { OrgUsers } from './org-users';
 import { ReportActions } from './report-actions';
 import { GenerateNow } from './generate-now';
 
@@ -45,14 +48,16 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
   const org = await getOrganizationById(params.orgId);
   if (!org) notFound();
 
-  const [relatorios, saude, produtos, analistas, analistaAtual, settings] = await Promise.all([
-    listOrgReports(org.id),
-    getOrgConnectionHealth(org.id),
-    listTrackedProducts(org.id),
-    listAnalistas(),
-    getOrgAnalistaUser(org.id),
-    getOrgSettings(org.id),
-  ]);
+  const [relatorios, saude, produtos, analistas, analistaAtual, settings, usuarios] =
+    await Promise.all([
+      listOrgReports(org.id),
+      getOrgConnectionHealth(org.id),
+      listTrackedProducts(org.id),
+      listAnalistas(),
+      getOrgAnalistaUser(org.id),
+      getOrgSettings(org.id),
+      listOrgUsers(org.id),
+    ]);
 
   const saudeInfo = SAUDE_BADGE[saude?.saude ?? 'nenhuma'];
 
@@ -79,6 +84,26 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
           </CardHeader>
           <CardContent>
             <AtribuirAnalista orgId={org.id} analistas={analistas} analistaAtual={analistaAtual} />
+          </CardContent>
+        </Card>
+      </Reveal>
+
+      <Reveal>
+        <Card data-testid="org-users-card">
+          <CardHeader>
+            <CardTitle as="h2" className="text-base">
+              Usuários ({usuarios.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OrgUsers
+              orgId={org.id}
+              usuarios={usuarios.map((u) => ({
+                id: u.id,
+                email: u.email,
+                createdAt: formatData(u.created_at),
+              }))}
+            />
           </CardContent>
         </Card>
       </Reveal>
@@ -185,22 +210,21 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
           {
             id: 'produtos',
             label: `Produtos (${produtos.length})`,
-            content:
-              produtos.length === 0 ? (
-                <EmptyState title="Nenhum produto monitorado." description="O cliente ainda não cadastrou produtos em Conexões." />
-              ) : (
-                <ul className="flex flex-col divide-y divide-line">
-                  {produtos.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                      <span className="text-white/90">
-                        {p.nome}
-                        {p.sku ? <span className="ml-1.5 font-mono text-xs text-muted">({p.sku})</span> : null}
-                      </span>
-                      <span className="font-mono text-xs text-dim">{p.keywords.join(', ')}</span>
-                    </li>
-                  ))}
-                </ul>
-              ),
+            content: (
+              <Card>
+                <CardContent>
+                  <StaffTrackedProducts
+                    orgId={org.id}
+                    produtos={produtos.map((p) => ({
+                      id: p.id,
+                      nome: p.nome,
+                      sku: p.sku,
+                      keywords: p.keywords,
+                    }))}
+                  />
+                </CardContent>
+              </Card>
+            ),
           },
         ]}
         />

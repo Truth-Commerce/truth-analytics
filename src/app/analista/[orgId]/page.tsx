@@ -5,6 +5,7 @@ import { AchadosParaTasks } from '@/components/tasks/AchadosParaTasks';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { NewTaskForm } from '@/components/tasks/NewTaskForm';
 import { NewTaskFromTemplateForm } from '@/components/tasks/NewTaskFromTemplateForm';
+import { StaffTrackedProducts } from '@/components/tracked-products/StaffTrackedProducts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Tabs } from '@/components/ui/Tabs';
@@ -16,6 +17,7 @@ import { getLatestDoneReport } from '@/modules/reports/report.repository';
 import { listTemplates } from '@/modules/tasks/task-template.repository';
 import { atorFromRole } from '@/modules/tasks/task.types';
 import { listTaskTitulosAbertos, listTasksKanban } from '@/modules/tasks/task.repository';
+import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 
 import type { Metadata } from 'next';
 
@@ -39,11 +41,12 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
   const orgId = params.orgId;
   const ator = atorFromRole(access.role);
 
-  const [org, tarefas, templates, relatorio] = await Promise.all([
+  const [org, tarefas, templates, relatorio, produtos] = await Promise.all([
     getOrganizationById(orgId),
     listTasksKanban(orgId),
     listTemplates(true),
     getLatestDoneReport(orgId),
+    listTrackedProducts(orgId),
   ]);
   if (!org) notFound();
 
@@ -155,6 +158,25 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
                   ) : null}
                 </div>
               ),
+          },
+          {
+            id: 'produtos',
+            label: `Produtos (${produtos.length})`,
+            content: (
+              <Card>
+                <CardContent>
+                  <StaffTrackedProducts
+                    orgId={orgId}
+                    produtos={produtos.map((p) => ({
+                      id: p.id,
+                      nome: p.nome,
+                      sku: p.sku,
+                      keywords: p.keywords,
+                    }))}
+                  />
+                </CardContent>
+              </Card>
+            ),
           },
         ]}
       />

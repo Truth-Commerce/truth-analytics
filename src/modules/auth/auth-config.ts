@@ -7,7 +7,7 @@ type SharedAuthConfig = Pick<
   'pages' | 'session' | 'callbacks' | 'providers' | 'trustHost'
 >;
 
-const clientRoutes = ['/dashboard', '/conexoes'];
+const clientRoutes = ['/dashboard', '/conexoes', '/configuracoes'];
 const adminRoutes = ['/admin'];
 const analistaRoutes = ['/analista'];
 

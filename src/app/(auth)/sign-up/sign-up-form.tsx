@@ -36,6 +36,25 @@ export function SignUpForm() {
             <Field label="Senha" htmlFor="senha">
               <Input id="senha" name="senha" type="password" placeholder="••••••••" autoComplete="new-password" />
             </Field>
+            <label htmlFor="aceite" className="flex items-start gap-2 text-sm text-muted">
+              <input
+                id="aceite"
+                name="aceite"
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-line bg-bg-elevated accent-brand"
+              />
+              <span>
+                Li e aceito os{' '}
+                <Link href="/termos" target="_blank" className="text-brand hover:underline">
+                  Termos de Uso
+                </Link>{' '}
+                e a{' '}
+                <Link href="/privacidade" target="_blank" className="text-brand hover:underline">
+                  Política de Privacidade
+                </Link>
+                .
+              </span>
+            </label>
             {state.error ? <Alert variant="danger">{state.error}</Alert> : null}
             <Button type="submit" variant="primary" className="mt-2 w-full justify-center">
               Cadastrar

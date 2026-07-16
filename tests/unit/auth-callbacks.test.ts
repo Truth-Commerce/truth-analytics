@@ -34,4 +34,18 @@ describe('authConfig.callbacks.authorized', () => {
     expect(cliente).toBeInstanceOf(Response); // redirect /dashboard
     expect(asRole(undefined)).toBe(false);
   });
+
+  it('rota /configuracoes exige login (clientRoute)', () => {
+    const url = new URL('http://localhost/configuracoes');
+    const deslogado = authConfig.callbacks.authorized!({
+      auth: null,
+      request: { nextUrl: url } as never,
+    });
+    expect(deslogado).toBe(false);
+    const logado = authConfig.callbacks.authorized!({
+      auth: { user: { role: 'client' } } as never,
+      request: { nextUrl: url } as never,
+    });
+    expect(logado).toBe(true);
+  });
 });

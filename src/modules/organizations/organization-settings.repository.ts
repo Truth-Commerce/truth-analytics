@@ -51,6 +51,18 @@ export async function getTotalVendasMesAnterior(orgId: string, agora: Date = new
   return Math.round(Number(row?.total ?? 0) * 100) / 100;
 }
 
+/** Renomeia a org e devolve o nome anterior (para auditoria de/para). Null se não existir. */
+export async function renameOrganization(orgId: string, nome: string): Promise<{ de: string } | null> {
+  const [row] = await db
+    .select({ name: organizations.name })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  if (!row) return null;
+  await db.update(organizations).set({ name: nome }).where(eq(organizations.id, orgId));
+  return { de: row.name };
+}
+
 export async function getOrgSettings(
   orgId: string,
 ): Promise<{ geracaoAutomatica: boolean; metaMensal: number | null } | null> {

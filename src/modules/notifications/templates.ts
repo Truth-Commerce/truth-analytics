@@ -161,6 +161,29 @@ export function passwordResetTemplate(link: string): EmailContent {
 }
 
 /**
+ * Template: senha alterada (aviso de segurança pós-troca autenticada).
+ */
+export function passwordChangedTemplate(appUrl: string): EmailContent {
+  const url = `${appUrl}/esqueci-senha`;
+  const subject = 'Sua senha foi alterada — Truth Analytics';
+  const text = [
+    'A senha da sua conta no Truth Analytics acabou de ser alterada.',
+    '',
+    'Se foi você, nenhuma ação é necessária.',
+    `Se NÃO foi você, redefina sua senha imediatamente em: ${url}`,
+    'e avise nosso suporte: suporte@truthcommerce.com.br',
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>A senha da sua conta no <strong>Truth Analytics</strong> acabou de ser alterada.</p>
+<p>Se foi você, nenhuma ação é necessária.</p>
+<p>Se <strong>não</strong> foi você, <a href="${url}">redefina sua senha imediatamente</a> e avise nosso suporte: suporte@truthcommerce.com.br</p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+  return { subject, html, text };
+}
+
+/**
  * Template: nova tarefa criada (enviado ao destinatário da tarefa).
  */
 export function taskCriadaTemplate(titulo: string, url: string): EmailContent {

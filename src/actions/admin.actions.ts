@@ -1,10 +1,14 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
+
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 import { logger } from '@/lib/logger';
 import { setOrgAnalista } from '@/modules/analista/analista.repository';
 import { requireAdmin } from '@/modules/auth/require-admin';
+import { createOrgClientUser, normalizeEmail } from '@/modules/auth/user.repository';
 import {
   activateOrganization,
   getOrgConnectionHealth,
@@ -239,4 +243,51 @@ export async function setOrgAnalistaAction(
   revalidatePath('/admin');
   revalidatePath(`/admin/${orgId}`);
   return { ok: true };
+}
+
+export type CriarUsuarioState = {
+  error?: string;
+  ok?: boolean;
+  email?: string;
+  senhaTemporaria?: string;
+};
+
+/**
+ * Cria um usuário adicional (role client) para a org — fluxo do admin Truth.
+ * A senha temporária é gerada aqui, devolvida SÓ no state (exibida uma vez)
+ * e NUNCA vai para audit/log/e-mail.
+ */
+export async function adminCreateOrgUserAction(
+  _prev: CriarUsuarioState,
+  formData: FormData,
+): Promise<CriarUsuarioState> {
+  const admin = await requireAdmin();
+  const orgId = String(formData.get('orgId') ?? '');
+  if (!orgId) return { error: 'Cliente inválido.' };
+  const parsed = z.string().trim().email('E-mail inválido.').safeParse(formData.get('email'));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'E-mail inválido.' };
+
+  const org = await getOrganizationById(orgId);
+  if (!org) return { error: 'Cliente inválido.' };
+
+  const senhaTemporaria = randomBytes(9).toString('base64url'); // 12 chars
+  try {
+    const { userId } = await createOrgClientUser({ orgId, email: parsed.data, senha: senhaTemporaria });
+    await recordAudit({
+      orgId,
+      userId: admin.id,
+      acao: 'user.criado_admin',
+      detalhes: { email: normalizeEmail(parsed.data), novoUserId: userId },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'email_em_uso') {
+      return { error: 'Já existe uma conta com este e-mail.' };
+    }
+    if (e instanceof Error && e.message === 'limite_usuarios') {
+      return { error: 'Limite de usuários desta organização atingido (máx. 3).' };
+    }
+    throw e;
+  }
+  revalidatePath(`/admin/${orgId}`);
+  return { ok: true, email: normalizeEmail(parsed.data), senhaTemporaria };
 }
