@@ -5,6 +5,7 @@ import { m } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
 import { fadeLift } from '@/lib/motion';
+import { coresDosCanais } from '@/lib/canal-visual';
 import { formatBRL, formatBRLCompacto } from '@/lib/format';
 import { Skeleton } from '@/components/ui/Skeleton';
 import type { XY } from '@/components/ui/charts/LineChart';
@@ -55,7 +56,7 @@ export function DashboardCharts({ evolucao, canais, srSummary }: DashboardCharts
         className="rounded-2xl border border-line bg-bg-surface p-5"
       >
         <h2 className="mb-3 font-heading text-base font-semibold text-white">Vendas por canal</h2>
-        <DonutChart data={canais} formatValue={formatBRL} />
+        <DonutChart data={canais} formatValue={formatBRL} colors={coresDosCanais(canais.map((c) => c.label))} />
       </m.div>
     </div>
   );
