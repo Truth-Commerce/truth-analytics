@@ -41,7 +41,7 @@ export const alerts = pgTable(
       .where(sql`${t.resolvido} = false`),
     tipo_check: check(
       'alerts_tipo_check',
-      sql`${t.tipo} IN ('queda_vendas', 'concorrente_preco', 'produto_parado')`,
+      sql`${t.tipo} IN ('queda_vendas', 'concorrente_preco', 'produto_parado', 'estoque_critico')`,
     ),
     severidade_check: check(
       'alerts_severidade_check',
