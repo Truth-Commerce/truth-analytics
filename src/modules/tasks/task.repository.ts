@@ -2,6 +2,7 @@ import { and, count, desc, eq, inArray, max, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { taskComments, taskActivities, tasks } from '@/db/schema';
+import { parseChecklist } from './checklist-line';
 import { normalizarTexto } from './report-to-task';
 import type {
   TaskAtor, TaskCriadoPor, TaskDetail, TaskPrioridade, TaskStatus, TaskSummary, TaskTipo,
@@ -35,6 +36,37 @@ async function proximaOrdem(orgId: string, status: TaskStatus): Promise<number> 
 export async function listTasksByOrg(orgId: string): Promise<TaskSummary[]> {
   const rows = await db.select().from(tasks).where(eq(tasks.org_id, orgId)).orderBy(tasks.status, tasks.ordem);
   return rows.map(rowToSummary);
+}
+
+export type TaskCardInfo = TaskSummary & {
+  comentarios: number;
+  checklistFeitos: number;
+  checklistTotal: number;
+  reincidente: boolean;
+};
+
+/** Kanban rico: summary + nº de comentários (agregado em SQL) + checklist (parse da descricao). */
+export async function listTasksKanban(orgId: string): Promise<TaskCardInfo[]> {
+  const rows = await db
+    .select({
+      task: tasks,
+      comentarios: count(taskComments.id),
+    })
+    .from(tasks)
+    .leftJoin(taskComments, eq(taskComments.task_id, tasks.id))
+    .where(eq(tasks.org_id, orgId))
+    .groupBy(tasks.id)
+    .orderBy(tasks.status, tasks.ordem);
+  return rows.map(({ task, comentarios }) => {
+    const itens = parseChecklist(task.descricao);
+    return {
+      ...rowToSummary(task),
+      comentarios: Number(comentarios),
+      checklistFeitos: itens.filter((i) => i.feito).length,
+      checklistTotal: itens.length,
+      reincidente: task.descricao.includes('_Reincidente:'),
+    };
+  });
 }
 
 export async function getTaskById(taskId: string, orgId: string): Promise<TaskDetail | null> {

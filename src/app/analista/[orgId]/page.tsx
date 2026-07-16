@@ -14,7 +14,7 @@ import { requireAnalista } from '@/modules/auth/require-analista';
 import { getLatestDoneReport } from '@/modules/reports/report.repository';
 import { listTemplates } from '@/modules/tasks/task-template.repository';
 import { atorFromRole } from '@/modules/tasks/task.types';
-import { listTaskTitulosAbertos, listTasksByOrg } from '@/modules/tasks/task.repository';
+import { listTaskTitulosAbertos, listTasksKanban } from '@/modules/tasks/task.repository';
 
 export default async function AnalistaOrgPage({ params }: { params: { orgId: string } }) {
   const access = await requireAnalista();
@@ -33,7 +33,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
 
   const [org, tarefas, templates, relatorio] = await Promise.all([
     getOrganizationById(orgId),
-    listTasksByOrg(orgId),
+    listTasksKanban(orgId),
     listTemplates(true),
     getLatestDoneReport(orgId),
   ]);

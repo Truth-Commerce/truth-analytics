@@ -4,7 +4,7 @@ import { aprovarTaskFormAction, concluirTaskFormAction } from '@/actions/tasks.a
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { formatBRL, formatData } from '@/lib/format';
+import { formatBRL, formatData, formatDataUtc } from '@/lib/format';
 import { CHECKLIST_CHECKED, CHECKLIST_UNCHECKED, parseChecklist } from '@/modules/tasks/checklist-line';
 import type { TaskImpact } from '@/modules/tasks/task-impact';
 import {
@@ -145,7 +145,9 @@ export function TaskDetail({
           {task.descricao.includes('_Reincidente:') ? <Badge variant="warn">Reincidente</Badge> : null}
         </div>
 
-        {task.prazo ? <p className="mt-2 text-xs text-dim">Prazo: {formatData(task.prazo)}</p> : null}
+        {/* task.prazo é dia-calendário 'yyyy-mm-dd' (date-only): formatDataUtc
+            não desloca o dia (formatData/BRT tiraria 1 dia — bug da Task 2). */}
+        {task.prazo ? <p className="mt-2 text-xs text-dim">Prazo: {formatDataUtc(task.prazo)}</p> : null}
       </header>
 
       {ator !== 'cliente' && orgId ? (

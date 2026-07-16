@@ -1,19 +1,21 @@
 import Link from 'next/link';
 
-import { concluirTaskFormAction, moveTaskFormAction, reorderTaskFormAction } from '@/actions/tasks.actions';
+import { concluirTaskFormAction } from '@/actions/tasks.actions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { labelPrazo, statusPrazo } from '@/modules/tasks/sla';
 import { podeTransicionar } from '@/modules/tasks/task-transitions';
+import type { TaskCardInfo } from '@/modules/tasks/task.repository';
 import {
   PRIORIDADE_TASK_LABEL,
   TASK_STATUSES,
   TIPO_TASK_LABEL,
-  isTaskAtrasada,
   type TaskAtor,
   type TaskPrioridade,
   type TaskStatus,
-  type TaskSummary,
 } from '@/modules/tasks/task.types';
+
+import { MoverTaskSelect } from './MoverTaskSelect';
 
 const PRIORIDADE_BADGE_VARIANT: Record<TaskPrioridade, 'danger' | 'warn' | 'neutral'> = {
   alta: 'danger',
@@ -21,49 +23,38 @@ const PRIORIDADE_BADGE_VARIANT: Record<TaskPrioridade, 'danger' | 'warn' | 'neut
   baixa: 'neutral',
 };
 
-function vizinhoStatus(status: TaskStatus, delta: 1 | -1): TaskStatus | null {
-  const indice = TASK_STATUSES.indexOf(status);
-  const alvo = indice + delta;
-  return alvo >= 0 && alvo < TASK_STATUSES.length ? TASK_STATUSES[alvo] : null;
-}
-
 export function TaskCard({
   task,
   ator,
   taskHrefBase,
   orgId,
-  isFirst = false,
-  isLast = false,
+  onMove,
+  pendente,
 }: {
-  task: TaskSummary;
+  task: TaskCardInfo;
   ator: TaskAtor;
   taskHrefBase: string;
   orgId?: string;
-  isFirst?: boolean;
-  isLast?: boolean;
+  onMove: (taskId: string, para: TaskStatus) => void;
+  pendente: boolean;
 }) {
-  // Cliente: em_revisao (aguardando análise) e concluida (encerrada) são
-  // só-leitura — nenhum controle de mover/reordenar/concluir é exibido.
   const somenteLeitura = ator === 'cliente' && (task.status === 'em_revisao' || task.status === 'concluida');
-
-  const anterior = vizinhoStatus(task.status, -1);
-  const proximo = vizinhoStatus(task.status, 1);
-
-  const podeVoltar =
-    !somenteLeitura && anterior !== null &&
-    podeTransicionar({ ator, criadoPor: task.criadoPor, de: task.status, para: anterior });
-
-  // Para o cliente, avançar a partir de "Em andamento" é sempre a ação de
-  // concluir a própria parte — o destino real (em_revisao ou concluida) é
-  // calculado no server por `concluirTaskFormAction` via
-  // `proximoStatusAoConcluir(criadoPor)`.
   const mostrarConcluir = !somenteLeitura && ator === 'cliente' && task.status === 'em_andamento';
 
-  const podeAvancar =
-    !somenteLeitura && !mostrarConcluir && proximo !== null &&
-    podeTransicionar({ ator, criadoPor: task.criadoPor, de: task.status, para: proximo });
+  // Única porta de transição: podeTransicionar. O select só OFERECE o que ele
+  // aprova; o servidor revalida em moveTask. Para o cliente, o avanço a partir
+  // de em_andamento é o botão Concluir (destino calculado no server) — o
+  // destino de conclusão sai da lista do select para não duplicar o caminho.
+  const destinosValidos = TASK_STATUSES.filter(
+    (para) =>
+      !somenteLeitura &&
+      para !== task.status &&
+      !(mostrarConcluir && ['em_revisao', 'concluida'].includes(para)) &&
+      podeTransicionar({ ator, criadoPor: task.criadoPor, de: task.status, para }),
+  );
 
-  const atrasada = isTaskAtrasada(task);
+  const prazoLabel = labelPrazo(task.prazo);
+  const prazoStatus = statusPrazo(task.status === 'concluida' ? null : task.prazo);
 
   return (
     <div data-testid="task-card" className="rounded-xl border border-line bg-bg-elevated p-3">
@@ -77,82 +68,36 @@ export function TaskCard({
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Badge variant="neutral">{TIPO_TASK_LABEL[task.tipo]}</Badge>
         <Badge variant={PRIORIDADE_BADGE_VARIANT[task.prioridade]}>{PRIORIDADE_TASK_LABEL[task.prioridade]}</Badge>
-        {atrasada ? <Badge variant="danger">Atrasada</Badge> : null}
+        {task.reincidente ? <Badge variant="warn">Reincidente</Badge> : null}
+        {prazoStatus === 'atrasada' ? <Badge variant="danger">Atrasada</Badge> : null}
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-dim">
+        {prazoLabel && task.status !== 'concluida' ? (
+          <span className={prazoStatus === 'vence_em_breve' ? 'text-warning-fg' : undefined}>{prazoLabel}</span>
+        ) : null}
+        {task.checklistTotal > 0 ? (
+          <span aria-label={`Checklist: ${task.checklistFeitos} de ${task.checklistTotal}`}>
+            ☑ {task.checklistFeitos}/{task.checklistTotal}
+          </span>
+        ) : null}
+        {task.comentarios > 0 ? (
+          <span aria-label={`${task.comentarios} comentário(s)`}>💬 {task.comentarios}</span>
+        ) : null}
       </div>
 
       {!somenteLeitura ? (
         <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            {podeVoltar ? (
-              <form action={moveTaskFormAction}>
-                <input type="hidden" name="taskId" value={task.id} />
-                <input type="hidden" name="para" value={anterior ?? ''} />
-                {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
-                <button
-                  type="submit"
-                  aria-label="Mover para trás"
-                  className="rounded-lg px-2 py-1 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  ←
-                </button>
-              </form>
-            ) : null}
-
-            {mostrarConcluir ? (
-              <form action={concluirTaskFormAction}>
-                <input type="hidden" name="taskId" value={task.id} />
-                {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
-                <Button type="submit" variant="secondary" size="sm" data-testid="task-concluir">
-                  Concluir
-                </Button>
-              </form>
-            ) : podeAvancar ? (
-              <form action={moveTaskFormAction}>
-                <input type="hidden" name="taskId" value={task.id} />
-                <input type="hidden" name="para" value={proximo ?? ''} />
-                {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
-                <button
-                  type="submit"
-                  aria-label="Mover para frente"
-                  className="rounded-lg px-2 py-1 text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  →
-                </button>
-              </form>
-            ) : null}
-          </div>
-
-          <div className="flex items-center gap-1">
-            {!isFirst ? (
-              <form action={reorderTaskFormAction}>
-                <input type="hidden" name="taskId" value={task.id} />
-                <input type="hidden" name="direcao" value="up" />
-                {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
-                <button
-                  type="submit"
-                  aria-label="Subir na coluna"
-                  className="rounded-lg px-2 py-1 text-xs text-dim outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  ↑
-                </button>
-              </form>
-            ) : null}
-
-            {!isLast ? (
-              <form action={reorderTaskFormAction}>
-                <input type="hidden" name="taskId" value={task.id} />
-                <input type="hidden" name="direcao" value="down" />
-                {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
-                <button
-                  type="submit"
-                  aria-label="Descer na coluna"
-                  className="rounded-lg px-2 py-1 text-xs text-dim outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  ↓
-                </button>
-              </form>
-            ) : null}
-          </div>
+          <MoverTaskSelect taskId={task.id} destinosValidos={destinosValidos} onMove={onMove} pendente={pendente} />
+          {mostrarConcluir ? (
+            <form action={concluirTaskFormAction}>
+              <input type="hidden" name="taskId" value={task.id} />
+              {orgId ? <input type="hidden" name="orgId" value={orgId} /> : null}
+              <Button type="submit" variant="secondary" size="sm" data-testid="task-concluir">
+                Concluir
+              </Button>
+            </form>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -200,6 +200,36 @@ export async function moveTaskFormAction(formData: FormData): Promise<void> {
   revalidateTaskRoutes(orgId);
 }
 
+/**
+ * moveTaskAction — mesma regra de moveTaskFormAction, mas DEVOLVE o resultado
+ * (o kanban otimista mostra toast de erro em vez de falhar em silêncio).
+ * Transição continua validada exclusivamente por podeTransicionar dentro de
+ * moveTask — esta action não abre porta nova.
+ */
+export async function moveTaskAction(formData: FormData): Promise<TaskActionState> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return { error: resolved.error };
+  const { access, orgId, ator } = resolved.ctx;
+
+  const parsed = moveTaskSchema.safeParse({ taskId: formData.get('taskId'), para: formData.get('para') });
+  if (!parsed.success) return { error: 'Dados inválidos. Tente novamente.' };
+
+  try {
+    await moveTask({ taskId: parsed.data.taskId, orgId, ator, actorUserId: access.id, para: parsed.data.para });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'transicao_invalida') {
+      return { error: 'Essa mudança de coluna não é permitida.' };
+    }
+    if (e instanceof Error && e.message === 'task_nao_encontrada') {
+      return { error: 'Tarefa não encontrada.' };
+    }
+    throw e;
+  }
+
+  revalidateTaskRoutes(orgId);
+  return { ok: true, taskId: parsed.data.taskId };
+}
+
 // ---------------------------------------------------------------------------
 // concluirTaskFormAction (fire-and-refresh)
 // `para` é SEMPRE calculado no servidor via proximoStatusAoConcluir — o
