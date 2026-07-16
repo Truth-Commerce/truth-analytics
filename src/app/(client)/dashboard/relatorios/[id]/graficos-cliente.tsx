@@ -2,6 +2,7 @@
 
 import React from 'react';
 
+import { coresDosCanais } from '@/lib/canal-visual';
 import { formatBRL, formatBRLCompacto } from '@/lib/format';
 import {
   divergingPrecoModel,
@@ -35,6 +36,7 @@ export function CanalPorDiaV2({ canalPorDia }: { canalPorDia: { data: string; ca
     <StackedAreaChart
       keys={keys}
       rows={rows}
+      colors={coresDosCanais(keys)}
       formatY={formatBRLCompacto}
       srSummary={`Vendas por canal ao longo dos dias. Canais: ${keys.join(', ')}.`}
     />

@@ -10,9 +10,12 @@ interface DonutChartProps {
   data: { label: string; value: number }[];
   height?: number;
   formatValue?: (v: number) => string;
+  /** Cores posicionais por item; ausente = paleta padrão. */
+  colors?: string[];
 }
 
-export function DonutChart({ data, height = 240, formatValue }: DonutChartProps) {
+export function DonutChart({ data, height = 240, formatValue, colors }: DonutChartProps) {
+  const corDe = (i: number) => colors?.[i] ?? seriesColor(i);
   return (
     <div>
       <div style={{ width: '100%', height }}>
@@ -30,7 +33,7 @@ export function DonutChart({ data, height = 240, formatValue }: DonutChartProps)
               strokeWidth={2}
             >
               {data.map((_, i) => (
-                <Cell key={i} fill={seriesColor(i)} />
+                <Cell key={i} fill={corDe(i)} />
               ))}
             </Pie>
           </PieChart>
@@ -42,7 +45,7 @@ export function DonutChart({ data, height = 240, formatValue }: DonutChartProps)
             <span
               aria-hidden="true"
               className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: seriesColor(i) }}
+              style={{ backgroundColor: corDe(i) }}
             />
             {d.label}
           </li>

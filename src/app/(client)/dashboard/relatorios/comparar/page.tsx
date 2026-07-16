@@ -4,6 +4,7 @@ import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDoneAnterior, getReportById, listDoneReports } from '@/modules/reports/report.repository';
 import { compararMetricas, compararTopProdutos, leituraComparacao } from '@/modules/reports/compare';
 import { formatBRL, formatPeriodo } from '@/lib/format';
+import { CanalDot } from '@/components/ui/CanalDot';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { CompararForm } from './comparar-form';
@@ -154,7 +155,7 @@ export default async function CompararPage({
                 )}
                 {comp.porCanal.map((c) => (
                   <TR key={c.canal}>
-                    <TD className="text-muted">Canal: {c.canal}</TD>
+                    <TD className="text-muted"><CanalDot canal={c.canal} />Canal: {c.canal}</TD>
                     <TD numeric>{formatBRL(c.delta.atual)}</TD>
                     <TD numeric className="text-muted">
                       {formatBRL(c.delta.anterior)}

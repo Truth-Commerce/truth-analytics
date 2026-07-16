@@ -5,6 +5,7 @@ import type { Metricas } from '@/modules/pipeline/contracts';
 import { compararMetricas } from '@/modules/reports/compare';
 import { corDeltaPreco, deltaReceitaPorSku, posicaoPrecoView } from '@/modules/reports/report-view-model';
 import { Badge } from '@/components/ui/Badge';
+import { CanalDot } from '@/components/ui/CanalDot';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Stat } from '@/components/ui/Stat';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
@@ -142,7 +143,7 @@ export function MetricasSection({ metricas, anterior }: { metricas: Metricas; an
             <TBody>
               {metricas.vendasPorCanal.map((v, i) => (
                 <TR key={i}>
-                  <TD>{v.canal}</TD>
+                  <TD><CanalDot canal={v.canal} />{v.canal}</TD>
                   <TD numeric>{formatBRL(v.total)}</TD>
                   <TD numeric>{v.pedidos}</TD>
                   {metricas.ticketPorCanal ? (
@@ -276,7 +277,7 @@ export function MetricasSection({ metricas, anterior }: { metricas: Metricas; an
               <TBody>
                 {metricas.frete.fretePorCanal.map((f, i) => (
                   <TR key={i}>
-                    <TD>{f.canal}</TD>
+                    <TD><CanalDot canal={f.canal} />{f.canal}</TD>
                     <TD numeric>{formatBRL(f.freteMedio)}</TD>
                     <TD numeric>{formatBRL(f.freteTotal)}</TD>
                   </TR>
