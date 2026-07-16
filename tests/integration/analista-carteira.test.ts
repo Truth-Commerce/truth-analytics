@@ -12,15 +12,18 @@ import {
 } from '@/modules/analista/analista.repository';
 import { hashPassword } from '@/modules/auth/password';
 import type { UserAccess } from '@/modules/auth/user.types';
+import { hojeBrt } from '@/lib/timezone';
+import { somarDias } from '@/modules/tasks/sla';
 
 const PREFIX = 'ta-test-carteira-';
 const asAccess = (id: string, role: UserAccess['role']): UserAccess =>
   ({ id, orgId: 'x', role, orgStatus: 'active', plano: null }) as UserAccess;
 
+// Dia-calendário BRT (getCarteira conta atrasadas contra hojeBrt). A versão
+// antiga usava toISOString().slice(0,10) sobre data local — entre 21h e 0h BRT
+// o UTC já virou o dia e "ontem" virava "hoje" (teste flakava nesse horário).
 function diasAtras(dias: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - dias);
-  return d.toISOString().slice(0, 10);
+  return somarDias(hojeBrt(), -dias);
 }
 
 describe.skipIf(!process.env.DATABASE_URL_TEST)('carteira do analista', () => {
