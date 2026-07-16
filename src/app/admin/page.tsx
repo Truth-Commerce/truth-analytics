@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
+import { PageHeader } from '@/components/page-header';
+import { Reveal } from '@/components/reveal';
 import { ClientRow } from './client-row';
 import { SystemStatusCard } from './system-status-card';
 
@@ -26,7 +28,7 @@ export default async function AdminPage({
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
-      <h1 className="font-heading text-2xl font-bold text-white">Painel Admin — Clientes</h1>
+      <PageHeader eyebrow="Operação Truth" title="Clientes" />
 
       <form method="get" action="/admin" className="flex max-w-sm items-center gap-2">
         <Input
@@ -41,9 +43,12 @@ export default async function AdminPage({
         </Button>
       </form>
 
-      <SystemStatusCard />
+      <Reveal>
+        <SystemStatusCard />
+      </Reveal>
 
-      <Card className="!p-0">
+      <Reveal>
+        <Card className="!p-0">
         <Table>
           <THead>
             <TR>
@@ -75,7 +80,8 @@ export default async function AdminPage({
             )}
           </TBody>
         </Table>
-      </Card>
+        </Card>
+      </Reveal>
 
       <Pagination page={page} pageCount={pageCount} hrefFor={hrefFor} />
     </main>

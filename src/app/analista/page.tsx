@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { RevisaoQueue } from '@/components/tasks/RevisaoQueue';
+import { PageHeader } from '@/components/page-header';
+import { Reveal } from '@/components/reveal';
 import { getCarteira, getImpactoPorOrg, getMeuDia, listTasksEmRevisao } from '@/modules/analista/analista.repository';
 import { requireAnalista } from '@/modules/auth/require-analista';
 import { STATUS_TASK_LABEL, TASK_STATUSES } from '@/modules/tasks/task.types';
@@ -23,16 +25,16 @@ export default async function AnalistaPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-8 p-6 md:p-8">
-      <h1 className="font-heading text-2xl font-bold text-white">Carteira de clientes</h1>
+      <PageHeader eyebrow="Consultoria Truth" title="Carteira de clientes" />
 
       <MeuDiaFaixa meuDia={meuDia} />
 
-      <section className="space-y-3">
+      <Reveal className="space-y-3">
         <h2 className="font-heading text-lg font-semibold text-white">Fila de revisão</h2>
         <RevisaoQueue items={fila} />
-      </section>
+      </Reveal>
 
-      <section className="space-y-3">
+      <Reveal className="space-y-3">
         <h2 className="font-heading text-lg font-semibold text-white">Organizações</h2>
         {carteira.length === 0 ? (
           <EmptyState
@@ -89,7 +91,7 @@ export default async function AnalistaPage() {
             ))}
           </div>
         )}
-      </section>
+      </Reveal>
     </main>
   );
 }

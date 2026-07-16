@@ -5,6 +5,7 @@ import { getOrgSettings } from '@/modules/organizations/organization-settings.re
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { PageHeader } from '@/components/page-header';
 import { DisconnectBling } from './disconnect-bling';
 import { TrackedProducts } from './tracked-products';
 import { GeracaoAutomaticaToggle } from './geracao-automatica-toggle';
@@ -24,7 +25,11 @@ export default async function ConexoesPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
-      <h1 className="font-heading text-2xl font-bold text-white">Conexões</h1>
+      <PageHeader
+        eyebrow="Configuração"
+        title="Conexões"
+        description="Bling, produtos monitorados e preferências de geração."
+      />
 
       {/* Retorno do OAuth Bling (G0/Task 8) */}
       {(() => {
