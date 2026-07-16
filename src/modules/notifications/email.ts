@@ -10,6 +10,7 @@ import {
   digestSemanalTemplate,
   type DigestEmailData,
   lembretePrazoTemplate,
+  passwordChangedTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
@@ -118,6 +119,14 @@ export async function sendBlingConnectionFailedEmail(to: string): Promise<void> 
 export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
   const link = `${serverEnv.APP_URL}/redefinir-senha/${token}`;
   const content = passwordResetTemplate(link);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Aviso de segurança: senha alterada com sucesso. Nunca lança.
+ */
+export async function sendPasswordChangedEmail(to: string): Promise<void> {
+  const content = passwordChangedTemplate(serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }
 

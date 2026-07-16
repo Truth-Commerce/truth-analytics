@@ -15,7 +15,7 @@ const RESET_MAX_PER_EMAIL = 3;
 const RESET_MAX_PER_IP = 10;
 const RESET_WINDOW_MINUTES = 15;
 
-export type EscopoRateLimit = 'login' | 'signup' | 'reset';
+export type EscopoRateLimit = 'login' | 'signup' | 'reset' | 'troca_senha';
 
 export async function recordAttempt(input: {
   escopo: EscopoRateLimit;
@@ -127,4 +127,19 @@ export async function isResetRateLimited(
     escopo: 'reset', ip, apenasFalhas: false, windowMinutes: RESET_WINDOW_MINUTES,
   });
   return perIp >= RESET_MAX_PER_IP;
+}
+
+// --- TROCA DE SENHA (usuário autenticado; chave = e-mail) ---
+
+const TROCA_SENHA_MAX_FALHAS = 5;
+const TROCA_SENHA_WINDOW_MINUTES = 15;
+
+export async function isTrocaSenhaRateLimited(email: string): Promise<boolean> {
+  const n = await countRecent({
+    escopo: 'troca_senha',
+    email,
+    apenasFalhas: true,
+    windowMinutes: TROCA_SENHA_WINDOW_MINUTES,
+  });
+  return n >= TROCA_SENHA_MAX_FALHAS;
 }

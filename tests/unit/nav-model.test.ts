@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { atalhoPaletaLabel, hrefAtivo, logoHref, navItems } from '@/components/nav-model';
 
 describe('navItems — nav por papel', () => {
-  it('client vê Dashboard, Conexões e Plano de Ação (com badge)', () => {
+  it('client vê Dashboard, Conexões, Plano de Ação (com badge) e Configurações', () => {
     expect(navItems('client')).toEqual([
       { href: '/dashboard', label: 'Dashboard' },
       { href: '/conexoes', label: 'Conexões' },
       { href: '/dashboard/plano-de-acao', label: 'Plano de Ação', badge: true },
+      { href: '/configuracoes', label: 'Configurações' },
     ]);
   });
 

@@ -79,3 +79,22 @@ export async function createOrgWithUser(input: {
     }
   });
 }
+
+/**
+ * Credenciais do usuário por id (para a troca de senha autenticada — precisa
+ * do hash atual para o verifyPassword). Não normaliza e-mail: id é a chave.
+ */
+export async function getUserAuthById(
+  userId: string,
+): Promise<{ id: string; email: string; senha_hash: string } | null> {
+  const [row] = await db
+    .select({ id: users.id, email: users.email, senha_hash: users.senha_hash })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function setUserPasswordHash(userId: string, senha_hash: string): Promise<void> {
+  await db.update(users).set({ senha_hash }).where(eq(users.id, userId));
+}

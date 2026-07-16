@@ -20,6 +20,7 @@ export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/conexoes', label: 'Conexões' },
     { href: '/dashboard/plano-de-acao', label: 'Plano de Ação', badge: true },
+    { href: '/configuracoes', label: 'Configurações' },
   ];
 }
 
