@@ -6,7 +6,11 @@ import { hojeBrt } from '@/lib/timezone';
 import { listClientOrganizations } from '@/modules/admin/admin.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import type { UserAccess } from '@/modules/auth/user.types';
+import { MetricasSchema } from '@/modules/pipeline/contracts';
+import { getLatestDoneReport, getPrimeiroDoneReport } from '@/modules/reports/report.repository';
 import { somarDias } from '@/modules/tasks/sla';
+
+import { impactoRenovacao, type ImpactoOrg, type PontaRelatorio } from './impacto-renovacao';
 import type {
   TaskCriadoPor,
   TaskPrioridade,
@@ -82,6 +86,16 @@ const zeroCounts = (): Record<TaskStatus, number> => ({
   concluida: 0,
 });
 
+/** Orgs visíveis para o papel: admin vê todas as orgs cliente; analista, só a própria carteira. */
+async function orgsDoEscopo(access: UserAccess): Promise<Array<{ id: string; name: string }>> {
+  return access.role === 'admin_truth'
+    ? (await listClientOrganizations()).map((o) => ({ id: o.id, name: o.name }))
+    : db
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.analista_id, access.id));
+}
+
 /**
  * Carteira por org, em 2 queries agregadas no TOTAL (GROUP BY) — o antigo
  * `Promise.all` fazia 2 queries POR org (N+1 da auditoria). Atrasadas contam
@@ -89,13 +103,7 @@ const zeroCounts = (): Record<TaskStatus, number> => ({
  * ORDENADO por criticidade: atrasadas desc → emRevisao desc → orgName asc.
  */
 export async function getCarteira(access: UserAccess): Promise<CarteiraOrg[]> {
-  const orgs =
-    access.role === 'admin_truth'
-      ? (await listClientOrganizations()).map((o) => ({ id: o.id, name: o.name }))
-      : await db
-          .select({ id: organizations.id, name: organizations.name })
-          .from(organizations)
-          .where(eq(organizations.analista_id, access.id));
+  const orgs = await orgsDoEscopo(access);
   if (orgs.length === 0) return [];
   const orgIds = orgs.map((o) => o.id);
   const hoje = hojeBrt();
@@ -350,4 +358,60 @@ export async function getConsultoriaMetrics(): Promise<ConsultoriaMetrics> {
   }));
 
   return { concluidas7d, concluidas30d, tempoMedioConclusaoDias: tempoMedio, porAnalista };
+}
+
+// ---------------------------------------------------------------------------
+// Impacto para renovação (G3 Task 11) — 1º vs último relatório done por org.
+// ---------------------------------------------------------------------------
+
+function pontaDoReport(rep: { metricas: unknown; periodoFim: Date } | null): PontaRelatorio | null {
+  if (!rep) return null;
+  const parsed = MetricasSchema.safeParse(rep.metricas);
+  if (!parsed.success) return null;
+  const total = parsed.data.vendasPorCanal.reduce((s, c) => s + c.total, 0);
+  return { total, score: parsed.data.truth_score?.score ?? null, periodoFim: rep.periodoFim };
+}
+
+/**
+ * Impacto 1º vs último done por org da carteira (renovação) + tasks
+ * concluídas no intervalo entre os dois. Escopo por papel (padrão
+ * getCarteira). Carteiras são pequenas (dezenas de orgs), então o loop com
+ * queries por org é aceitável — NÃO reintroduz o N+1 de listas grandes.
+ */
+export async function getImpactoPorOrg(access: UserAccess): Promise<ImpactoOrg[]> {
+  const orgs = await orgsDoEscopo(access);
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [primeiroRep, ultimoRep] = await Promise.all([
+        getPrimeiroDoneReport(org.id),
+        getLatestDoneReport(org.id),
+      ]);
+      const doisDones = primeiroRep !== null && ultimoRep !== null && primeiroRep.id !== ultimoRep.id;
+      let tasksConcluidas = 0;
+      if (doisDones) {
+        const [row] = await db
+          .select({ n: sql<number>`count(distinct ${taskActivities.task_id})::int` })
+          .from(taskActivities)
+          .innerJoin(tasks, eq(taskActivities.task_id, tasks.id))
+          .where(
+            and(
+              eq(tasks.org_id, org.id),
+              eq(taskActivities.evento, 'status'),
+              eq(taskActivities.para, 'concluida'),
+              gte(taskActivities.created_at, primeiroRep.createdAt),
+              lte(taskActivities.created_at, ultimoRep.createdAt),
+            ),
+          );
+        tasksConcluidas = Number(row?.n ?? 0);
+      }
+      return impactoRenovacao({
+        orgId: org.id,
+        orgName: org.name,
+        primeiro: doisDones ? pontaDoReport(primeiroRep) : null,
+        ultimo: doisDones ? pontaDoReport(ultimoRep) : null,
+        tasksConcluidas,
+      });
+    }),
+  );
 }

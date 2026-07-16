@@ -1,5 +1,5 @@
 import { MetricasSchema } from '@/modules/pipeline/contracts';
-import { getLatestDoneReportAfter, getReportById } from '@/modules/reports/report.repository';
+import { getDoneMaisProximo, getLatestDoneReportAfter, getReportById } from '@/modules/reports/report.repository';
 
 import { getTaskById } from './task.repository';
 
@@ -16,23 +16,29 @@ function totalVendas(metricas: { vendasPorCanal: Array<{ total: number }> }): nu
 }
 
 /**
- * Impacto de uma task concluída — compara as vendas do relatório que
- * originou a task (`reportId`) com as do relatório `done` mais recente da
- * org (posterior ao de origem). É o "payoff" da F2: mostra se a task
- * concluída se traduziu em mais vendas.
+ * Impacto de uma task concluída — compara as vendas do relatório de origem
+ * com as do relatório `done` mais recente da org (posterior ao de origem).
+ * É o "payoff" da F2: mostra se a task concluída se traduziu em mais vendas.
+ *
+ * Origem: o próprio report quando a task tem `reportId`; para task
+ * manual/cliente (sem `reportId`), o done mais próximo da criação da task
+ * (decisão da auditoria G3 — antes devolvia `null`).
  *
  * `null` em qualquer condição que impeça a comparação: task não existe na
- * org, não está `concluida`, não tem `reportId`, o report de origem não é
- * `done`/não tem métricas válidas, ou ainda não existe um relatório `done`
- * posterior ao de origem (comparação prematura).
+ * org, não está `concluida`, o report de origem não é `done`/não tem
+ * métricas válidas, ou ainda não existe um relatório `done` posterior ao de
+ * origem (comparação prematura).
  */
 export async function getTaskImpact(taskId: string, orgId: string): Promise<TaskImpact> {
   const task = await getTaskById(taskId, orgId);
   if (!task) return null;
   if (task.status !== 'concluida') return null;
-  if (!task.reportId) return null;
 
-  const origem = await getReportById(task.reportId, orgId);
+  // Task de relatório: origem = o próprio report. Task manual/cliente (sem
+  // report_id): origem = done mais próximo da criação da task (auditoria G3).
+  const origem = task.reportId
+    ? await getReportById(task.reportId, orgId)
+    : await getDoneMaisProximo(orgId, task.createdAt);
   if (!origem || origem.status !== 'done') return null;
   const origemParsed = MetricasSchema.safeParse(origem.metricas);
   if (!origemParsed.success) return null;

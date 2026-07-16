@@ -1,12 +1,15 @@
-import { getConsultoriaMetrics } from '@/modules/analista/analista.repository';
+import { formatBRL } from '@/lib/format';
+import { getConsultoriaMetrics, getImpactoPorOrg } from '@/modules/analista/analista.repository';
 import { requireAdmin } from '@/modules/auth/require-admin';
 import { Card } from '@/components/ui/Card';
 import { Stat } from '@/components/ui/Stat';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
 
 export default async function ConsultoriaPage() {
-  await requireAdmin();
-  const metrics = await getConsultoriaMetrics();
+  const admin = await requireAdmin();
+  const [metrics, impactoTodos] = await Promise.all([getConsultoriaMetrics(), getImpactoPorOrg(admin)]);
+  // Só orgs com 2+ dones têm comparação — as demais não dizem nada aqui.
+  const impacto = impactoTodos.filter((o) => o.primeiro !== null && o.ultimo !== null);
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
@@ -66,6 +69,48 @@ export default async function ConsultoriaPage() {
           </TBody>
         </Table>
       </Card>
+
+      <section className="space-y-3">
+        <h2 className="font-heading text-lg font-semibold text-white">Impacto por cliente</h2>
+        <Card className="!p-0">
+          <Table data-testid="impacto-orgs-table">
+            <THead>
+              <TR>
+                <TH>Cliente</TH>
+                <TH>Faturamento 1º → último</TH>
+                <TH>Score 1º → último</TH>
+                <TH>Tasks concluídas</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {impacto.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-6 text-center text-muted" colSpan={4}>
+                    Nenhum cliente com relatórios suficientes para comparar.
+                  </td>
+                </tr>
+              ) : (
+                impacto.map((o) => (
+                  <TR key={o.orgId}>
+                    <TD>{o.orgName}</TD>
+                    <TD numeric>
+                      {o.primeiro && o.ultimo
+                        ? `${formatBRL(o.primeiro.total)} → ${formatBRL(o.ultimo.total)}${o.deltaFaturamentoPct !== null ? ` (${o.deltaFaturamentoPct > 0 ? '+' : ''}${o.deltaFaturamentoPct}%)` : ''}`
+                        : '—'}
+                    </TD>
+                    <TD numeric>
+                      {o.primeiro !== null && o.ultimo !== null && o.primeiro.score !== null && o.ultimo.score !== null
+                        ? `${o.primeiro.score} → ${o.ultimo.score}`
+                        : '—'}
+                    </TD>
+                    <TD numeric>{o.tasksConcluidas}</TD>
+                  </TR>
+                ))
+              )}
+            </TBody>
+          </Table>
+        </Card>
+      </section>
     </main>
   );
 }

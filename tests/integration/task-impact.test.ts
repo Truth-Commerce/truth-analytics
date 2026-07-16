@@ -43,8 +43,12 @@ describe.skipIf(!url)('task-impact — integração', () => {
   let taskComImpactoId = '';
   // Task em andamento (não concluída) — impacto null mesmo com reportId.
   let taskEmAndamentoId = '';
-  // Task concluída sem reportId — impacto null.
+  // Task concluída sem reportId, criada ENTRE os dois dones — baseline = done
+  // mais próximo da criação (contrato estendido na G3 Task 11; antes era null).
   let taskSemReportId = '';
+  // Task concluída sem reportId, criada DEPOIS do último done — baseline é o
+  // próprio último done e não há posterior → null (comparação prematura).
+  let taskSemReportRecenteId = '';
   // Task concluída com reportId de origem, mas SEM relatório done posterior — impacto null.
   let taskSemRelatorioPosteriorId = '';
   let reportOrigemSemSucessorId = '';
@@ -159,9 +163,27 @@ describe.skipIf(!url)('task-impact — integração', () => {
         criado_por: 'analista',
         report_id: null,
         ordem: 3,
+        // Entre o report origem (2026-06-01) e o atual (2026-07-01) → baseline = origem.
+        created_at: new Date('2026-06-15T00:00:00.000Z'),
       })
       .returning({ id: tasks.id });
     taskSemReportId = taskSemReport!.id;
+
+    const [taskSemReportRecente] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgId,
+        titulo: 'Task sem report_id recente',
+        tipo: 'catalogo',
+        prioridade: 'media',
+        status: 'concluida',
+        criado_por: 'analista',
+        report_id: null,
+        ordem: 4,
+        // created_at defaultNow → depois do último done da org.
+      })
+      .returning({ id: tasks.id });
+    taskSemReportRecenteId = taskSemReportRecente!.id;
 
     const [taskSemPosterior] = await tdb
       .insert(tasks)
@@ -205,9 +227,20 @@ describe.skipIf(!url)('task-impact — integração', () => {
     expect(impact).toBeNull();
   });
 
-  it('task concluída sem report_id retorna null', async () => {
+  // Contrato estendido de propósito na G3 Task 11: task sem report_id deixou
+  // de ser null incondicional — baseline = done mais próximo da criação.
+  it('task concluída sem report_id usa o done mais próximo da criação como baseline', async () => {
     const { getTaskImpact } = await import('@/modules/tasks/task-impact');
     const impact = await getTaskImpact(taskSemReportId, orgId);
+    expect(impact).not.toBeNull();
+    expect(impact!.totalOrigem).toBe(1000);
+    expect(impact!.totalAtual).toBe(1500);
+    expect(impact!.deltaPct).toBe(50);
+  });
+
+  it('task sem report_id criada após o último done retorna null (sem posterior)', async () => {
+    const { getTaskImpact } = await import('@/modules/tasks/task-impact');
+    const impact = await getTaskImpact(taskSemReportRecenteId, orgId);
     expect(impact).toBeNull();
   });
 
