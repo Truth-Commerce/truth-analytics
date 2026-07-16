@@ -14,7 +14,7 @@ export function seriesColor(i: number): string {
 
 /**
  * Cor do arco do Truth Score por faixa — alinhada aos tokens do tailwind
- * (brand / warning.DEFAULT / danger.DEFAULT). O #eab308 fora de token morreu aqui.
+ * (brand / warning.DEFAULT / danger.DEFAULT). O amarelo fora de token morreu aqui.
  */
 export function corDoScore(score: number): string {
   if (score >= 70) return '#07dd2b';

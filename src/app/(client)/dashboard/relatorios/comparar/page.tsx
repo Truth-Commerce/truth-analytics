@@ -12,7 +12,7 @@ function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   if (deltaPct === null) return <span className="text-dim">—</span>;
   const positivo = deltaPct >= 0;
   return (
-    <span className={positivo ? 'text-brand' : 'text-red-400'}>
+    <span className={positivo ? 'text-brand' : 'text-danger-fg'}>
       {positivo ? '▲' : '▼'} {positivo ? '+' : ''}
       {deltaPct}%
     </span>
@@ -39,7 +39,7 @@ const SITUACAO_LABEL = {
 
 const SITUACAO_COR = {
   subiu: 'text-brand',
-  caiu: 'text-red-400',
+  caiu: 'text-danger-fg',
   estavel: 'text-muted',
   entrou: 'text-brand',
   saiu: 'text-dim',

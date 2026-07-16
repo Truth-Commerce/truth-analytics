@@ -9,7 +9,7 @@ function DeltaTag({ deltaPct }: { deltaPct: number | null }) {
   if (deltaPct === null) return null;
   const positivo = deltaPct >= 0;
   return (
-    <span className={`font-mono text-xs ${positivo ? 'text-brand' : 'text-red-400'}`}>
+    <span className={`font-mono text-xs ${positivo ? 'text-brand' : 'text-danger-fg'}`}>
       {positivo ? '▲' : '▼'} {positivo ? '+' : ''}
       {deltaPct.toLocaleString('pt-BR')}% vs anterior
     </span>
@@ -19,7 +19,7 @@ function DeltaTag({ deltaPct }: { deltaPct: number | null }) {
 const DIRECAO_ICONE: Record<Destaque['direcao'], string> = { up: '▲', down: '▼', flat: '→' };
 const DIRECAO_COR: Record<Destaque['direcao'], string> = {
   up: 'text-brand',
-  down: 'text-red-400',
+  down: 'text-danger-fg',
   flat: 'text-muted',
 };
 

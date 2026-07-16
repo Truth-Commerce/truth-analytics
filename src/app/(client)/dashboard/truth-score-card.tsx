@@ -30,7 +30,7 @@ export function TruthScoreCard({
         <div className="min-w-0 space-y-2">
           <p className="text-sm text-muted">Saúde da operação no último relatório.</p>
           {delta !== null && (
-            <p className={`text-sm font-medium ${delta >= 0 ? 'text-brand' : 'text-red-400'}`} data-testid="score-delta">
+            <p className={`text-sm font-medium ${delta >= 0 ? 'text-brand' : 'text-danger-fg'}`} data-testid="score-delta">
               {delta >= 0 ? '▲' : '▼'} {delta >= 0 ? '+' : ''}{delta} vs relatório anterior
             </p>
           )}

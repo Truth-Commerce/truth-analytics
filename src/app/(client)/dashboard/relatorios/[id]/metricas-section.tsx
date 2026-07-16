@@ -19,7 +19,7 @@ function DeltaPct({ valor, bomSeNegativo = false }: { valor: number | null; bomS
   const positivo = valor >= 0;
   const bom = bomSeNegativo ? corDeltaPreco(valor) === 'boa' : positivo;
   return (
-    <span className={`font-mono text-xs ${bom ? 'text-brand' : 'text-red-400'}`}>
+    <span className={`font-mono text-xs ${bom ? 'text-brand' : 'text-danger-fg'}`}>
       {positivo ? '▲' : '▼'} {positivo ? '+' : ''}
       {valor.toLocaleString('pt-BR')}%
     </span>

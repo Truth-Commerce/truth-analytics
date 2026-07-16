@@ -164,7 +164,7 @@ function buildStyles(fonts: ReturnType<typeof registerPdfFonts>) {
 
 /** ScoreGauge nativo em SVG (@react-pdf) — 270° como o gauge da UI. */
 function GaugePdf({ score }: { score: number }) {
-  const cor = score >= 70 ? '#07dd2b' : score >= 40 ? '#eab308' : '#ef4444';
+  const cor = score >= 70 ? '#07dd2b' : score >= 40 ? '#f59e0b' : '#ef4444'; // warning.DEFAULT/danger.DEFAULT
   return (
     <View style={{ width: 140, height: 140, position: 'relative', marginTop: 32 }}>
       <Svg width={140} height={140} viewBox="0 0 140 140">
