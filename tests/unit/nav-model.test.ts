@@ -11,9 +11,9 @@ describe('navItems — nav por papel', () => {
     ]);
   });
 
-  it('admin NÃO vê rotas de cliente', () => {
+  it('admin NÃO vê rotas de cliente, mas tem a Carteira (G3/T10)', () => {
     const hrefs = navItems('admin').map((i) => i.href);
-    expect(hrefs).toEqual(['/admin', '/admin/playbooks', '/admin/consultoria']);
+    expect(hrefs).toEqual(['/admin', '/admin/playbooks', '/admin/consultoria', '/analista']);
     expect(hrefs).not.toContain('/dashboard');
     expect(hrefs).not.toContain('/conexoes');
   });

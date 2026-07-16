@@ -8,6 +8,9 @@ export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
       { href: '/admin', label: 'Clientes' },
       { href: '/admin/playbooks', label: 'Playbooks' },
       { href: '/admin/consultoria', label: 'Consultoria' },
+      // G3/T10: admin precisa de caminho até a fila de revisão do analista
+      // (acesso a /analista permitido para admin_truth).
+      { href: '/analista', label: 'Carteira' },
     ];
   }
   if (variant === 'analista') {
