@@ -83,4 +83,13 @@ describe.skipIf(!url)('createOrgWithUser — integração', () => {
       }),
     ).rejects.toThrow('email_em_uso');
   });
+
+  it('grava o aceite dos termos (aceitou_termos_em preenchido)', async () => {
+    const [user] = await tdb
+      .select({ aceitou_termos_em: users.aceitou_termos_em })
+      .from(users)
+      .where(eq(users.id, createdUserId))
+      .limit(1);
+    expect(user.aceitou_termos_em).toBeInstanceOf(Date);
+  });
 });

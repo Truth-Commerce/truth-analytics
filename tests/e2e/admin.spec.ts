@@ -22,6 +22,7 @@ test('admin ativa um cliente pendente definindo plano', async ({ page, browser }
   await page.fill('input[name="orgName"]', `${E2E_PREFIX}Loja-${RUN}`);
   await page.fill('input[name="email"]', clienteEmail);
   await page.fill('input[name="senha"]', clienteSenha);
+  await page.check('input[name="aceite"]');
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/aguardando/);
 

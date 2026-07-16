@@ -21,6 +21,11 @@ const signUpSchema = z.object({
   orgName: z.string().trim().min(2, 'Informe o nome da empresa.'),
   email: z.string().trim().email('E-mail inválido.'),
   senha: z.string().min(8, 'A senha precisa ter ao menos 8 caracteres.'),
+  aceite: z.literal('on', {
+    errorMap: () => ({
+      message: 'Para criar a conta, aceite os Termos de Uso e a Política de Privacidade.',
+    }),
+  }),
 });
 
 const signInSchema = z.object({
@@ -36,6 +41,7 @@ export async function signUpAction(
     orgName: formData.get('orgName'),
     email: formData.get('email'),
     senha: formData.get('senha'),
+    aceite: formData.get('aceite'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };

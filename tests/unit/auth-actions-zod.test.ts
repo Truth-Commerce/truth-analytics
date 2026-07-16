@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/headers', () => ({ headers: () => new Headers() }));
 vi.mock('next-auth', () => ({ AuthError: class AuthError extends Error {} }));
@@ -30,6 +30,13 @@ function form(entries: Record<string, string>): FormData {
   return fd;
 }
 
+// Isola o histórico de chamadas entre testes (mantém as implementações dos
+// mocks) — necessário para o teste "sem aceite → nada é criado" asseverar
+// `createOrgWithUser` não chamado sem herdar a chamada do teste anterior.
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe('signInAction com Zod', () => {
   it('e-mail inválido → erro sem chamar signIn', async () => {
     const res = await signInAction({}, form({ email: 'nao-eh-email', senha: 'x'.repeat(8) }));
@@ -49,12 +56,25 @@ describe('signUpAction anti-enumeração', () => {
     vi.mocked(createOrgWithUser).mockRejectedValueOnce(new Error('email_em_uso'));
     const res = await signUpAction(
       {},
-      form({ orgName: 'Empresa Teste', email: 'ja-existe@teste.dev', senha: 'x'.repeat(8) }),
+      form({ orgName: 'Empresa Teste', email: 'ja-existe@teste.dev', senha: 'x'.repeat(8), aceite: 'on' }),
     );
     expect(res.error).toBe('Já existe uma conta com este e-mail.');
     expect(recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ escopo: 'signup', email: 'ja-existe@teste.dev', success: false }),
     );
     expect(signIn).not.toHaveBeenCalled();
+  });
+});
+
+describe('signUpAction — aceite dos termos (LGPD)', () => {
+  it('sem aceite → erro e nada é criado', async () => {
+    const res = await signUpAction(
+      {},
+      form({ orgName: 'Empresa Teste', email: 'novo@teste.dev', senha: 'x'.repeat(8) }),
+    );
+    expect(res.error).toBe(
+      'Para criar a conta, aceite os Termos de Uso e a Política de Privacidade.',
+    );
+    expect(createOrgWithUser).not.toHaveBeenCalled();
   });
 });

@@ -17,6 +17,7 @@ test('cadastro cria conta e cai em /aguardando (org pending)', async ({ page }) 
   await page.fill('input[name="orgName"]', `${E2E_PREFIX}Loja`);
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="senha"]', senha);
+  await page.check('input[name="aceite"]');
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/aguardando/);
 });

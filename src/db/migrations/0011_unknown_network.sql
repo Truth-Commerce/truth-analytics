@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "aceitou_termos_em" timestamp with time zone;

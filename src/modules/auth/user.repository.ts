@@ -67,7 +67,7 @@ export async function createOrgWithUser(input: {
 
       const [user] = await tx
         .insert(users)
-        .values({ org_id: org.id, email, senha_hash, role: 'client' })
+        .values({ org_id: org.id, email, senha_hash, role: 'client', aceitou_termos_em: new Date() })
         .returning({ id: users.id });
 
       return { orgId: org.id, userId: user.id };
