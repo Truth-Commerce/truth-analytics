@@ -6,38 +6,29 @@ export type CommandItem = {
   keywords?: string;
 };
 
-/** Comandos do ⌘K por variante do shell (pura). */
+/**
+ * Comandos do ⌘K por papel (pura). Coerente com a nav por papel do shell:
+ * admin/analista não recebem rotas nem ações de cliente.
+ */
 export function buildCommands(variant: 'client' | 'admin' | 'analista'): CommandItem[] {
-  // 'analista' tem seu próprio caso: navega para a carteira, sem os links de
-  // Dashboard/Conexões/Admin (rotas do papel cliente/admin) nem as Ações
-  // (gerar relatório/adicionar produto são fluxos do cliente sobre a própria
-  // org — não fazem sentido no contexto multi-org do analista).
   if (variant === 'analista') {
     return [{ id: 'nav-analista', label: 'Ir para a Carteira', group: 'Navegação', href: '/analista', keywords: 'clientes tasks kanban revisão' }];
   }
 
-  const nav: CommandItem[] = [
+  if (variant === 'admin') {
+    return [
+      { id: 'nav-admin', label: 'Ir para Clientes', group: 'Navegação', href: '/admin', keywords: 'clientes orgs' },
+      { id: 'nav-playbooks', label: 'Ir para Playbooks', group: 'Navegação', href: '/admin/playbooks', keywords: 'templates tasks' },
+      { id: 'nav-consultoria', label: 'Ir para Consultoria', group: 'Navegação', href: '/admin/consultoria', keywords: 'métricas analistas' },
+    ];
+  }
+
+  return [
     { id: 'nav-dashboard', label: 'Ir para o Dashboard', group: 'Navegação', href: '/dashboard' },
     { id: 'nav-conexoes', label: 'Ir para Conexões', group: 'Navegação', href: '/conexoes', keywords: 'bling produtos' },
+    { id: 'nav-plano-de-acao', label: 'Ir para o Plano de Ação', group: 'Navegação', href: '/dashboard/plano-de-acao', keywords: 'tasks tarefas kanban consultoria' },
+    { id: 'acao-gerar-relatorio', label: 'Gerar relatório', group: 'Ações', href: '/dashboard#gerar-relatorio', keywords: 'análise ia relatório novo' },
+    { id: 'acao-adicionar-produto', label: 'Adicionar produto monitorado', group: 'Ações', href: '/conexoes#produtos-monitorados', keywords: 'sku keywords monitorar' },
+    { id: 'acao-comparar-periodos', label: 'Comparar períodos', group: 'Ações', href: '/dashboard/relatorios/comparar', keywords: 'relatórios comparação evolução' },
   ];
-  if (variant === 'admin') {
-    nav.push({ id: 'nav-admin', label: 'Ir para o Admin', group: 'Navegação', href: '/admin', keywords: 'clientes' });
-  }
-  const acoes: CommandItem[] = [
-    {
-      id: 'acao-gerar-relatorio',
-      label: 'Gerar relatório',
-      group: 'Ações',
-      href: '/dashboard#gerar-relatorio',
-      keywords: 'análise ia relatório novo',
-    },
-    {
-      id: 'acao-adicionar-produto',
-      label: 'Adicionar produto monitorado',
-      group: 'Ações',
-      href: '/conexoes#produtos-monitorados',
-      keywords: 'sku keywords monitorar',
-    },
-  ];
-  return [...nav, ...acoes];
 }
