@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 
 import { DUR, EASE_TRUTH } from '@/lib/motion';
 
@@ -97,7 +97,7 @@ export function Dialog({
   return createPortal(
     <AnimatePresence>
       {open ? (
-        <motion.div
+        <m.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -108,7 +108,7 @@ export function Dialog({
             position === 'top' ? 'items-start pt-[18vh]' : 'items-center'
           }`}
         >
-          <motion.div
+          <m.div
             ref={panelRef}
             role="dialog"
             aria-modal="true"
@@ -123,8 +123,8 @@ export function Dialog({
             className={`w-full outline-none ${maxWidthClassName}`}
           >
             {children}
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       ) : null}
     </AnimatePresence>,
     document.body,

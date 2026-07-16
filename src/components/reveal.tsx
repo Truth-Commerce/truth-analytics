@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 
 import { fadeLift } from '@/lib/motion';
 
@@ -15,7 +15,7 @@ interface RevealProps {
 /** Seção com scroll-reveal (fade+lift ao entrar na viewport, uma vez). */
 export function Reveal({ children, className = '', id, ...rest }: RevealProps) {
   return (
-    <motion.section
+    <m.section
       id={id}
       variants={fadeLift}
       initial="hidden"
@@ -25,6 +25,6 @@ export function Reveal({ children, className = '', id, ...rest }: RevealProps) {
       {...rest}
     >
       {children}
-    </motion.section>
+    </m.section>
   );
 }

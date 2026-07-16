@@ -8,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 
 import { DUR, EASE_TRUTH } from '@/lib/motion';
 
@@ -96,7 +96,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       >
         <AnimatePresence>
           {items.map((t) => (
-            <motion.div
+            <m.div
               key={t.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -142,7 +142,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   ✕
                 </button>
               </div>
-            </motion.div>
+            </m.div>
           ))}
         </AnimatePresence>
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 
 import { EASE_TRUTH } from '@/lib/motion';
 
@@ -66,7 +66,7 @@ export function Stepper({ steps, activeIndex, failed = false, className = '' }: 
               >
                 {step.label}
                 {active && !isFailed ? (
-                  <motion.span
+                  <m.span
                     aria-hidden="true"
                     className="ml-2 inline-block h-1.5 w-1.5 rounded-full bg-brand align-middle"
                     animate={{ opacity: [1, 0.25, 1] }}

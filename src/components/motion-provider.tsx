@@ -1,8 +1,16 @@
 'use client';
 
-import { MotionConfig } from 'framer-motion';
+import { LazyMotion, MotionConfig, domAnimation } from 'framer-motion';
 
-/** Respeita prefers-reduced-motion em TODAS as animações framer da árvore. */
+/**
+ * LazyMotion strict: só os features DOM entram no bundle (componente `m.` em
+ * vez de `motion.` — strict LANÇA se algum `motion.` sobrar, garantindo a
+ * dieta). MotionConfig respeita prefers-reduced-motion em toda a árvore.
+ */
 export function MotionProvider({ children }: { children: React.ReactNode }) {
-  return <MotionConfig reducedMotion="user">{children}</MotionConfig>;
+  return (
+    <LazyMotion features={domAnimation} strict>
+      <MotionConfig reducedMotion="user">{children}</MotionConfig>
+    </LazyMotion>
+  );
 }
