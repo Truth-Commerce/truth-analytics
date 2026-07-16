@@ -4,7 +4,7 @@ import { aprovarTaskFormAction, concluirTaskFormAction } from '@/actions/tasks.a
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { formatBRL, formatData } from '@/lib/format';
+import { formatBRL, formatData, formatDataUtc } from '@/lib/format';
 import { CHECKLIST_CHECKED, CHECKLIST_UNCHECKED, parseChecklist } from '@/modules/tasks/checklist-line';
 import type { TaskImpact } from '@/modules/tasks/task-impact';
 import {
@@ -22,6 +22,7 @@ import {
 import { DevolverTaskButton } from './DevolverTaskButton';
 import { TaskChecklist } from './TaskChecklist';
 import { TaskComments } from './TaskComments';
+import { TaskEditForm } from './TaskEditForm';
 
 const PRIORIDADE_BADGE_VARIANT: Record<TaskPrioridade, 'danger' | 'warn' | 'neutral'> = {
   alta: 'danger',
@@ -42,6 +43,9 @@ const EVENTO_LABEL: Record<string, string> = {
   devolvida: 'Devolvida para ajustes',
   editada: 'Editada',
   prazo: 'Prazo alterado',
+  assignee: 'Responsável alterado',
+  lembrete_prazo: 'Lembrete de prazo enviado',
+  reincidencia: 'Reincidência de recomendação concluída',
 };
 
 function statusLabel(status: string | null): string {
@@ -83,7 +87,14 @@ export function TaskDetail({
   ator: TaskAtor;
   orgId?: string;
   comments: Array<{ id: string; corpo: string; userEmail: string; createdAt: Date }>;
-  activities: Array<{ id: string; evento: string; de: string | null; para: string | null; createdAt: Date }>;
+  activities: Array<{
+    id: string;
+    evento: string;
+    de: string | null;
+    para: string | null;
+    userEmail: string | null;
+    createdAt: Date;
+  }>;
   impact: TaskImpact;
   backHref: string;
 }) {
@@ -140,10 +151,28 @@ export function TaskDetail({
             {PRIORIDADE_TASK_LABEL[task.prioridade]}
           </Badge>
           {atrasada ? <Badge variant="danger">Atrasada</Badge> : null}
+          {task.descricao.includes('_Reincidente:') ? <Badge variant="warn">Reincidente</Badge> : null}
         </div>
 
-        {task.prazo ? <p className="mt-2 text-xs text-dim">Prazo: {formatData(task.prazo)}</p> : null}
+        {/* task.prazo é dia-calendário 'yyyy-mm-dd' (date-only): formatDataUtc
+            não desloca o dia (formatData/BRT tiraria 1 dia — bug da Task 2). */}
+        {task.prazo ? <p className="mt-2 text-xs text-dim">Prazo: {formatDataUtc(task.prazo)}</p> : null}
       </header>
+
+      {ator !== 'cliente' && orgId ? (
+        <TaskEditForm
+          task={{
+            id: task.id,
+            titulo: task.titulo,
+            descricao: task.descricao,
+            tipo: task.tipo,
+            prioridade: task.prioridade,
+            prazo: task.prazo,
+          }}
+          orgId={orgId}
+          backHref={backHref}
+        />
+      ) : null}
 
       {textoLivre || itensChecklist.length > 0 ? (
         <Card>
@@ -201,7 +230,10 @@ export function TaskDetail({
             <ol data-testid="task-atividades" className="space-y-2">
               {activities.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-white/80">{eventoLabel(a)}</span>
+                  <span className="text-white/80">
+                    {eventoLabel(a)}
+                    {a.userEmail ? <span className="text-xs text-dim"> — {a.userEmail}</span> : null}
+                  </span>
                   <span className="whitespace-nowrap text-xs text-dim">{formatData(a.createdAt)}</span>
                 </li>
               ))}

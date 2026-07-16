@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, lte, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { orders, organizations } from '@/db/schema';
@@ -29,6 +29,25 @@ export async function getTotalVendasMesCorrente(orgId: string, agora: Date = new
     .select({ total: sql<string | null>`coalesce(sum(${orders.valor_total}), '0')` })
     .from(orders)
     .where(and(eq(orders.org_id, orgId), gte(orders.data, inicioMes), lte(orders.data, fimHoje)));
+  return Math.round(Number(row?.total ?? 0) * 100) / 100;
+}
+
+/**
+ * Soma de orders.valor_total do mês ANTERIOR fechado — mesma convenção do
+ * corrente (SUM() no banco; mês decidido pelo calendário America/Sao_Paulo,
+ * fronteiras codificadas em UTC): [1º dia do mês anterior 00:00Z, 1º dia do
+ * mês corrente 00:00Z).
+ */
+export async function getTotalVendasMesAnterior(orgId: string, agora: Date = new Date()): Promise<number> {
+  const hoje = hojeBrt(agora);
+  const inicioMesAtual = inicioDeDiaUtc(`${hoje.slice(0, 7)}-01`);
+  const inicioMesAnterior = new Date(
+    Date.UTC(inicioMesAtual.getUTCFullYear(), inicioMesAtual.getUTCMonth() - 1, 1),
+  );
+  const [row] = await db
+    .select({ total: sql<string | null>`coalesce(sum(${orders.valor_total}), '0')` })
+    .from(orders)
+    .where(and(eq(orders.org_id, orgId), gte(orders.data, inicioMesAnterior), lt(orders.data, inicioMesAtual)));
   return Math.round(Number(row?.total ?? 0) * 100) / 100;
 }
 

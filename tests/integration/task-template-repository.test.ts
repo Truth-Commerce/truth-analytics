@@ -57,6 +57,44 @@ describe.skipIf(!url)('task-template.repository — lado-escrita (integração)'
     expect(todos.some((t) => t.id === id)).toBe(true);
   });
 
+  it('prioridade e prazoDias persistem e voltam no shape do TaskTemplate', async () => {
+    const { createTemplate, getTemplateById, updateTemplate } = await import(
+      '@/modules/tasks/task-template.repository'
+    );
+
+    const id = await createTemplate({
+      titulo: `${PREFIX}Playbook com prazo`,
+      tipo: 'preco',
+      checklist: [],
+      prioridade: 'alta',
+      prazoDias: 5,
+    });
+
+    const tpl = await getTemplateById(id);
+    expect(tpl?.prioridade).toBe('alta');
+    expect(tpl?.prazoDias).toBe(5);
+
+    // patch dos campos novos (inclusive limpar o prazo)
+    await updateTemplate(id, { prioridade: 'baixa', prazoDias: null });
+    const editado = await getTemplateById(id);
+    expect(editado?.prioridade).toBe('baixa');
+    expect(editado?.prazoDias).toBeNull();
+  });
+
+  it('sem prioridade/prazoDias no input → defaults media e null', async () => {
+    const { createTemplate, getTemplateById } = await import('@/modules/tasks/task-template.repository');
+
+    const id = await createTemplate({
+      titulo: `${PREFIX}Playbook default`,
+      tipo: 'outro',
+      checklist: [],
+    });
+
+    const tpl = await getTemplateById(id);
+    expect(tpl?.prioridade).toBe('media');
+    expect(tpl?.prazoDias).toBeNull();
+  });
+
   it('updateTemplate altera o título (e demais campos) do template', async () => {
     const { createTemplate, getTemplateById, updateTemplate } = await import(
       '@/modules/tasks/task-template.repository'

@@ -1,4 +1,4 @@
-import { inArray, like } from 'drizzle-orm';
+import { eq, inArray, like } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db/client';
@@ -76,5 +76,37 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('getConsultoriaMetrics — integ
     expect(analistaMetrics!.email).toBe(`${PREFIX}an@example.com`);
     expect(analistaMetrics!.orgs).toBeGreaterThanOrEqual(1);
     expect(analistaMetrics!.concluidas30d).toBeGreaterThanOrEqual(1);
+  });
+
+  it('tempo médio usa a PRIMEIRA conclusão por task e ignora re-conclusões (MIN por task)', async () => {
+    const { getConsultoriaMetrics } = await import('@/modules/analista/analista.repository');
+
+    // Baseline global (banco compartilhado): a média das PRIMEIRAS conclusões
+    // dentro dos 90d. As outras suítes concluem tasks "agora" (gap ~0d), então
+    // este baseline é pequeno e estável.
+    const antes = (await getConsultoriaMetrics()).tempoMedioConclusaoDias;
+    expect(antes).not.toBeNull();
+
+    // RE-conclusão da MESMA task (já concluída na 1ª vez em beforeAll, gap ~0d),
+    // agora registrada 400 dias APÓS a criação. O AVG antigo somava este ponto e
+    // puxava a média para cima em dezenas de dias; o MIN por task o IGNORA.
+    const [t] = await db
+      .select({ created_at: tasks.created_at })
+      .from(tasks)
+      .where(eq(tasks.id, taskId))
+      .limit(1);
+    await db.insert(taskActivities).values({
+      task_id: taskId,
+      evento: 'status',
+      de: 'em_revisao',
+      para: 'concluida',
+      created_at: new Date(t!.created_at.getTime() + 400 * 86_400_000),
+    });
+
+    const depois = (await getConsultoriaMetrics()).tempoMedioConclusaoDias;
+    expect(depois).not.toBeNull();
+    // MIN por task ⇒ a re-conclusão de 400d NÃO entra na média (inalterada).
+    // No AVG antigo, |depois - antes| seria dezenas de dias.
+    expect(Math.abs(depois! - antes!)).toBeLessThan(1);
   });
 });

@@ -7,6 +7,9 @@ import {
   alertasDigestTemplate,
   autoGeracaoPausadaTemplate,
   blingConnectionFailedTemplate,
+  digestSemanalTemplate,
+  type DigestEmailData,
+  lembretePrazoTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
@@ -15,6 +18,7 @@ import {
   taskComentarioTemplate,
   taskCriadaTemplate,
   taskDevolvidaTemplate,
+  taskRevisaoTemplate,
 } from './templates';
 
 /**
@@ -146,6 +150,30 @@ export async function sendTaskDevolvidaEmail(to: string, titulo: string, url: st
  */
 export async function sendTaskAprovadaEmail(to: string, titulo: string, url: string): Promise<void> {
   const content = taskAprovadaTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/** Task aguardando ação da consultoria (analista ou fallback admin). Nunca lança. */
+export async function sendTaskRevisaoEmail(to: string, titulo: string, url: string): Promise<void> {
+  const content = taskRevisaoTemplate(titulo, url);
+  await sendEmail({ to, ...content });
+}
+
+/** Lembrete de prazo de tarefa. Nunca lança. */
+export async function sendLembretePrazoEmail(
+  to: string,
+  input: { titulo: string; prazoLabel: string; tipo: 'vence_em_breve' | 'atrasada' },
+): Promise<void> {
+  const content = lembretePrazoTemplate(input, serverEnv.APP_URL);
+  await sendEmail({ to, ...content });
+}
+
+/**
+ * Digest semanal do Plano de Ação por org (tasks da semana + vendas do mês).
+ * Nunca lança.
+ */
+export async function sendDigestSemanalEmail(to: string, dados: DigestEmailData): Promise<void> {
+  const content = digestSemanalTemplate(dados, serverEnv.APP_URL);
   await sendEmail({ to, ...content });
 }
 

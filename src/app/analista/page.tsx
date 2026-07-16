@@ -4,18 +4,28 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { RevisaoQueue } from '@/components/tasks/RevisaoQueue';
-import { getCarteira, listTasksEmRevisao } from '@/modules/analista/analista.repository';
+import { getCarteira, getImpactoPorOrg, getMeuDia, listTasksEmRevisao } from '@/modules/analista/analista.repository';
 import { requireAnalista } from '@/modules/auth/require-analista';
 import { STATUS_TASK_LABEL, TASK_STATUSES } from '@/modules/tasks/task.types';
+
+import { MeuDiaFaixa } from './meu-dia';
 
 export default async function AnalistaPage() {
   const access = await requireAnalista();
 
-  const [carteira, fila] = await Promise.all([getCarteira(access), listTasksEmRevisao(access)]);
+  const [carteira, fila, meuDia, impacto] = await Promise.all([
+    getCarteira(access),
+    listTasksEmRevisao(access),
+    getMeuDia(access),
+    getImpactoPorOrg(access),
+  ]);
+  const impactoMap = new Map(impacto.map((i) => [i.orgId, i]));
 
   return (
     <main className="mx-auto max-w-6xl space-y-8 p-6 md:p-8">
       <h1 className="font-heading text-2xl font-bold text-white">Carteira de clientes</h1>
+
+      <MeuDiaFaixa meuDia={meuDia} />
 
       <section className="space-y-3">
         <h2 className="font-heading text-lg font-semibold text-white">Fila de revisão</h2>
@@ -53,6 +63,20 @@ export default async function AnalistaPage() {
                     </span>
                     <span className="font-semibold text-brand">Em revisão: {org.emRevisao}</span>
                   </div>
+
+                  {(() => {
+                    const imp = impactoMap.get(org.orgId);
+                    return imp?.deltaFaturamentoPct !== null && imp?.deltaFaturamentoPct !== undefined ? (
+                      <p className="text-xs text-dim" data-testid="carteira-org-impacto">
+                        Desde o 1º relatório:{' '}
+                        <span className={imp.deltaFaturamentoPct >= 0 ? 'text-success-fg' : 'text-danger-fg'}>
+                          {imp.deltaFaturamentoPct > 0 ? '+' : ''}
+                          {imp.deltaFaturamentoPct}% faturamento
+                        </span>
+                        {imp.deltaScore !== null ? ` · score ${imp.deltaScore > 0 ? '+' : ''}${imp.deltaScore}` : ''}
+                      </p>
+                    ) : null;
+                  })()}
 
                   <Link
                     href={`/analista/${org.orgId}`}

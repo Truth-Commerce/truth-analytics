@@ -17,7 +17,12 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
 import type { TaskTemplate } from '@/modules/tasks/task-template.repository';
-import { TASK_TIPOS, TIPO_TASK_LABEL } from '@/modules/tasks/task.types';
+import {
+  PRIORIDADE_TASK_LABEL,
+  TASK_PRIORIDADES,
+  TASK_TIPOS,
+  TIPO_TASK_LABEL,
+} from '@/modules/tasks/task.types';
 
 const initial: TemplateActionState = {};
 
@@ -85,6 +90,27 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
                 </option>
               ))}
             </Select>
+          </Field>
+
+          <Field label="Prioridade" htmlFor="prioridade">
+            <Select id="prioridade" name="prioridade" defaultValue={editing?.prioridade ?? 'media'}>
+              {TASK_PRIORIDADES.map((p) => (
+                <option key={p} value={p}>
+                  {PRIORIDADE_TASK_LABEL[p]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="Prazo (dias após criação)" htmlFor="prazoDias">
+            <Input
+              id="prazoDias"
+              name="prazoDias"
+              type="number"
+              min={1}
+              max={365}
+              defaultValue={editing?.prazoDias ?? ''}
+            />
           </Field>
 
           <Field label="Descrição" htmlFor="descricao" className="sm:col-span-2">

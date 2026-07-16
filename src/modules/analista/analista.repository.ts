@@ -1,11 +1,16 @@
-import { and, count, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, isNotNull, lt, lte, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { organizations, taskActivities, tasks, users } from '@/db/schema';
+import { hojeBrt } from '@/lib/timezone';
 import { listClientOrganizations } from '@/modules/admin/admin.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import type { UserAccess } from '@/modules/auth/user.types';
-import { countTasksByStatus } from '@/modules/tasks/task.repository';
+import { MetricasSchema } from '@/modules/pipeline/contracts';
+import { getLatestDoneReport, getPrimeiroDoneReport } from '@/modules/reports/report.repository';
+import { somarDias } from '@/modules/tasks/sla';
+
+import { impactoRenovacao, type ImpactoOrg, type PontaRelatorio } from './impacto-renovacao';
 import type {
   TaskCriadoPor,
   TaskPrioridade,
@@ -65,14 +70,6 @@ export async function setOrgAnalista(input: {
 // confiar em `access.orgId` aqui — o escopo é sempre derivado do papel.
 // ---------------------------------------------------------------------------
 
-async function countTasksAtrasadas(orgId: string): Promise<number> {
-  const [row] = await db
-    .select({ n: count() })
-    .from(tasks)
-    .where(and(eq(tasks.org_id, orgId), lt(tasks.prazo, sql`CURRENT_DATE`), ne(tasks.status, 'concluida')));
-  return Number(row?.n ?? 0);
-}
-
 export type CarteiraOrg = {
   orgId: string;
   orgName: string;
@@ -81,29 +78,148 @@ export type CarteiraOrg = {
   emRevisao: number;
 };
 
-export async function getCarteira(access: UserAccess): Promise<CarteiraOrg[]> {
-  const orgs =
-    access.role === 'admin_truth'
-      ? (await listClientOrganizations()).map((o) => ({ id: o.id, name: o.name }))
-      : await db
-          .select({ id: organizations.id, name: organizations.name })
-          .from(organizations)
-          .where(eq(organizations.analista_id, access.id));
+const zeroCounts = (): Record<TaskStatus, number> => ({
+  backlog: 0,
+  todo: 0,
+  em_andamento: 0,
+  em_revisao: 0,
+  concluida: 0,
+});
 
-  return Promise.all(
-    orgs.map(async (org) => {
-      const [counts, atrasadas] = await Promise.all([
-        countTasksByStatus(org.id),
-        countTasksAtrasadas(org.id),
-      ]);
-      return { orgId: org.id, orgName: org.name, counts, atrasadas, emRevisao: counts.em_revisao };
-    }),
-  );
+/** Orgs visíveis para o papel: admin vê todas as orgs cliente; analista, só a própria carteira. */
+async function orgsDoEscopo(access: UserAccess): Promise<Array<{ id: string; name: string }>> {
+  return access.role === 'admin_truth'
+    ? (await listClientOrganizations()).map((o) => ({ id: o.id, name: o.name }))
+    : db
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.analista_id, access.id));
+}
+
+/**
+ * Carteira por org, em 2 queries agregadas no TOTAL (GROUP BY) — o antigo
+ * `Promise.all` fazia 2 queries POR org (N+1 da auditoria). Atrasadas contam
+ * contra hoje BRT (o antigo `CURRENT_DATE` era o dia UTC do banco). Retorno
+ * ORDENADO por criticidade: atrasadas desc → emRevisao desc → orgName asc.
+ */
+export async function getCarteira(access: UserAccess): Promise<CarteiraOrg[]> {
+  const orgs = await orgsDoEscopo(access);
+  if (orgs.length === 0) return [];
+  const orgIds = orgs.map((o) => o.id);
+  const hoje = hojeBrt();
+
+  const [countsRows, atrasadasRows] = await Promise.all([
+    db
+      .select({ orgId: tasks.org_id, status: tasks.status, n: count() })
+      .from(tasks)
+      .where(inArray(tasks.org_id, orgIds))
+      .groupBy(tasks.org_id, tasks.status),
+    db
+      .select({ orgId: tasks.org_id, n: count() })
+      .from(tasks)
+      .where(and(inArray(tasks.org_id, orgIds), lt(tasks.prazo, hoje), ne(tasks.status, 'concluida')))
+      .groupBy(tasks.org_id),
+  ]);
+
+  const countsMap = new Map<string, Record<TaskStatus, number>>();
+  for (const r of countsRows) {
+    const base = countsMap.get(r.orgId) ?? zeroCounts();
+    base[r.status as TaskStatus] = Number(r.n);
+    countsMap.set(r.orgId, base);
+  }
+  const atrasadasMap = new Map(atrasadasRows.map((r) => [r.orgId, Number(r.n)]));
+
+  return orgs
+    .map((org) => {
+      const counts = countsMap.get(org.id) ?? zeroCounts();
+      return {
+        orgId: org.id,
+        orgName: org.name,
+        counts,
+        atrasadas: atrasadasMap.get(org.id) ?? 0,
+        emRevisao: counts.em_revisao,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.atrasadas - a.atrasadas || b.emRevisao - a.emRevisao || a.orgName.localeCompare(b.orgName, 'pt-BR'),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// "Meu dia" (G3 Task 6) — faixa consolidada cross-org da carteira.
+// ---------------------------------------------------------------------------
+
+export const VENCEM_JANELA_DIAS = 7;
+export const SEM_ATIVIDADE_DIAS = 14;
+export const MEU_DIA_LIMITE = 50;
+
+export type MeuDiaItem = {
+  taskId: string;
+  orgId: string;
+  orgName: string;
+  titulo: string;
+  prazo: string | null;
+  status: TaskStatus;
+  updatedAt: Date;
+};
+
+export type MeuDia = {
+  atrasadas: MeuDiaItem[];
+  vencem7d: MeuDiaItem[];
+  emRevisao: MeuDiaItem[];
+  semAtividade14d: MeuDiaItem[];
+};
+
+const CAMPOS_MEU_DIA = {
+  taskId: tasks.id,
+  orgId: organizations.id,
+  orgName: organizations.name,
+  titulo: tasks.titulo,
+  prazo: tasks.prazo,
+  status: tasks.status,
+  updatedAt: tasks.updated_at,
+};
+
+/** Faixa "Meu dia": 4 listas cross-org da carteira, cada uma numa query agregada. */
+export async function getMeuDia(access: UserAccess, agora: Date = new Date()): Promise<MeuDia> {
+  const escopoOrg =
+    access.role === 'admin_truth' ? undefined : eq(organizations.analista_id, access.id);
+  const hoje = hojeBrt(agora);
+  const fimJanela = somarDias(hoje, VENCEM_JANELA_DIAS);
+  const corteAtividade = new Date(agora.getTime() - SEM_ATIVIDADE_DIAS * 86_400_000);
+  const abertas = inArray(tasks.status, ['backlog', 'todo', 'em_andamento']);
+
+  function consulta(cond: ReturnType<typeof and>, ordem: 'prazo' | 'updated') {
+    return db
+      .select(CAMPOS_MEU_DIA)
+      .from(tasks)
+      .innerJoin(organizations, eq(tasks.org_id, organizations.id))
+      .where(escopoOrg ? and(cond, escopoOrg) : cond)
+      .orderBy(ordem === 'prazo' ? tasks.prazo : tasks.updated_at)
+      .limit(MEU_DIA_LIMITE);
+  }
+
+  const [atrasadas, vencem7d, emRevisao, semAtividade14d] = await Promise.all([
+    consulta(and(ne(tasks.status, 'concluida'), lt(tasks.prazo, hoje)), 'prazo'),
+    consulta(and(ne(tasks.status, 'concluida'), gte(tasks.prazo, hoje), lte(tasks.prazo, fimJanela)), 'prazo'),
+    consulta(eq(tasks.status, 'em_revisao'), 'updated'),
+    consulta(and(abertas, lt(tasks.updated_at, corteAtividade)), 'updated'),
+  ]);
+
+  const mapear = (rows: typeof atrasadas): MeuDiaItem[] =>
+    rows.map((r) => ({ ...r, status: r.status as TaskStatus }));
+  return {
+    atrasadas: mapear(atrasadas),
+    vencem7d: mapear(vencem7d),
+    emRevisao: mapear(emRevisao),
+    semAtividade14d: mapear(semAtividade14d),
+  };
 }
 
 export async function listTasksEmRevisao(
   access: UserAccess,
-): Promise<Array<TaskSummary & { orgId: string; orgName: string }>> {
+): Promise<Array<TaskSummary & { orgId: string; orgName: string; updatedAt: Date }>> {
   const condicaoStatus = eq(tasks.status, 'em_revisao');
   const escopo =
     access.role === 'admin_truth' ? condicaoStatus : and(condicaoStatus, eq(organizations.analista_id, access.id));
@@ -120,6 +236,7 @@ export async function listTasksEmRevisao(
       report_id: tasks.report_id,
       ordem: tasks.ordem,
       created_at: tasks.created_at,
+      updated_at: tasks.updated_at,
       orgId: organizations.id,
       orgName: organizations.name,
     })
@@ -139,6 +256,7 @@ export async function listTasksEmRevisao(
     reportId: r.report_id,
     ordem: r.ordem,
     createdAt: r.created_at,
+    updatedAt: r.updated_at,
     orgId: r.orgId,
     orgName: r.orgName,
   }));
@@ -173,14 +291,33 @@ async function contarConcluidasDesde(desde: Date): Promise<number> {
   return Number(row?.n ?? 0);
 }
 
-async function tempoMedioConclusaoDias(): Promise<number | null> {
-  const [row] = await db
+export const TEMPO_MEDIO_JANELA_DIAS = 90;
+
+/**
+ * Tempo médio entre a criação da task e a PRIMEIRA transição a concluida,
+ * só para conclusões dos últimos 90 dias (o AVG antigo contava re-conclusões
+ * e a vida inteira do banco — auditoria G3).
+ */
+async function tempoMedioConclusaoDias(agora: Date = new Date()): Promise<number | null> {
+  const corte = new Date(agora.getTime() - TEMPO_MEDIO_JANELA_DIAS * 86_400_000);
+  const primeira = db
     .select({
-      media: sql<string | null>`avg(extract(epoch from (${taskActivities.created_at} - ${tasks.created_at})) / 86400)`,
+      task_id: taskActivities.task_id,
+      concluida_em: sql<Date>`min(${taskActivities.created_at})`.as('concluida_em'),
     })
     .from(taskActivities)
-    .innerJoin(tasks, eq(taskActivities.task_id, tasks.id))
-    .where(and(eq(taskActivities.evento, 'status'), eq(taskActivities.para, 'concluida')));
+    .where(and(eq(taskActivities.evento, 'status'), eq(taskActivities.para, 'concluida')))
+    .groupBy(taskActivities.task_id)
+    .as('primeira_conclusao');
+  const [row] = await db
+    .select({
+      media: sql<string | null>`avg(extract(epoch from (${primeira.concluida_em} - ${tasks.created_at})) / 86400)`,
+    })
+    .from(primeira)
+    .innerJoin(tasks, eq(primeira.task_id, tasks.id))
+    // corte via literal ::timestamptz — a coluna do subselect é um alias de
+    // min() sem mapper de driver, então bindar um Date direto quebra o postgres-js.
+    .where(sql`${primeira.concluida_em} >= ${corte.toISOString()}::timestamptz`);
   return row?.media != null ? Number(row.media) : null;
 }
 
@@ -240,4 +377,60 @@ export async function getConsultoriaMetrics(): Promise<ConsultoriaMetrics> {
   }));
 
   return { concluidas7d, concluidas30d, tempoMedioConclusaoDias: tempoMedio, porAnalista };
+}
+
+// ---------------------------------------------------------------------------
+// Impacto para renovação (G3 Task 11) — 1º vs último relatório done por org.
+// ---------------------------------------------------------------------------
+
+function pontaDoReport(rep: { metricas: unknown; periodoFim: Date } | null): PontaRelatorio | null {
+  if (!rep) return null;
+  const parsed = MetricasSchema.safeParse(rep.metricas);
+  if (!parsed.success) return null;
+  const total = parsed.data.vendasPorCanal.reduce((s, c) => s + c.total, 0);
+  return { total, score: parsed.data.truth_score?.score ?? null, periodoFim: rep.periodoFim };
+}
+
+/**
+ * Impacto 1º vs último done por org da carteira (renovação) + tasks
+ * concluídas no intervalo entre os dois. Escopo por papel (padrão
+ * getCarteira). Carteiras são pequenas (dezenas de orgs), então o loop com
+ * queries por org é aceitável — NÃO reintroduz o N+1 de listas grandes.
+ */
+export async function getImpactoPorOrg(access: UserAccess): Promise<ImpactoOrg[]> {
+  const orgs = await orgsDoEscopo(access);
+
+  return Promise.all(
+    orgs.map(async (org) => {
+      const [primeiroRep, ultimoRep] = await Promise.all([
+        getPrimeiroDoneReport(org.id),
+        getLatestDoneReport(org.id),
+      ]);
+      const doisDones = primeiroRep !== null && ultimoRep !== null && primeiroRep.id !== ultimoRep.id;
+      let tasksConcluidas = 0;
+      if (doisDones) {
+        const [row] = await db
+          .select({ n: sql<number>`count(distinct ${taskActivities.task_id})::int` })
+          .from(taskActivities)
+          .innerJoin(tasks, eq(taskActivities.task_id, tasks.id))
+          .where(
+            and(
+              eq(tasks.org_id, org.id),
+              eq(taskActivities.evento, 'status'),
+              eq(taskActivities.para, 'concluida'),
+              gte(taskActivities.created_at, primeiroRep.createdAt),
+              lte(taskActivities.created_at, ultimoRep.createdAt),
+            ),
+          );
+        tasksConcluidas = Number(row?.n ?? 0);
+      }
+      return impactoRenovacao({
+        orgId: org.id,
+        orgName: org.name,
+        primeiro: doisDones ? pontaDoReport(primeiroRep) : null,
+        ultimo: doisDones ? pontaDoReport(ultimoRep) : null,
+        tasksConcluidas,
+      });
+    }),
+  );
 }

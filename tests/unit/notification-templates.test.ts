@@ -5,12 +5,14 @@ import {
   alertaTemplate,
   blingConnectionFailedTemplate,
   escapeHtml,
+  lembretePrazoTemplate,
   pipelineFailedTemplate,
   reportReadyTemplate,
   taskAprovadaTemplate,
   taskComentarioTemplate,
   taskCriadaTemplate,
   taskDevolvidaTemplate,
+  taskRevisaoTemplate,
 } from '@/modules/notifications/templates';
 
 describe('escapeHtml', () => {
@@ -297,6 +299,31 @@ describe('notification templates (puro)', () => {
     });
   });
 
+  describe('taskRevisaoTemplate', () => {
+    it('retorna subject, html e text não-vazios, em pt-BR com Truth Analytics', () => {
+      const result = taskRevisaoTemplate('Revisar catálogo', 'http://app/analista/o1/tasks/t1');
+      expect(result.subject.length).toBeGreaterThan(0);
+      expect(result.html.length).toBeGreaterThan(0);
+      expect(result.text.length).toBeGreaterThan(0);
+      expect(result.subject).toContain('Truth Analytics');
+    });
+
+    it('text e html contêm o título da tarefa e a url', () => {
+      const result = taskRevisaoTemplate('Revisar catálogo', 'http://app/analista/o1/tasks/t1');
+      expect(result.text).toContain('Revisar catálogo');
+      expect(result.text).toContain('http://app/analista/o1/tasks/t1');
+      expect(result.html).toContain('http://app/analista/o1/tasks/t1');
+    });
+
+    it('escapa HTML injetado no título (evita XSS)', () => {
+      const titulo = '<img src=x onerror=alert(1)>';
+      const result = taskRevisaoTemplate(titulo, 'http://app/analista/o1');
+      expect(result.html).not.toContain('<img');
+      expect(result.html).toContain('&lt;img');
+      expect(result.text).toContain(titulo);
+    });
+  });
+
   describe('alertaTemplate', () => {
     it('retorna subject, html e text não-vazios', () => {
       const result = alertaTemplate('Queda de vendas de 60%', 'Corpo do alerta', 'http://app');
@@ -349,6 +376,55 @@ describe('alertasDigestTemplate', () => {
     );
     expect(tres.subject).toContain('3');
     expect(tres.html).toContain('<li>');
+  });
+});
+
+describe('lembretePrazoTemplate', () => {
+  it('vence_em_breve: assunto de aviso + título escapado + link do plano', () => {
+    const t = lembretePrazoTemplate(
+      { titulo: 'Ajustar <preço> do kit', prazoLabel: 'Vence amanhã', tipo: 'vence_em_breve' },
+      'http://x',
+    );
+    expect(t.subject).toContain('Tarefa perto do prazo');
+    expect(t.html).toContain('&lt;preço&gt;');
+    expect(t.html).toContain('http://x/dashboard/plano-de-acao');
+    expect(t.text).toContain('Vence amanhã');
+  });
+
+  it('atrasada: assunto de atraso', () => {
+    const t = lembretePrazoTemplate({ titulo: 'T', prazoLabel: 'Atrasada há 2d', tipo: 'atrasada' }, 'http://x');
+    expect(t.subject).toContain('Tarefa atrasada');
+  });
+});
+
+describe('digestSemanalTemplate', () => {
+  const DADOS = {
+    orgName: 'Loja <Teste>',
+    resumo: '3 concluídas ✅, 2 atrasadas ⚠️, 4 em andamento',
+    vendasMes: 10880.5,
+    vendasMesAnterior: 9700,
+  };
+
+  it('assunto com resumo, nome escapado, vendas e CTA do plano de ação', async () => {
+    const { digestSemanalTemplate } = await import('@/modules/notifications/templates');
+    const t = digestSemanalTemplate(DADOS, 'http://x');
+    expect(t.subject).toContain('Resumo da semana');
+    expect(t.html).toContain('&lt;Teste&gt;');
+    expect(t.html).not.toContain('<Teste>');
+    expect(t.html).toContain('3 concluídas ✅, 2 atrasadas ⚠️, 4 em andamento');
+    expect(t.text).toContain('R$');
+    expect(t.html).toContain('http://x/dashboard/plano-de-acao');
+  });
+
+  it('mês anterior > 0 → delta percentual com seta; = 0 → só o valor do mês', async () => {
+    const { digestSemanalTemplate } = await import('@/modules/notifications/templates');
+    const alta = digestSemanalTemplate(DADOS, 'http://x');
+    expect(alta.text).toContain('▲ 12,2% vs mês anterior');
+    const queda = digestSemanalTemplate({ ...DADOS, vendasMes: 8730 }, 'http://x');
+    expect(queda.text).toContain('▼ 10% vs mês anterior');
+    const semBase = digestSemanalTemplate({ ...DADOS, vendasMesAnterior: 0 }, 'http://x');
+    expect(semBase.text).toContain('Vendas do mês:');
+    expect(semBase.text).not.toContain('vs mês anterior');
   });
 });
 

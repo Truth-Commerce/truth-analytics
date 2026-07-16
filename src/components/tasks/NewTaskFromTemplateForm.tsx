@@ -6,11 +6,10 @@ import { useFormState, useFormStatus } from 'react-dom';
 import { createTaskAction, type TaskActionState } from '@/actions/tasks.actions';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import type { TaskTemplate } from '@/modules/tasks/task-template.repository';
-import { PRIORIDADE_TASK_LABEL, TASK_PRIORIDADES, TASK_TIPOS } from '@/modules/tasks/task.types';
+import { TASK_TIPOS } from '@/modules/tasks/task.types';
 
 const initial: TaskActionState = {};
 
@@ -27,8 +26,8 @@ function SubmitButton() {
  * Cria uma task a partir de um `TaskTemplate` (Task 11 — analista/admin).
  * `createTaskAction` exige titulo/tipo mesmo com templateId (o servidor os
  * sobrescreve a partir do template quando `ator !== 'cliente'`) — por isso
- * envia valores placeholder ocultos para eles; prioridade e prazo continuam
- * escolhidos aqui pelo analista.
+ * envia valores placeholder ocultos para eles. Prioridade e prazo vêm do
+ * playbook (prioridade + prazo_dias); o servidor os aplica (Task 10 — G3).
  */
 export function NewTaskFromTemplateForm({ orgId, templates }: { orgId: string; templates: TaskTemplate[] }) {
   const [state, action] = useFormState(createTaskAction, initial);
@@ -64,20 +63,6 @@ export function NewTaskFromTemplateForm({ orgId, templates }: { orgId: string; t
             </option>
           ))}
         </Select>
-      </Field>
-
-      <Field label="Prioridade" htmlFor="nova-task-template-prioridade">
-        <Select id="nova-task-template-prioridade" name="prioridade" defaultValue="media">
-          {TASK_PRIORIDADES.map((prioridade) => (
-            <option key={prioridade} value={prioridade}>
-              {PRIORIDADE_TASK_LABEL[prioridade]}
-            </option>
-          ))}
-        </Select>
-      </Field>
-
-      <Field label="Prazo" htmlFor="nova-task-template-prazo">
-        <Input id="nova-task-template-prazo" name="prazo" type="date" />
       </Field>
 
       <div className="flex justify-end sm:col-span-2">

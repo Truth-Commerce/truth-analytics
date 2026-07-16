@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, lt, lte, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { reports } from '@/db/schema';
@@ -150,6 +150,39 @@ export async function getLatestDoneReport(orgId: string): Promise<ReportDetail |
     .orderBy(desc(reports.created_at))
     .limit(1);
   return row ? rowToDetail(row) : null;
+}
+
+/** Done mais ANTIGO da org — a "foto de entrada" do cliente na consultoria. */
+export async function getPrimeiroDoneReport(orgId: string): Promise<ReportDetail | null> {
+  const [row] = await db
+    .select()
+    .from(reports)
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done')))
+    .orderBy(asc(reports.created_at))
+    .limit(1);
+  return row ? rowToDetail(row) : null;
+}
+
+/**
+ * Done mais próximo de `ref`: o mais recente com created_at <= ref; se não
+ * houver (task mais velha que qualquer relatório), o mais antigo depois de
+ * ref. Baseline de impacto p/ tasks sem report_id (decisão da auditoria G3).
+ */
+export async function getDoneMaisProximo(orgId: string, ref: Date): Promise<ReportDetail | null> {
+  const [antes] = await db
+    .select()
+    .from(reports)
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done'), lte(reports.created_at, ref)))
+    .orderBy(desc(reports.created_at))
+    .limit(1);
+  if (antes) return rowToDetail(antes);
+  const [depois] = await db
+    .select()
+    .from(reports)
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done'), gt(reports.created_at, ref)))
+    .orderBy(asc(reports.created_at))
+    .limit(1);
+  return depois ? rowToDetail(depois) : null;
 }
 
 /**

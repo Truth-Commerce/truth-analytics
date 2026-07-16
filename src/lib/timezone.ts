@@ -22,6 +22,22 @@ export function hojeBrt(agora: Date = new Date()): string {
   return fmtBrt.format(agora);
 }
 
+/**
+ * `true` só se `s` for um dia-calendário YYYY-MM-DD REAL. O regex sozinho
+ * (`/^\d{4}-\d{2}-\d{2}$/`) aceita '2026-13-99', que vira erro de `date` no
+ * Postgres → 500. Valida por round-trip em UTC (mês/dia têm de bater após a
+ * normalização — '2026-02-30' vira 02-mar e é rejeitado).
+ */
+export function isDataCalendarioValida(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const ano = Number(m[1]);
+  const mes = Number(m[2]);
+  const dia = Number(m[3]);
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
 /** Dia-calendário de ontem no fuso America/Sao_Paulo. */
 export function ontemBrt(agora: Date = new Date()): string {
   const hoje = hojeBrt(agora);

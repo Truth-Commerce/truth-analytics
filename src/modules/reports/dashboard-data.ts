@@ -6,7 +6,7 @@ import {
   getOrgSettings,
   getTotalVendasMesCorrente,
 } from '@/modules/organizations/organization-settings.repository';
-import { listTaskTitulosByReport } from '@/modules/tasks/task.repository';
+import { listTaskTitulosAbertos } from '@/modules/tasks/task.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 
 import {
@@ -55,7 +55,7 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   const latestDone = donesRecentes[0] ?? null;
   // Dependente do latestDone — fora do Promise.all de propósito.
   const titulosTasksUltimoDone = latestDone?.analiseIa
-    ? await listTaskTitulosByReport(latestDone.id, orgId)
+    ? await listTaskTitulosAbertos(orgId)
     : [];
 
   const primeiro = historico[0] ?? null;

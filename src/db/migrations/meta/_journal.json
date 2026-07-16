@@ -71,6 +71,13 @@
       "when": 1784045211553,
       "tag": "0009_typical_falcon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784162336448,
+      "tag": "0010_cool_jocasta",
+      "breakpoints": true
     }
   ]
 }

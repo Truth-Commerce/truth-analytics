@@ -1,7 +1,9 @@
-import { and, count, desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { taskComments, taskActivities, tasks } from '@/db/schema';
+import { parseChecklist } from './checklist-line';
+import { normalizarTexto } from './report-to-task';
 import type {
   TaskAtor, TaskCriadoPor, TaskDetail, TaskPrioridade, TaskStatus, TaskSummary, TaskTipo,
 } from './task.types';
@@ -34,6 +36,37 @@ async function proximaOrdem(orgId: string, status: TaskStatus): Promise<number> 
 export async function listTasksByOrg(orgId: string): Promise<TaskSummary[]> {
   const rows = await db.select().from(tasks).where(eq(tasks.org_id, orgId)).orderBy(tasks.status, tasks.ordem);
   return rows.map(rowToSummary);
+}
+
+export type TaskCardInfo = TaskSummary & {
+  comentarios: number;
+  checklistFeitos: number;
+  checklistTotal: number;
+  reincidente: boolean;
+};
+
+/** Kanban rico: summary + nº de comentários (agregado em SQL) + checklist (parse da descricao). */
+export async function listTasksKanban(orgId: string): Promise<TaskCardInfo[]> {
+  const rows = await db
+    .select({
+      task: tasks,
+      comentarios: count(taskComments.id),
+    })
+    .from(tasks)
+    .leftJoin(taskComments, eq(taskComments.task_id, tasks.id))
+    .where(eq(tasks.org_id, orgId))
+    .groupBy(tasks.id)
+    .orderBy(tasks.status, tasks.ordem);
+  return rows.map(({ task, comentarios }) => {
+    const itens = parseChecklist(task.descricao);
+    return {
+      ...rowToSummary(task),
+      comentarios: Number(comentarios),
+      checklistFeitos: itens.filter((i) => i.feito).length,
+      checklistTotal: itens.length,
+      reincidente: task.descricao.includes('_Reincidente:'),
+    };
+  });
 }
 
 export async function getTaskById(taskId: string, orgId: string): Promise<TaskDetail | null> {
@@ -179,4 +212,33 @@ export async function listTaskTitulosByReport(reportId: string, orgId: string): 
     .from(tasks)
     .where(and(eq(tasks.report_id, reportId), eq(tasks.org_id, orgId)));
   return rows.map((r) => r.titulo);
+}
+
+export const DEDUP_CONCLUIDAS_LIMITE = 500;
+
+/** Títulos CRUS das tasks ABERTAS da org (dedup cross-report + botões da UI). */
+export async function listTaskTitulosAbertos(orgId: string): Promise<string[]> {
+  const rows = await db
+    .select({ titulo: tasks.titulo })
+    .from(tasks)
+    .where(and(eq(tasks.org_id, orgId), ne(tasks.status, 'concluida')));
+  return rows.map((r) => r.titulo);
+}
+
+/**
+ * Task CONCLUÍDA mais recente cujo título normalizado bate com `titulo`
+ * (reincidência). Varre no máx. DEDUP_CONCLUIDAS_LIMITE concluídas.
+ */
+export async function findTaskConcluidaPorTitulo(
+  orgId: string,
+  titulo: string,
+): Promise<{ id: string; titulo: string; updatedAt: Date } | null> {
+  const alvo = normalizarTexto(titulo);
+  const rows = await db
+    .select({ id: tasks.id, titulo: tasks.titulo, updatedAt: tasks.updated_at })
+    .from(tasks)
+    .where(and(eq(tasks.org_id, orgId), eq(tasks.status, 'concluida')))
+    .orderBy(desc(tasks.updated_at))
+    .limit(DEDUP_CONCLUIDAS_LIMITE);
+  return rows.find((r) => normalizarTexto(r.titulo) === alvo) ?? null;
 }

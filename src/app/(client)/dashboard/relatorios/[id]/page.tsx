@@ -7,7 +7,9 @@ import { getDoneAnterior, getReportById } from '@/modules/reports/report.reposit
 import { heroKpis } from '@/modules/reports/report-view-model';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { friendlyReportError } from '@/modules/reports/report-errors';
-import { listTaskTitulosByReport } from '@/modules/tasks/task.repository';
+import { listTaskTitulosAbertos } from '@/modules/tasks/task.repository';
+import { listTemplates } from '@/modules/tasks/task-template.repository';
+import type { TaskTipo } from '@/modules/tasks/task.types';
 import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -32,8 +34,16 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
       : null;
 
   const titulosExistentes = rel.analiseIa
-    ? await listTaskTitulosByReport(rel.id, access.orgId)
+    ? await listTaskTitulosAbertos(access.orgId)
     : [];
+
+  // Playbook sugerido por tipo no mini-form de conversão achado→task: 1º
+  // template ativo de cada tipo. Só carrega quando o relatório tem achados v2.
+  const templatesAtivos = rel.analiseIa?.achados?.length ? await listTemplates(true) : [];
+  const playbooksPorTipo: Partial<Record<TaskTipo, { id: string; titulo: string }>> = {};
+  for (const t of templatesAtivos) {
+    playbooksPorTipo[t.tipo] ??= { id: t.id, titulo: t.titulo };
+  }
 
   return (
     <main className="mx-auto max-w-6xl p-6 md:p-8">
@@ -188,6 +198,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                         reportId={rel.id}
                         achados={rel.analiseIa.achados}
                         titulosExistentes={titulosExistentes}
+                        playbooksPorTipo={playbooksPorTipo}
                       />
                     ) : (
                     <div className="space-y-4">

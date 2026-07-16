@@ -1,9 +1,9 @@
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { db } from '@/db/client';
 import { taskTemplates } from '@/db/schema';
-import type { TaskTipo } from './task.types';
+import type { TaskPrioridade, TaskTipo } from './task.types';
 
 /**
  * Repositório de templates de task ("playbooks"). Templates são GLOBAIS
@@ -19,6 +19,10 @@ export type TaskTemplate = {
   descricao: string;
   checklist: string[];
   ativo: boolean;
+  /** Prioridade que a task criada deste playbook recebe (Task 10 — G3). */
+  prioridade: TaskPrioridade;
+  /** Prazo em dias após a criação (null = usa o SLA default da prioridade). */
+  prazoDias: number | null;
 };
 
 // checklist é jsonb — nunca confiar no shape vindo do banco (coluna pode ter
@@ -34,6 +38,8 @@ function rowToTemplate(row: typeof taskTemplates.$inferSelect): TaskTemplate {
     descricao: row.descricao,
     checklist: checklistSchema.parse(row.checklist),
     ativo: row.ativo,
+    prioridade: row.prioridade as TaskPrioridade,
+    prazoDias: row.prazo_dias,
   };
 }
 
@@ -49,6 +55,17 @@ export async function listTemplates(soAtivos = false): Promise<TaskTemplate[]> {
   return rows.map(rowToTemplate);
 }
 
+/** 1º template ATIVO do tipo (created_at asc) — playbook sugerido da conversão achado→task. */
+export async function getTemplateAtivoPorTipo(tipo: TaskTipo): Promise<TaskTemplate | null> {
+  const [row] = await db
+    .select()
+    .from(taskTemplates)
+    .where(and(eq(taskTemplates.tipo, tipo), eq(taskTemplates.ativo, true)))
+    .orderBy(asc(taskTemplates.created_at))
+    .limit(1);
+  return row ? rowToTemplate(row) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Lado-ESCRITA (Task 12) — administrado só pela UI admin de playbooks.
 // ---------------------------------------------------------------------------
@@ -58,6 +75,8 @@ export async function createTemplate(input: {
   tipo: TaskTipo;
   descricao?: string;
   checklist: string[];
+  prioridade?: TaskPrioridade;
+  prazoDias?: number | null;
 }): Promise<string> {
   const [row] = await db
     .insert(taskTemplates)
@@ -66,6 +85,8 @@ export async function createTemplate(input: {
       tipo: input.tipo,
       descricao: input.descricao ?? '',
       checklist: input.checklist,
+      prioridade: input.prioridade ?? 'media',
+      prazo_dias: input.prazoDias ?? null,
     })
     .returning({ id: taskTemplates.id });
   return row!.id;
@@ -73,13 +94,22 @@ export async function createTemplate(input: {
 
 export async function updateTemplate(
   id: string,
-  patch: Partial<{ titulo: string; tipo: TaskTipo; descricao: string; checklist: string[] }>,
+  patch: Partial<{
+    titulo: string;
+    tipo: TaskTipo;
+    descricao: string;
+    checklist: string[];
+    prioridade: TaskPrioridade;
+    prazoDias: number | null;
+  }>,
 ): Promise<void> {
   const set: Partial<typeof taskTemplates.$inferInsert> = {};
   if (patch.titulo !== undefined) set.titulo = patch.titulo;
   if (patch.tipo !== undefined) set.tipo = patch.tipo;
   if (patch.descricao !== undefined) set.descricao = patch.descricao;
   if (patch.checklist !== undefined) set.checklist = patch.checklist;
+  if (patch.prioridade !== undefined) set.prioridade = patch.prioridade;
+  if (patch.prazoDias !== undefined) set.prazo_dias = patch.prazoDias;
   if (Object.keys(set).length === 0) return;
   await db.update(taskTemplates).set(set).where(eq(taskTemplates.id, id));
 }

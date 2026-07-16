@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { taskActivities, tasks } from '@/db/schema';
+import { taskActivities, tasks, users } from '@/db/schema';
 
 export async function recordTaskActivity(input: {
   taskId: string;
@@ -27,10 +27,13 @@ export async function listTaskActivities(taskId: string, orgId: string) {
       de: taskActivities.de,
       para: taskActivities.para,
       userId: taskActivities.user_id,
+      userEmail: users.email,
       createdAt: taskActivities.created_at,
     })
     .from(taskActivities)
     .innerJoin(tasks, eq(taskActivities.task_id, tasks.id))
+    // LEFT JOIN: user_id é nullable (eventos de sistema/cron não têm autor).
+    .leftJoin(users, eq(taskActivities.user_id, users.id))
     .where(eq(taskActivities.task_id, taskId))
     .orderBy(desc(taskActivities.created_at))
     .limit(50);

@@ -258,6 +258,31 @@ export function taskAprovadaTemplate(titulo: string, url: string): EmailContent 
 }
 
 /**
+ * Template: task aguardando ação da consultoria (revisão pelo cliente, nova
+ * task criada pelo cliente ou conversão de achados). Genérico de propósito —
+ * serve tanto ao analista da org quanto ao e-mail de fallback do admin.
+ */
+export function taskRevisaoTemplate(titulo: string, url: string): EmailContent {
+  const subject = 'Tarefa aguardando sua atenção — Truth Analytics';
+  const text = [
+    'Uma tarefa precisa da atenção da consultoria.',
+    '',
+    `Tarefa: ${titulo}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Uma tarefa precisa da atenção da consultoria.</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(titulo)}</p>
+<p><a href="${escapeHtml(url)}">Clique aqui para visualizar a tarefa</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
  * Template: alerta de inteligência (queda de vendas, concorrente abaixo do
  * preço, produto parado). Enviado ao cliente quando o cron detecta um novo
  * alerta. `titulo`/`corpo` vêm dos detectores (texto já pt-BR).
@@ -311,6 +336,86 @@ export function alertasDigestTemplate(
 ${alertas.map((a) => `<li><strong>${escapeHtml(a.titulo)}</strong><br>${escapeHtml(a.corpo)}</li>`).join('\n')}
 </ul>
 <p><a href="${escapeHtml(url)}">Acesse seu painel</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Template: lembrete de prazo de tarefa (vence em breve / atrasada).
+ * `titulo` vem do usuário → escapado.
+ */
+export function lembretePrazoTemplate(
+  input: { titulo: string; prazoLabel: string; tipo: 'vence_em_breve' | 'atrasada' },
+  appUrl: string,
+): EmailContent {
+  const url = `${appUrl}/dashboard/plano-de-acao`;
+  const subject =
+    input.tipo === 'atrasada'
+      ? 'Tarefa atrasada no seu Plano de Ação — Truth Analytics'
+      : 'Tarefa perto do prazo — Truth Analytics';
+  const text = [
+    input.tipo === 'atrasada'
+      ? 'Uma tarefa do seu Plano de Ação está atrasada.'
+      : 'Uma tarefa do seu Plano de Ação está perto do prazo.',
+    '',
+    `Tarefa: ${input.titulo}`,
+    `Prazo: ${input.prazoLabel}`,
+    '',
+    `Acesse em: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>${input.tipo === 'atrasada' ? 'Uma tarefa do seu Plano de Ação está <strong>atrasada</strong>.' : 'Uma tarefa do seu Plano de Ação está <strong>perto do prazo</strong>.'}</p>
+<p><strong>Tarefa:</strong> ${escapeHtml(input.titulo)}<br><strong>Prazo:</strong> ${escapeHtml(input.prazoLabel)}</p>
+<p><a href="${escapeHtml(url)}">Abrir o Plano de Ação</a></p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+  return { subject, html, text };
+}
+
+/**
+ * Dados do e-mail de digest semanal — o `resumo` chega PRONTO (montado por
+ * linhaResumo no módulo de digest). Este arquivo NÃO importa digest-semanal
+ * para evitar o ciclo digest → email → templates → digest.
+ */
+export type DigestEmailData = {
+  orgName: string;
+  resumo: string;
+  vendasMes: number;
+  vendasMesAnterior: number;
+};
+
+/**
+ * Template: digest semanal do Plano de Ação + vendas do mês, com CTA para o
+ * plano de ação. `orgName`/`resumo` são escapados no HTML.
+ */
+export function digestSemanalTemplate(dados: DigestEmailData, appUrl: string): EmailContent {
+  const url = `${appUrl}/dashboard/plano-de-acao`;
+  const deltaPct =
+    dados.vendasMesAnterior > 0
+      ? Math.round(((dados.vendasMes - dados.vendasMesAnterior) / dados.vendasMesAnterior) * 1000) / 10
+      : null;
+  const linhaVendas =
+    deltaPct === null
+      ? `Vendas do mês: ${formatBRL(dados.vendasMes)}`
+      : `Vendas do mês: ${formatBRL(dados.vendasMes)} (${deltaPct >= 0 ? '▲' : '▼'} ${Math.abs(deltaPct).toLocaleString('pt-BR')}% vs mês anterior)`;
+  const subject = `Resumo da semana — ${dados.resumo} — Truth Analytics`;
+  const text = [
+    `Como foi a semana do Plano de Ação da ${dados.orgName}:`,
+    '',
+    dados.resumo,
+    linhaVendas,
+    '',
+    `Veja e priorize as próximas tarefas: ${url}`,
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>Como foi a semana do Plano de Ação da <strong>${escapeHtml(dados.orgName)}</strong>:</p>
+<p><strong>${escapeHtml(dados.resumo)}</strong></p>
+<p>${escapeHtml(linhaVendas)}</p>
+<p><a href="${escapeHtml(url)}">Veja e priorize as próximas tarefas</a></p>
 <p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
 
   return { subject, html, text };

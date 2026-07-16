@@ -1,3 +1,4 @@
+import { hojeBrt } from '@/lib/timezone';
 import type { UserRole } from '@/modules/auth/user.types';
 
 export const TASK_STATUSES = ['backlog', 'todo', 'em_andamento', 'em_revisao', 'concluida'] as const;
@@ -68,6 +69,7 @@ export function atorFromRole(role: UserRole): TaskAtor {
 
 export function isTaskAtrasada(task: Pick<TaskSummary, 'prazo' | 'status'>, hoje: Date = new Date()): boolean {
   if (!task.prazo || task.status === 'concluida') return false;
-  const hojeStr = hoje.toISOString().slice(0, 10);
-  return task.prazo < hojeStr;
+  // Dia-calendário em America/Sao_Paulo (o antigo toISOString().slice(0,10)
+  // era UTC: entre 21h e 0h BRT a task "atrasava" 3h antes da meia-noite).
+  return task.prazo < hojeBrt(hoje);
 }
