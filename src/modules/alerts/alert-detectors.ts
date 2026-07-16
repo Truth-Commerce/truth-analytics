@@ -1,3 +1,4 @@
+import { formatBRL, formatData } from '@/lib/format';
 import type { Metricas } from '@/modules/pipeline/contracts';
 import {
   CONCORRENTE_CRITICO_PCT,
@@ -22,7 +23,7 @@ export type AlertaCandidato = {
 };
 
 function brl(n: number): string {
-  return `R$ ${n.toFixed(2).replace('.', ',')}`;
+  return formatBRL(n);
 }
 
 /** (a) Queda de vendas: total 7d vs média das 4 semanas anteriores. Pura. */
@@ -97,7 +98,7 @@ export function detectarProdutoParado(
       tipo: 'produto_parado',
       severidade: 'atencao',
       titulo: `${p.nome} está há ${dias} dias sem vender`,
-      corpo: `O produto monitorado ${p.nome} (${p.sku}) não registra vendas desde ${ultima.toISOString().slice(0, 10)} (${dias} dias).`,
+      corpo: `O produto monitorado ${p.nome} (${p.sku}) não registra vendas desde ${formatData(ultima)} (${dias} dias).`,
       dados: { sku: p.sku, diasSemVenda: dias, ultimaVenda: ultima.toISOString() },
       chaveDedup: `produto_parado:${p.sku}`,
     });

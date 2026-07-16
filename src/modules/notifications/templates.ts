@@ -128,9 +128,9 @@ export function pipelineFailedTemplate(
     'Equipe Truth Analytics',
   ].join('\n');
   const html = `<p>Falha ao gerar o relatório.</p>
-<p><strong>Org ID:</strong> ${orgId}</p>
-<p><strong>Relatório ID:</strong> ${reportId}</p>
-<p><strong>Erro:</strong> ${erro}</p>
+<p><strong>Org ID:</strong> ${escapeHtml(orgId)}</p>
+<p><strong>Relatório ID:</strong> ${escapeHtml(reportId)}</p>
+<p><strong>Erro:</strong> ${escapeHtml(erro)}</p>
 <p>Verifique o painel administrativo para mais detalhes.</p>`;
 
   return { subject, html, text };

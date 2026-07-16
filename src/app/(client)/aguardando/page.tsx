@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+
 import { requireSession } from '@/modules/auth/require-session';
 import { signOutAction } from '@/actions/auth.actions';
 import { Logo } from '@/components/ui/Logo';
@@ -15,35 +17,46 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Conta em análise' };
 
 export default async function AguardandoPage() {
-  await requireSession();
+  const access = await requireSession();
+  if (access.role === 'admin_truth') redirect('/admin');
+  if (access.role === 'analista') redirect('/analista');
+  if (access.orgStatus === 'active') redirect('/dashboard');
+  const suspensa = access.orgStatus === 'suspended';
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-bg-base p-8">
       <Logo withMark size="lg" />
       <div className="max-w-md space-y-2 text-center">
-        <h1 className="font-heading text-xl font-semibold text-white">Conta aguardando ativação</h1>
+        <h1 className="font-heading text-xl font-semibold text-white">
+          {suspensa ? 'Conta suspensa' : 'Conta aguardando ativação'}
+        </h1>
         <p className="text-sm text-muted">
-          Sua conta foi criada e será ativada pela equipe Truth em breve.
+          {suspensa
+            ? 'Sua conta está suspensa no momento. Fale com o suporte para entender o motivo e reativar o acesso.'
+            : 'Sua conta foi criada e será ativada pela equipe Truth em breve.'}
         </p>
       </div>
 
-      <Card className="w-full max-w-md">
-        <CardContent>
-          <h2 className="mb-4 font-heading text-sm font-semibold text-white">O que acontece agora</h2>
-          <ol className="flex flex-col gap-4">
-            {passos.map((p, i) => (
-              <li key={p.titulo} className="flex gap-3">
-                <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-brand/30 bg-brand-glow font-mono text-[10px] text-brand">
-                  {i + 1}
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-white">{p.titulo}</p>
-                  <p className="text-sm text-muted">{p.texto}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </CardContent>
-      </Card>
+      {!suspensa ? (
+        <Card className="w-full max-w-md">
+          <CardContent>
+            <h2 className="mb-4 font-heading text-sm font-semibold text-white">O que acontece agora</h2>
+            <ol className="flex flex-col gap-4">
+              {passos.map((p, i) => (
+                <li key={p.titulo} className="flex gap-3">
+                  <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-brand/30 bg-brand-glow font-mono text-[10px] text-brand">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-white">{p.titulo}</p>
+                    <p className="text-sm text-muted">{p.texto}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Button as="a" href="mailto:suporte@truthcommerce.com.br" variant="secondary" size="sm">

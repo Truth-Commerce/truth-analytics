@@ -252,11 +252,21 @@ export async function requeueFailedReport(input: {
   reportId: string;
   actorUserId: string;
 }): Promise<{ orgId: string } | null> {
-  const updated = await db
-    .update(reports)
-    .set({ status: 'queued', etapa: null, erro: null })
-    .where(and(eq(reports.id, input.reportId), eq(reports.status, 'failed')))
-    .returning({ org_id: reports.org_id });
+  let updated: { org_id: string }[];
+  try {
+    updated = await db
+      .update(reports)
+      .set({ status: 'queued', etapa: null, erro: null })
+      .where(and(eq(reports.id, input.reportId), eq(reports.status, 'failed')))
+      .returning({ org_id: reports.org_id });
+  } catch (e) {
+    // 23505 = unique_violation no índice parcial reports_org_ativo_uq:
+    // já existe um report queued/running nesta org.
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+      throw new Error('relatorio_em_andamento');
+    }
+    throw e;
+  }
   if (updated.length === 0) return null;
   await recordAudit({
     orgId: updated[0].org_id,

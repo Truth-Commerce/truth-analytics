@@ -109,7 +109,15 @@ export async function adminReprocessReportAction(
   const reportId = String(formData.get('reportId') ?? '');
   if (!reportId) return { error: 'Relatório inválido.' };
 
-  const res = await requeueFailedReport({ reportId, actorUserId: admin.id });
+  let res: { orgId: string } | null;
+  try {
+    res = await requeueFailedReport({ reportId, actorUserId: admin.id });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'relatorio_em_andamento') {
+      return { error: 'Já existe um relatório em andamento para este cliente. Aguarde ele terminar.' };
+    }
+    throw e;
+  }
   if (!res) return { error: 'Só relatórios com falha podem ser reprocessados.' };
 
   try {
