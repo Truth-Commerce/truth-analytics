@@ -27,6 +27,7 @@ export const reports = pgTable(
     analise_ia: jsonb('analise_ia'),
     /** Usage da chamada Claude { input_tokens, output_tokens, cache_*, tentativas } — governança de custo. */
     ia_usage: jsonb('ia_usage'),
+    kits_ia_usage: jsonb('kits_ia_usage'),
     erro: text('erro'),
     created_at: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .defaultNow()
