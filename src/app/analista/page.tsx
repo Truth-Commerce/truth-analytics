@@ -7,9 +7,12 @@ import { RevisaoQueue } from '@/components/tasks/RevisaoQueue';
 import { PageHeader } from '@/components/page-header';
 import { Reveal } from '@/components/reveal';
 import { getCarteira, getImpactoPorOrg, getMeuDia, listTasksEmRevisao } from '@/modules/analista/analista.repository';
+import { carteiraResumo, kpisDaCarteira } from '@/modules/analista/carteira-data.repository';
 import { requireAnalista } from '@/modules/auth/require-analista';
 import { STATUS_TASK_LABEL, TASK_STATUSES } from '@/modules/tasks/task.types';
 
+import { FilaAtencaoHoje } from './fila-atencao';
+import { KpisCarteiraHero } from './kpis-carteira';
 import { MeuDiaFaixa } from './meu-dia';
 
 import type { Metadata } from 'next';
@@ -18,18 +21,33 @@ export const metadata: Metadata = { title: 'Carteira' };
 
 export default async function AnalistaPage() {
   const access = await requireAnalista();
+  const agora = new Date();
 
-  const [carteira, fila, meuDia, impacto] = await Promise.all([
+  // Escopo de TODOS os insumos abaixo vem do papel (analista: carteira
+  // própria; admin: todas as orgs cliente) via `getCarteira`/`carteiraResumo`
+  // — nunca de `access.orgId` (que só existe p/ acesso de cliente).
+  const [carteira, fila, meuDia, impacto, resumos] = await Promise.all([
     getCarteira(access),
     listTasksEmRevisao(access),
     getMeuDia(access),
     getImpactoPorOrg(access),
+    carteiraResumo(access, agora),
   ]);
   const impactoMap = new Map(impacto.map((i) => [i.orgId, i]));
+  const kpis = kpisDaCarteira(resumos);
 
   return (
     <main className="mx-auto max-w-6xl space-y-8 p-6 md:p-8">
       <PageHeader eyebrow="Consultoria Truth" title="Carteira de clientes" />
+
+      <Reveal>
+        <KpisCarteiraHero kpis={kpis} />
+      </Reveal>
+
+      <Reveal className="space-y-3">
+        <h2 className="font-heading text-lg font-semibold text-white">Atenção hoje</h2>
+        <FilaAtencaoHoje resumos={resumos} />
+      </Reveal>
 
       <MeuDiaFaixa meuDia={meuDia} />
 
