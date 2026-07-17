@@ -21,6 +21,12 @@ export type RawOrder = {
   itens: RawOrderItem[];
 };
 
+export type RawStockItem = {
+  sku?: string;
+  nome: string;
+  saldo: number;
+};
+
 export type Periodo = {
   inicio: Date;
   fim: Date;
@@ -36,4 +42,5 @@ export interface ConnectionProvider {
     periodo: Periodo,
     onPage?: (pagina: RawOrder[]) => Promise<void>,
   ): Promise<RawOrder[]>;
+  fetchStock(orgId: string): Promise<RawStockItem[]>;
 }
