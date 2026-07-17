@@ -233,13 +233,12 @@ export async function updateOrgNichoAction(
   const orgId = String(formData.get('orgId') ?? '');
   if (!orgId) return { error: 'Cliente inválido.' };
   const nicho = String(formData.get('nicho') ?? '');
-  await updateOrgNicho(orgId, nicho);
-  const trimmed = nicho.trim();
+  const nichoGravado = await updateOrgNicho(orgId, nicho);
   await recordAudit({
     orgId,
     userId: admin.id,
     acao: 'org.nicho_alterado',
-    detalhes: { nicho: trimmed === '' ? null : trimmed.slice(0, 60) },
+    detalhes: { nicho: nichoGravado },
   });
   revalidatePath(`/admin/${orgId}`);
   return { ok: true };

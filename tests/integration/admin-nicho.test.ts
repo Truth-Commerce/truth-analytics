@@ -38,28 +38,33 @@ describe.skipIf(!url)('admin.repository — updateOrgNicho (integração)', () =
   });
 
   it('grava o nicho com trim', async () => {
-    await updateOrgNicho(orgId, '  Moda feminina  ');
+    const retorno = await updateOrgNicho(orgId, '  Moda feminina  ');
+    expect(retorno).toBe('Moda feminina');
     const org = await getOrganizationById(orgId);
     expect(org?.nicho).toBe('Moda feminina');
   });
 
   it('string vazia (ou só espaços) vira null', async () => {
     await updateOrgNicho(orgId, 'Moda feminina');
-    await updateOrgNicho(orgId, '   ');
+    const retorno = await updateOrgNicho(orgId, '   ');
+    expect(retorno).toBeNull();
     const org = await getOrganizationById(orgId);
     expect(org?.nicho).toBeNull();
   });
 
   it('null explícito grava null', async () => {
     await updateOrgNicho(orgId, 'Moda feminina');
-    await updateOrgNicho(orgId, null);
+    const retorno = await updateOrgNicho(orgId, null);
+    expect(retorno).toBeNull();
     const org = await getOrganizationById(orgId);
     expect(org?.nicho).toBeNull();
   });
 
   it('trunca para 60 caracteres após o trim', async () => {
     const longo = '  ' + 'a'.repeat(70) + '  ';
-    await updateOrgNicho(orgId, longo);
+    const retorno = await updateOrgNicho(orgId, longo);
+    expect(retorno).toBe('a'.repeat(60));
+    expect(retorno?.length).toBeLessThanOrEqual(60);
     const org = await getOrganizationById(orgId);
     expect(org?.nicho).toBe('a'.repeat(60));
     expect(org?.nicho?.length).toBe(60);

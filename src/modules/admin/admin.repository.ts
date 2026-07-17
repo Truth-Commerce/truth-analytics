@@ -283,11 +283,15 @@ export async function requeueFailedReport(input: {
  * valor gravado seja sempre consistente, venha da action ou de outro
  * chamador. Não restringe org interna (mesmo padrão de setMetaMensal): é um
  * atributo descritivo, não uma mudança de status.
+ *
+ * Retorna o valor normalizado (fonte única de verdade) para que chamadores
+ * — como o audit log — nunca recomputem a regra e divirjam do valor gravado.
  */
-export async function updateOrgNicho(orgId: string, nicho: string | null): Promise<void> {
+export async function updateOrgNicho(orgId: string, nicho: string | null): Promise<string | null> {
   const trimmed = nicho?.trim() ?? '';
   const value = trimmed === '' ? null : trimmed.slice(0, 60);
   await db.update(organizations).set({ nicho: value }).where(eq(organizations.id, orgId));
+  return value;
 }
 
 export async function setPlano(input: {
