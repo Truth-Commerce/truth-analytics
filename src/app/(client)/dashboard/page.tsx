@@ -33,6 +33,7 @@ import { BentoCards } from './bento-cards';
 import { OnboardingChecklist } from './onboarding-checklist';
 import { TruthScoreCard } from './truth-score-card';
 import { AlertasSection } from './alertas-section';
+import { EstoqueResumo } from './estoque-resumo';
 import { MetaProgress } from './meta-progress';
 import { AcaoPrincipalCard } from './acao-principal';
 
@@ -111,6 +112,7 @@ export default async function DashboardPage() {
 
       {/* 2. Alertas abertos — a decisão mais urgente primeiro (some sem alertas) */}
       <AlertasSection alertas={alertas} />
+      <EstoqueResumo orgId={access.orgId} />
 
       {/* 3. Como está minha loja: Truth Score + Ação nº 1 da IA */}
       {latestDone?.metricas?.truth_score || acao ? (
