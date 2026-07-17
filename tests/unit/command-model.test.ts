@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { buildCommands } from '@/components/command-model';
 
 describe('buildCommands', () => {
-  it('client: navegação completa (Estoque e Plano de Ação inclusos) + ações (comparar incluso)', () => {
+  it('client: navegação completa (Estoque, Kits e Plano de Ação inclusos) + ações (comparar incluso)', () => {
     const cmds = buildCommands('client');
     expect(cmds.map((c) => c.id)).toEqual([
       'nav-dashboard',
       'nav-conexoes',
       'nav-estoque',
+      'nav-kits',
       'nav-configuracoes',
       'nav-plano-de-acao',
       'acao-gerar-relatorio',
@@ -18,6 +19,11 @@ describe('buildCommands', () => {
     expect(cmds.find((c) => c.id === 'nav-estoque')).toMatchObject({
       label: 'Ir para o Estoque',
       href: '/dashboard/estoque',
+      group: 'Navegação',
+    });
+    expect(cmds.find((c) => c.id === 'nav-kits')).toMatchObject({
+      label: 'Ir para Kits sugeridos',
+      href: '/dashboard/kits',
       group: 'Navegação',
     });
     expect(cmds.find((c) => c.id === 'nav-configuracoes')).toMatchObject({
