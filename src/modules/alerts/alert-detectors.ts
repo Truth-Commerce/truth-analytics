@@ -4,6 +4,7 @@ import type { Metricas } from '@/modules/pipeline/contracts';
 import {
   CONCORRENTE_CRITICO_PCT,
   CONCORRENTE_MARGEM_MINIMA,
+  ESTOQUE_MAX_ALERTAS,
   PRODUTO_PARADO_DIAS,
   QUEDA_BASE_MINIMA_SEMANAL,
   QUEDA_VENDAS_CRITICO,
@@ -111,20 +112,27 @@ export function detectarProdutoParado(
 export function detectarEstoqueCritico(produtos: CoberturaProduto[]): AlertaCandidato[] {
   return produtos
     .filter((p) => p.estado === 'critico')
+    // Teto de rajada (ex.: primeira sincronização de um catálogo grande) — a
+    // entrada já vem ordenada por prioridade/vendas via montarCobertura.
+    .slice(0, ESTOQUE_MAX_ALERTAS)
     .map((p) => {
-      const esgotado = (p.coberturaDias ?? 0) <= 0;
+      const coberturaDias = p.coberturaDias ?? 0;
+      const titulo =
+        p.saldo <= 0
+          ? `Estoque de ${p.nome} esgotado — e o produto segue vendendo`
+          : coberturaDias <= 0
+            ? `Estoque de ${p.nome} acaba em menos de 1 dia`
+            : `Estoque de ${p.nome} acaba em ~${coberturaDias} dia(s)`;
       return {
         tipo: 'estoque_critico' as const,
         severidade: 'critico' as const,
-        titulo: esgotado
-          ? `Estoque de ${p.nome} esgotado — e o produto segue vendendo`
-          : `Estoque de ${p.nome} acaba em ~${p.coberturaDias} dia(s)`,
-        corpo: `${p.nome} (${p.sku}) tem ${p.saldo} un. em estoque e vendeu ${p.vendas30d} un. nos últimos 30 dias — no ritmo atual a cobertura é de ${p.coberturaDias ?? 0} dia(s). Reponha para não perder vendas.`,
+        titulo: titulo.slice(0, 255),
+        corpo: `${p.nome} (${p.sku}) tem ${p.saldo} un. em estoque e vendeu ${p.vendas30d} un. nos últimos 30 dias — no ritmo atual a cobertura é de ${coberturaDias} dia(s). Reponha para não perder vendas.`,
         dados: {
           sku: p.sku,
           saldo: p.saldo,
           vendas30d: p.vendas30d,
-          coberturaDias: p.coberturaDias ?? 0,
+          coberturaDias,
         },
         chaveDedup: `estoque_critico:${p.sku}`,
       };

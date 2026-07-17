@@ -134,6 +134,25 @@ describe('detectarEstoqueCritico', () => {
     expect(r!.titulo).toContain('esgotado');
   });
 
+  it('saldo > 0 mas cobertura 0 tem título de "menos de 1 dia" (não contradiz "esgotado")', () => {
+    const [r] = detectarEstoqueCritico([{ ...base, saldo: 1, coberturaDias: 0 }]);
+    expect(r!.titulo).not.toContain('esgotado');
+    expect(r!.titulo).toContain('menos de 1 dia');
+  });
+
+  it('limita a ESTOQUE_MAX_ALERTAS (10) mesmo com mais produtos críticos', () => {
+    const produtos = Array.from({ length: 12 }, (_, i) => ({ ...base, sku: `SKU-${i}` }));
+    const r = detectarEstoqueCritico(produtos);
+    expect(r).toHaveLength(10);
+  });
+
+  it('título nunca estoura varchar(255) mesmo com nome muito longo', () => {
+    const nomeLongo = 'Produto '.repeat(40).trim(); // > 300 chars
+    expect(nomeLongo.length).toBeGreaterThan(255);
+    const [r] = detectarEstoqueCritico([{ ...base, nome: nomeLongo }]);
+    expect(r!.titulo.length).toBeLessThanOrEqual(255);
+  });
+
   it('ignora estados nao-criticos', () => {
     expect(
       detectarEstoqueCritico([
