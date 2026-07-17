@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { createLogger } from '@/lib/logger';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
+import { gerarKitsDoCiclo } from '@/modules/kits/gerar-kits';
 import { sendPipelineFailedEmail } from '@/modules/notifications/email';
 import { getAdminAlertEmail, getOrgPrimaryEmail } from '@/modules/notifications/recipients';
 import { collectBlingOrders } from '@/modules/pipeline/steps/collect-bling';
@@ -102,6 +103,21 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
       // lookup falhou — e-mail pulado, pipeline continua
     }
     await finalize({ reportId, orgId, metricas, analise, plano, periodo, clientEmail, iaUsage });
+
+    // H2: kits do ciclo — best-effort, NUNCA afeta o resultado do pipeline.
+    try {
+      await gerarKitsDoCiclo({
+        orgId,
+        reportId,
+        orgName,
+        nicho,
+        ticketMedio: metricas.ticketMedio,
+      });
+    } catch (err) {
+      log.warn('kits.geracao_falhou', {
+        erro: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     log.info('pipeline concluído');
     return { reportId, status: 'done' };
