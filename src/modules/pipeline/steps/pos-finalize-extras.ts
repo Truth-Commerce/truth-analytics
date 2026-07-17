@@ -1,8 +1,9 @@
 import { logger } from '@/lib/logger';
+import { gerarCalendarioDoCiclo } from '@/modules/calendario/gerar-calendario';
 import { gerarKitsDoCiclo } from '@/modules/kits/gerar-kits';
 import { gravarNichoSeVazio, inferirNichoComIA } from '@/modules/pipeline/steps/nicho-ia';
 
-/** Contexto repassado ao passo de calendário (T4 pluga a implementação real). */
+/** Contexto repassado ao passo de calendário. */
 export type PosFinalizeExtrasCtx = {
   orgId: string;
   reportId: string;
@@ -14,8 +15,8 @@ export type PosFinalizeExtrasCtx = {
 
 export type PosFinalizeExtrasInput = PosFinalizeExtrasCtx & {
   /**
-   * Ponto de extensão tipado para o passo 3 (calendário) — ausente = passo
-   * pulado silenciosamente. A T4 pluga a implementação real como default.
+   * Seam de teste para o passo 3 (calendário) — sem valor injetado, usa
+   * `gerarCalendarioDoCiclo` (implementação real) como default.
    */
   gerarCalendario?: (ctx: PosFinalizeExtrasCtx) => Promise<unknown>;
 };
@@ -77,24 +78,24 @@ export async function executarExtrasPosFinalize(input: PosFinalizeExtrasInput): 
     }
 
     // Passo 3: calendário (H3) — ponto de extensão tipado; sem função
-    // injetada, o passo é pulado silenciosamente (dormente até a T4).
-    if (input.gerarCalendario) {
-      try {
-        await input.gerarCalendario({
-          orgId: input.orgId,
-          reportId: input.reportId,
-          orgName: input.orgName,
-          nicho,
-          ticketMedio: input.ticketMedio,
-          topProdutos: input.topProdutos,
-        });
-      } catch (err) {
-        logger.warn('extras.calendario_falhou', {
-          orgId: input.orgId,
-          reportId: input.reportId,
-          erro: err instanceof Error ? err.message : String(err),
-        });
-      }
+    // injetada, usa a implementação real (`gerarCalendario` fica só como
+    // seam de teste).
+    const gerarCalendario = input.gerarCalendario ?? gerarCalendarioDoCiclo;
+    try {
+      await gerarCalendario({
+        orgId: input.orgId,
+        reportId: input.reportId,
+        orgName: input.orgName,
+        nicho,
+        ticketMedio: input.ticketMedio,
+        topProdutos: input.topProdutos,
+      });
+    } catch (err) {
+      logger.warn('extras.calendario_falhou', {
+        orgId: input.orgId,
+        reportId: input.reportId,
+        erro: err instanceof Error ? err.message : String(err),
+      });
     }
   } catch (err) {
     // Defesa em profundidade: nenhum código entre os passos deve escapar

@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/modules/calendario/gerar-calendario', () => ({ gerarCalendarioDoCiclo: vi.fn() }));
 vi.mock('@/modules/kits/gerar-kits', () => ({ gerarKitsDoCiclo: vi.fn() }));
 vi.mock('@/modules/pipeline/steps/nicho-ia', () => ({
   inferirNichoComIA: vi.fn(),
   gravarNichoSeVazio: vi.fn(),
 }));
 
+import { gerarCalendarioDoCiclo } from '@/modules/calendario/gerar-calendario';
 import { gerarKitsDoCiclo } from '@/modules/kits/gerar-kits';
 import { gravarNichoSeVazio, inferirNichoComIA } from '@/modules/pipeline/steps/nicho-ia';
 import { executarExtrasPosFinalize } from '@/modules/pipeline/steps/pos-finalize-extras';
@@ -57,5 +59,15 @@ describe('executarExtrasPosFinalize', () => {
       executarExtrasPosFinalize({ ...BASE, gerarCalendario }),
     ).resolves.toBeUndefined();
     expect(gerarCalendario).toHaveBeenCalled();
+    expect(gerarCalendarioDoCiclo).not.toHaveBeenCalled();
+  });
+
+  it('sem gerarCalendario injetado usa gerarCalendarioDoCiclo como default', async () => {
+    vi.mocked(gerarKitsDoCiclo).mockResolvedValue(null);
+    vi.mocked(gerarCalendarioDoCiclo).mockResolvedValue({ sugestoes: 3 });
+    await executarExtrasPosFinalize(BASE);
+    expect(gerarCalendarioDoCiclo).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'o1', reportId: 'r1', orgName: 'Loja', nicho: 'cozinha' }),
+    );
   });
 });
