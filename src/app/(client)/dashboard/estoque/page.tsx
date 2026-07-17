@@ -34,10 +34,15 @@ export default async function EstoquePage() {
         description="Saldo do Bling cruzado com o ritmo de venda dos últimos 30 dias — veja o que acaba primeiro."
       />
 
-      {produtos.length === 0 ? (
+      {stockRows.length === 0 ? (
         <EmptyState
           title="Sem dados de estoque ainda"
           description="O estoque sincroniza automaticamente todo dia às 4h30 (horário de Brasília), logo após o sync de pedidos. Confira se o Bling está conectado em Conexões."
+        />
+      ) : produtos.length === 0 ? (
+        <EmptyState
+          title="Nenhum produto com giro ou saldo"
+          description="O estoque sincronizou, mas todos os produtos estão com saldo zerado e sem vendas nos últimos 30 dias."
         />
       ) : (
         <Card data-testid="estoque-card">
