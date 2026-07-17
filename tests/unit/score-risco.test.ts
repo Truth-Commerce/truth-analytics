@@ -61,6 +61,19 @@ describe('calcularRisco', () => {
     expect(r.score).toBe(0);
   });
 
+  it('conexao nenhuma + tokenExpiraEmHoras<72h não pontua (gate só vale p/ conexao ok)', () => {
+    const r = calcularRisco({ ...SAUDAVEL, conexao: 'nenhuma', tokenExpiraEmHoras: 10 });
+    expect(r.score).toBe(0);
+    expect(r.nivel).toBe('ok');
+    expect(r.motivos).toEqual([]);
+  });
+
+  it('conexao ok + tokenExpiraEmHoras<72h → 15 (caso real continua disparando)', () => {
+    const r = calcularRisco({ ...SAUDAVEL, conexao: 'ok', tokenExpiraEmHoras: 10 });
+    expect(r.score).toBe(15);
+    expect(r.motivos).toEqual(['Conexão Bling expirando em breve']);
+  });
+
   it('ultimoReportFailed → 25', () => {
     const r = calcularRisco({ ...SAUDAVEL, ultimoReportFailed: true });
     expect(r.score).toBe(25);

@@ -45,7 +45,11 @@ type Motivo = { peso: number; texto: string };
 function insumoConexao(i: InsumosRisco): Motivo | null {
   if (i.conexao === 'expirado') return { peso: PESO_CONEXAO_EXPIRADO, texto: 'Conexão Bling expirada' };
   if (i.conexao === 'erro') return { peso: PESO_CONEXAO_ERRO, texto: 'Erro na conexão Bling' };
-  if (i.tokenExpiraEmHoras !== null && i.tokenExpiraEmHoras < TOKEN_EXPIRA_LIMITE_HORAS) {
+  if (
+    i.conexao === 'ok' &&
+    i.tokenExpiraEmHoras !== null &&
+    i.tokenExpiraEmHoras < TOKEN_EXPIRA_LIMITE_HORAS
+  ) {
     return { peso: PESO_CONEXAO_EXPIRANDO, texto: 'Conexão Bling expirando em breve' };
   }
   return null;
