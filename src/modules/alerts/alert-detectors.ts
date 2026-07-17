@@ -1,4 +1,5 @@
 import { formatBRL, formatData } from '@/lib/format';
+import type { CoberturaProduto } from '@/modules/estoque/stock-coverage';
 import type { Metricas } from '@/modules/pipeline/contracts';
 import {
   CONCORRENTE_CRITICO_PCT,
@@ -9,7 +10,7 @@ import {
   QUEDA_VENDAS_LIMIAR,
 } from './alerts.constants';
 
-export type TipoAlerta = 'queda_vendas' | 'concorrente_preco' | 'produto_parado';
+export type TipoAlerta = 'queda_vendas' | 'concorrente_preco' | 'produto_parado' | 'estoque_critico';
 export type SeveridadeAlerta = 'atencao' | 'critico';
 
 export type AlertaCandidato = {
@@ -104,6 +105,30 @@ export function detectarProdutoParado(
     });
   }
   return out;
+}
+
+/** (d) Estoque crítico: cobertura < ESTOQUE_CRITICO_DIAS no ritmo de venda atual. Pura. */
+export function detectarEstoqueCritico(produtos: CoberturaProduto[]): AlertaCandidato[] {
+  return produtos
+    .filter((p) => p.estado === 'critico')
+    .map((p) => {
+      const esgotado = (p.coberturaDias ?? 0) <= 0;
+      return {
+        tipo: 'estoque_critico' as const,
+        severidade: 'critico' as const,
+        titulo: esgotado
+          ? `Estoque de ${p.nome} esgotado — e o produto segue vendendo`
+          : `Estoque de ${p.nome} acaba em ~${p.coberturaDias} dia(s)`,
+        corpo: `${p.nome} (${p.sku}) tem ${p.saldo} un. em estoque e vendeu ${p.vendas30d} un. nos últimos 30 dias — no ritmo atual a cobertura é de ${p.coberturaDias ?? 0} dia(s). Reponha para não perder vendas.`,
+        dados: {
+          sku: p.sku,
+          saldo: p.saldo,
+          vendas30d: p.vendas30d,
+          coberturaDias: p.coberturaDias ?? 0,
+        },
+        chaveDedup: `estoque_critico:${p.sku}`,
+      };
+    });
 }
 
 /** Dedup puro: descarta candidato cujo tipo+chaveDedup já tem alerta ABERTO. */

@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { formatBRL } from '@/lib/format';
 import {
   detectarConcorrenteAbaixo,
+  detectarEstoqueCritico,
   detectarProdutoParado,
   detectarQuedaVendas,
   filtrarNaoDuplicados,
 } from '@/modules/alerts/alert-detectors';
+import type { CoberturaProduto } from '@/modules/estoque/stock-coverage';
 
 describe('detectarQuedaVendas', () => {
   it('queda para 40% da média → atencao', () => {
@@ -101,5 +103,44 @@ describe('filtrarNaoDuplicados', () => {
     const r = filtrarNaoDuplicados(candidatos, [{ tipo: 'queda_vendas', chaveDedup: 'queda_vendas' }]);
     expect(r).toHaveLength(1);
     expect(r[0].tipo).toBe('concorrente_preco');
+  });
+});
+
+describe('detectarEstoqueCritico', () => {
+  const base: CoberturaProduto = {
+    sku: 'SKU-1',
+    nome: 'Caneca Truth',
+    saldo: 4,
+    vendas30d: 30,
+    coberturaDias: 4,
+    estado: 'critico',
+  };
+
+  it('gera 1 candidato crítico por produto em estado critico, com dedup por sku', () => {
+    const r = detectarEstoqueCritico([base, { ...base, sku: 'SKU-2', nome: 'Copo' }]);
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({
+      tipo: 'estoque_critico',
+      severidade: 'critico',
+      chaveDedup: 'estoque_critico:SKU-1',
+    });
+    expect(r[0]!.titulo).toContain('Caneca Truth');
+    expect(r[0]!.corpo).toContain('4 dia');
+    expect(r[0]!.dados).toMatchObject({ sku: 'SKU-1', saldo: 4, coberturaDias: 4 });
+  });
+
+  it('cobertura 0 (vendendo sem estoque) tem título de esgotado', () => {
+    const [r] = detectarEstoqueCritico([{ ...base, saldo: 0, coberturaDias: 0 }]);
+    expect(r!.titulo).toContain('esgotado');
+  });
+
+  it('ignora estados nao-criticos', () => {
+    expect(
+      detectarEstoqueCritico([
+        { ...base, estado: 'atencao', coberturaDias: 10 },
+        { ...base, sku: 'P', estado: 'parado', coberturaDias: null },
+        { ...base, sku: 'O', estado: 'ok', coberturaDias: 60 },
+      ]),
+    ).toEqual([]);
   });
 });
