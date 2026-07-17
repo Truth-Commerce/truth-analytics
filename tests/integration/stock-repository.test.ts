@@ -92,6 +92,18 @@ describe.skipIf(!url)('stock.repository — integração', () => {
     expect(rows).toEqual([{ sku: 'SKU-A', nome: 'Produto A v2', saldo: 4 }]);
   });
 
+  it('upsertStock deduplica sku repetido no mesmo lote (last-wins, sem 21000)', async () => {
+    const n = await upsertStock(orgId, [
+      { sku: 'SKU-DUP', nome: 'Produto Dup v1', saldo: 7 },
+      { sku: 'SKU-DUP', nome: 'Produto Dup v2', saldo: 3 },
+    ]);
+    expect(n).toBe(1);
+
+    const rows = await getStockRows(orgId);
+    const dup = rows.find((r) => r.sku === 'SKU-DUP');
+    expect(dup).toEqual({ sku: 'SKU-DUP', nome: 'Produto Dup v2', saldo: 3 });
+  });
+
   it('getVendas30dPorSku soma quantidade na janela, ignora itens sem sku e não vaza entre orgs', async () => {
     const mapa = await getVendas30dPorSku(orgId, AGORA);
     expect(mapa.get('SKU-A')).toBe(5); // 2 + 3; o pedido de 45d atrás fica fora

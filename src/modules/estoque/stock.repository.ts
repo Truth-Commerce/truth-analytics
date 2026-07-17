@@ -7,9 +7,17 @@ import type { RawOrderItem, RawStockItem } from '@/modules/providers/types';
 
 const CHUNK = 500;
 
-/** Upsert do snapshot de saldo por (org_id, sku). Itens sem sku são descartados. */
+/**
+ * Upsert do snapshot de saldo por (org_id, sku). Itens sem sku são descartados.
+ * Duplicatas de sku no mesmo lote são deduplicadas (last-wins) — o Postgres
+ * lança 21000 ("cannot affect row a second time") se o mesmo (org_id, sku)
+ * aparecer duas vezes num único onConflictDoUpdate.
+ */
 export async function upsertStock(orgId: string, itens: RawStockItem[]): Promise<number> {
-  const validos = itens.filter((i): i is RawStockItem & { sku: string } => !!i.sku);
+  const comSku = itens.filter((i): i is RawStockItem & { sku: string } => !!i.sku);
+  const porSku = new Map<string, RawStockItem & { sku: string }>();
+  for (const item of comSku) porSku.set(item.sku, item);
+  const validos = [...porSku.values()];
   for (let i = 0; i < validos.length; i += CHUNK) {
     const lote = validos.slice(i, i + CHUNK).map((p) => ({
       org_id: orgId,
