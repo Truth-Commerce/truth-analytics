@@ -18,6 +18,7 @@ import {
   requeueFailedReport,
   setPlano,
   suspendOrganization,
+  updateOrgNicho,
 } from '@/modules/admin/admin.repository';
 import { periodoDoPlano } from '@/modules/admin/periodo-plano';
 import { recordAudit } from '@/modules/audit/audit.repository';
@@ -219,6 +220,27 @@ export async function setMetaMensalAction(
   }
   await setMetaMensal(orgId, meta);
   await recordAudit({ orgId, userId: admin.id, acao: 'org.meta_alterada', detalhes: { meta } });
+  revalidatePath(`/admin/${orgId}`);
+  return { ok: true };
+}
+
+/** Só admin. Nicho (H3) — normalização (trim/''→null/cap 60) fica no repositório. */
+export async function updateOrgNichoAction(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const admin = await requireAdmin();
+  const orgId = String(formData.get('orgId') ?? '');
+  if (!orgId) return { error: 'Cliente inválido.' };
+  const nicho = String(formData.get('nicho') ?? '');
+  await updateOrgNicho(orgId, nicho);
+  const trimmed = nicho.trim();
+  await recordAudit({
+    orgId,
+    userId: admin.id,
+    acao: 'org.nicho_alterado',
+    detalhes: { nicho: trimmed === '' ? null : trimmed.slice(0, 60) },
+  });
   revalidatePath(`/admin/${orgId}`);
   return { ok: true };
 }

@@ -277,6 +277,19 @@ export async function requeueFailedReport(input: {
   return { orgId: updated[0].org_id };
 }
 
+/**
+ * Nicho editável pelo admin (H3) — normaliza aqui (trim, ''→null, cap 60,
+ * mesmo limite do schema de inferência por IA em nicho-ia.ts) para que o
+ * valor gravado seja sempre consistente, venha da action ou de outro
+ * chamador. Não restringe org interna (mesmo padrão de setMetaMensal): é um
+ * atributo descritivo, não uma mudança de status.
+ */
+export async function updateOrgNicho(orgId: string, nicho: string | null): Promise<void> {
+  const trimmed = nicho?.trim() ?? '';
+  const value = trimmed === '' ? null : trimmed.slice(0, 60);
+  await db.update(organizations).set({ nicho: value }).where(eq(organizations.id, orgId));
+}
+
 export async function setPlano(input: {
   orgId: string;
   plano: Plano;

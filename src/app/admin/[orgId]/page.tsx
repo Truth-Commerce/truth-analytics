@@ -25,6 +25,7 @@ import { PageHeader } from '@/components/page-header';
 import { Reveal } from '@/components/reveal';
 import { AtribuirAnalista } from './atribuir-analista';
 import { MetaMensalForm } from './meta-mensal-form';
+import { NichoForm } from './nicho-form';
 import { OrgUsers } from './org-users';
 import { ReportActions } from './report-actions';
 import { GenerateNow } from './generate-now';
@@ -104,6 +105,19 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
                 createdAt: formatData(u.created_at),
               }))}
             />
+          </CardContent>
+        </Card>
+      </Reveal>
+
+      <Reveal>
+        <Card data-testid="admin-nicho-card">
+          <CardHeader>
+            <CardTitle as="h2" className="text-base">
+              Nicho
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <NichoForm orgId={org.id} nichoAtual={org.nicho} />
           </CardContent>
         </Card>
       </Reveal>
