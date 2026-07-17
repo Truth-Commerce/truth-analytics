@@ -10,6 +10,7 @@ on:
   schedule:
     - cron: "*/30 * * * *" # watchdog
     - cron: "0 7 * * *" # sincronizar-pedidos
+    - cron: "30 7 * * *" # sincronizar-estoque
     - cron: "0 9 * * *" # gerar-relatorios
     - cron: "30 9 * * *" # verificar-alertas
     - cron: "0 12 * * 1" # digest-semanal
@@ -33,6 +34,7 @@ jobs:
           case "${{ github.event.schedule }}" in
             "*/30 * * * *") rota=watchdog ;;
             "0 7 * * *") rota=sincronizar-pedidos ;;
+            "30 7 * * *") rota=sincronizar-estoque ;;
             "0 9 * * *") rota=gerar-relatorios ;;
             "30 9 * * *") rota=verificar-alertas ;;
             "0 12 * * 1") rota=digest-semanal ;;
