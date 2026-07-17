@@ -10,6 +10,7 @@ import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import {
   agruparPorData,
   badgeContagem,
+  inicioDoDiaUtc,
   sugestaoView,
 } from '@/modules/calendario/calendario-view-model';
 import { listSugestoesUltimoCiclo } from '@/modules/calendario/calendario.repository';
@@ -21,7 +22,7 @@ export const metadata: Metadata = { title: 'Calendário comercial' };
 
 export default async function CalendarioPage() {
   const access = await requireActiveOrg();
-  const hoje = new Date();
+  const hoje = inicioDoDiaUtc(new Date());
   const datas = proximasDatas(hoje, JANELA_CALENDARIO_DIAS);
   const sugestoes = (await listSugestoesUltimoCiclo(access.orgId)).map(sugestaoView);
   const timeline = agruparPorData(sugestoes, datas, hoje);

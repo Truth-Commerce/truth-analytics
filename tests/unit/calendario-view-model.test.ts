@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { proximasDatas } from '@/lib/calendario-comercial';
 import type { DataComercial } from '@/lib/calendario-comercial';
 import {
   agruparPorData,
   badgeContagem,
+  inicioDoDiaUtc,
   labelContagem,
   statusSugestaoBadge,
   sugestaoView,
@@ -115,5 +117,34 @@ describe('statusSugestaoBadge', () => {
     expect(statusSugestaoBadge('sugerido')).toEqual({ variant: 'success', label: 'Sugerido' });
     expect(statusSugestaoBadge('virou_task')).toEqual({ variant: 'neutral', label: 'Virou tarefa' });
     expect(statusSugestaoBadge('descartado')).toEqual({ variant: 'neutral', label: 'Descartado' });
+  });
+});
+
+describe('inicioDoDiaUtc', () => {
+  it('trunca um instante às 15h UTC para meia-noite UTC do mesmo dia', () => {
+    const natalAs15hUtc = new Date(Date.UTC(2026, 11, 25, 15, 0, 0));
+    const truncado = inicioDoDiaUtc(natalAs15hUtc);
+    expect(truncado.toISOString()).toBe('2026-12-25T00:00:00.000Z');
+  });
+});
+
+describe('"hoje" no dia da data comercial não desaparece da timeline (regressão)', () => {
+  it('com hoje normalizado, proximasDatas inclui o Natal e a timeline mostra "é hoje!"', () => {
+    // Instante tardio no dia do Natal — sem normalizar, `>= aPartirDe` no
+    // filtro de proximasDatas excluiria o próprio Natal (getTime() do Natal
+    // é meia-noite UTC, menor que 15h UTC do mesmo dia).
+    const natalAs15hUtc = new Date(Date.UTC(2026, 11, 25, 15, 0, 0));
+    const hoje = inicioDoDiaUtc(natalAs15hUtc);
+
+    const datas = proximasDatas(hoje, 90);
+    const natal = datas.find((d) => d.nome === 'Natal');
+    expect(natal).toBeDefined();
+    expect(natal!.data.toISOString()).toBe('2026-12-25T00:00:00.000Z');
+
+    const timeline = agruparPorData([], datas, hoje);
+    const entradaNatal = timeline.find((t) => t.nome === 'Natal');
+    expect(entradaNatal).toBeDefined();
+    expect(entradaNatal!.faltamDias).toBe(0);
+    expect(labelContagem(entradaNatal!.faltamDias)).toBe('é hoje!');
   });
 });

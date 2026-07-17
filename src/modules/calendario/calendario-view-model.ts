@@ -45,6 +45,17 @@ function utcMidnight(d: Date): number {
 }
 
 /**
+ * Normaliza um instante qualquer para meia-noite UTC do mesmo dia. Usar
+ * SEMPRE como "hoje" antes de passar para proximasDatas/agruparPorData —
+ * as datas comerciais são UTC-midnight, e comparar contra `new Date()` (um
+ * instante com hora local) faz a data de HOJE cair fora do filtro
+ * `>= aPartirDe` assim que o relógio passa da meia-noite UTC.
+ */
+export function inicioDoDiaUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/**
  * Timeline dos próximos N dias: TODAS as datas comerciais aparecem (mesmo
  * sem nenhuma sugestão casada — a dica geral do calendário já tem valor
  * sozinha). Sugestões casam por dataISO; faltamDias é a diferença em dias
