@@ -1,8 +1,8 @@
-import { inArray, like } from 'drizzle-orm';
+import { eq, inArray, like } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db/client';
-import { connections, organizations, orders, tasks, users } from '@/db/schema';
+import { connections, organizations, orders, productStock, reports, tasks, users } from '@/db/schema';
 import { hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
 import { hashPassword } from '@/modules/auth/password';
 import type { UserAccess } from '@/modules/auth/user.types';
@@ -117,6 +117,36 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
       },
     ]);
 
+    // orgRisco: mais 3 insumos que na semente-padrão ficam "off" — provando a
+    // fiação real de getReportsInfoBatch/contarSkusCriticos/calcularMetaEmRisco
+    // (não só os defaults). valor_total='0.00' no pedido de estoque para NÃO
+    // alterar faturamentoMes/faturamentoMesAnterior já travados nos testes
+    // abaixo (500/1000).
+    await db.insert(reports).values({
+      org_id: orgRiscoId,
+      periodo_inicio: new Date(agora.getTime() - 7 * 86_400_000),
+      periodo_fim: agora,
+      status: 'failed',
+      created_at: agora,
+    });
+    await db.insert(productStock).values({
+      org_id: orgRiscoId,
+      sku: `${PREFIX}sku-critico`,
+      nome: 'Produto crítico',
+      saldo: '1.00',
+    });
+    await db.insert(orders).values({
+      org_id: orgRiscoId,
+      bling_order_id: `${PREFIX}risco-estoque-${RUN}`,
+      canal: 'teste',
+      data: new Date(agora.getTime() - 5 * 86_400_000),
+      valor_total: '0.00',
+      itens: [{ sku: `${PREFIX}sku-critico`, nome: 'Produto crítico', quantidade: 30, valor: 0 }],
+    });
+    // meta_mensal alta o bastante para o pace (500/10000 = 5%) ficar bem abaixo
+    // dos 80% do limiar (metaEmRisco só considera a partir do dia 15 do mês).
+    await db.update(organizations).set({ meta_mensal: '10000.00' }).where(eq(organizations.id, orgRiscoId));
+
     // orgSaudavel: conexão ok, token expira em 30 dias (>>72h) — sem tasks, sem histórico
     // de vendas anteriores (média das 4 semanas fica 0 → não dispara "queda").
     await db.insert(connections).values({
@@ -142,6 +172,8 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
     if (orgIds.length) {
       await db.delete(orders).where(inArray(orders.org_id, orgIds));
       await db.delete(connections).where(inArray(connections.org_id, orgIds));
+      await db.delete(reports).where(inArray(reports.org_id, orgIds));
+      await db.delete(productStock).where(inArray(productStock.org_id, orgIds));
     }
     // organizations.analista_id → users.id (sem ON DELETE): limpar antes do delete de users.
     await db.update(organizations).set({ analista_id: null }).where(like(organizations.name, `${PREFIX}%`));
@@ -175,6 +207,32 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
     expect(risco.tasksAtrasadas).toBe(1);
     expect(risco.pendentesRevisao).toBe(1);
     expect(risco.tasksAbertas).toBe(2);
+    expect(risco.faturamentoMes).toBe(500);
+    expect(risco.faturamentoMesAnterior).toBe(1000);
+  });
+
+  it('org com report falhado + SKU crítico + meta em risco → os 3 insumos aparecem no risco (prova a fiação, não só os defaults)', async () => {
+    // NOTA: metaEmRisco só é avaliado a partir do dia 15 do mês corrente (regra
+    // do plano em calcularMetaEmRisco); `agora` é o instante real de execução
+    // do teste, então esta asserção depende de o teste rodar em dia >= 15.
+    const hoje = hojeBrt(agora);
+    const dia = Number(hoje.slice(8, 10));
+
+    const { carteiraResumo } = await import('@/modules/analista/carteira-data.repository');
+    const resumo = await carteiraResumo(asAccess(analistaId, 'analista'), agora);
+    const risco = resumo.find((r) => r.orgId === orgRiscoId)!;
+
+    expect(risco).toBeDefined();
+    // Insumos já cobertos no teste anterior continuam valendo (mesma org).
+    expect(risco.risco.motivos).toContain('Conexão Bling expirada');
+    expect(risco.risco.motivos).toContain('1 tarefa atrasada');
+    // Novos insumos, wiring real (não default): report failed / estoque crítico.
+    expect(risco.risco.motivos).toContain('Último relatório falhou');
+    expect(risco.risco.motivos).toContain('1 SKUs em estoque crítico');
+    if (dia >= 15) {
+      expect(risco.risco.motivos).toContain('Meta em risco');
+    }
+    // faturamento não pode ter sido contaminado pelo pedido de estoque (valor_total=0).
     expect(risco.faturamentoMes).toBe(500);
     expect(risco.faturamentoMesAnterior).toBe(1000);
   });
