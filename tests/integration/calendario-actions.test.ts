@@ -2,17 +2,17 @@ import { eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db/client';
-import { kitSuggestions, organizations, reports, taskActivities, tasks } from '@/db/schema';
-import { kitParaTask } from '@/modules/kits/kit-to-task';
+import { calendarSuggestions, organizations, reports, taskActivities, tasks } from '@/db/schema';
+import { sugestaoParaTask } from '@/modules/calendario/sugestao-to-task';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
-const PREFIX = 'ta-test-kitact-';
+const PREFIX = 'ta-test-calact-';
 
-describe.skipIf(!url)('kit → task — integração', () => {
+describe.skipIf(!url)('sugestão do calendário → task — integração', () => {
   let orgId = '';
   let reportId = '';
-  let kitId = '';
+  let sugestaoId = '';
 
   beforeAll(async () => {
     const [org] = await db
@@ -30,25 +30,21 @@ describe.skipIf(!url)('kit → task — integração', () => {
       })
       .returning({ id: reports.id });
     reportId = rep!.id;
-    const [kit] = await db
-      .insert(kitSuggestions)
+    const [sug] = await db
+      .insert(calendarSuggestions)
       .values({
         org_id: orgId,
         report_id: reportId,
-        titulo: 'Kit Café Completo',
+        titulo: 'Anuncie a Black Friday',
         payload: {
-          itens: [
-            { sku: 'A', nome: 'Caneca' },
-            { sku: 'B', nome: 'Filtro' },
-          ],
-          precoSugerido: 79.9,
-          argumento: 'Vendem juntos.',
-          canalRecomendado: 'Shopee',
-          evidencia: { pedidosJuntos: 7 },
+          dataISO: '2026-11-27',
+          nomeData: 'Black Friday',
+          sugestao: 'Capriche nas fotos e no anúncio para a Black Friday.',
+          skus: ['A', 'B'],
         },
       })
-      .returning({ id: kitSuggestions.id });
-    kitId = kit!.id;
+      .returning({ id: calendarSuggestions.id });
+    sugestaoId = sug!.id;
   });
 
   afterAll(async () => {
@@ -59,35 +55,38 @@ describe.skipIf(!url)('kit → task — integração', () => {
     if (taskIds.length > 0) {
       await db.delete(taskActivities).where(inArray(taskActivities.task_id, taskIds));
     }
-    await db.delete(kitSuggestions).where(eq(kitSuggestions.org_id, orgId));
+    await db.delete(calendarSuggestions).where(eq(calendarSuggestions.org_id, orgId));
     await db.delete(tasks).where(eq(tasks.org_id, orgId));
     await db.delete(reports).where(eq(reports.org_id, orgId));
     await db.delete(organizations).where(eq(organizations.id, orgId));
   });
 
-  it('cria task tipo catalogo, marca o kit e é idempotente', async () => {
-    const r1 = await kitParaTask(orgId, kitId);
+  it('cria task com prazo=dataISO e tipo inferido, marca a sugestão e é idempotente', async () => {
+    const r1 = await sugestaoParaTask(orgId, sugestaoId);
     expect(r1.ok).toBe(true);
 
     const [task] = await db.select().from(tasks).where(eq(tasks.org_id, orgId));
-    expect(task!.tipo).toBe('catalogo');
-    expect(task!.titulo).toContain('Kit Café Completo');
+    expect(task!.tipo).toBe('anuncio');
+    expect(task!.titulo).toBe('Anuncie a Black Friday');
+    expect(task!.prazo).toBe('2026-11-27');
     expect(task!.report_id).toBe(reportId);
-    expect(task!.descricao).toContain('Caneca');
-    expect(task!.descricao).toContain('79,90');
+    expect(task!.criado_por).toBe('cliente');
+    expect(task!.prioridade).toBe('media');
+    expect(task!.descricao).toContain('Black Friday');
+    expect(task!.descricao).toContain('A, B');
 
-    const [kit] = await db.select().from(kitSuggestions).where(eq(kitSuggestions.id, kitId));
-    expect(kit!.status).toBe('virou_task');
-    expect(kit!.task_id).toBe(task!.id);
+    const [sug] = await db.select().from(calendarSuggestions).where(eq(calendarSuggestions.id, sugestaoId));
+    expect(sug!.status).toBe('virou_task');
+    expect(sug!.task_id).toBe(task!.id);
 
-    // 2ª chamada: kit já processado → ok:false e NENHUMA task nova.
-    const r2 = await kitParaTask(orgId, kitId);
-    expect(r2).toEqual({ ok: false, erro: 'kit_ja_processado' });
+    // 2ª chamada: sugestão já processada → ok:false e NENHUMA task nova.
+    const r2 = await sugestaoParaTask(orgId, sugestaoId);
+    expect(r2).toEqual({ ok: false, erro: 'sugestao_ja_processada' });
     const todas = await db.select().from(tasks).where(eq(tasks.org_id, orgId));
     expect(todas).toHaveLength(1);
   });
 
-  it('corrida: kit reservado (virou_task sem task_id) — kitParaTask não cria task', async () => {
+  it('corrida: sugestão reservada (virou_task sem task_id) — sugestaoParaTask não cria task', async () => {
     const [rep] = await db
       .insert(reports)
       .values({
@@ -97,34 +96,30 @@ describe.skipIf(!url)('kit → task — integração', () => {
         periodo_fim: new Date('2026-07-08'),
       })
       .returning({ id: reports.id });
-    const [kit] = await db
-      .insert(kitSuggestions)
+    const [sug] = await db
+      .insert(calendarSuggestions)
       .values({
         org_id: orgId,
         report_id: rep!.id,
-        titulo: 'Kit Corrida',
+        titulo: 'Prepare o Natal',
         payload: {
-          itens: [
-            { sku: 'C', nome: 'Xícara' },
-            { sku: 'D', nome: 'Bule' },
-          ],
-          precoSugerido: 59.9,
-          argumento: 'Vendem juntos.',
-          canalRecomendado: 'Shopee',
-          evidencia: { pedidosJuntos: 3 },
+          dataISO: '2026-12-25',
+          nomeData: 'Natal',
+          sugestao: 'Garanta o frete a tempo para o Natal.',
+          skus: ['C'],
         },
       })
-      .returning({ id: kitSuggestions.id });
-    const corridaKitId = kit!.id;
+      .returning({ id: calendarSuggestions.id });
+    const corridaSugestaoId = sug!.id;
 
     // Simula o estado "reservado, ainda criando a task" de um caller concorrente.
     await db
-      .update(kitSuggestions)
+      .update(calendarSuggestions)
       .set({ status: 'virou_task', task_id: null })
-      .where(eq(kitSuggestions.id, corridaKitId));
+      .where(eq(calendarSuggestions.id, corridaSugestaoId));
 
-    const r = await kitParaTask(orgId, corridaKitId);
-    expect(r).toEqual({ ok: false, erro: 'kit_ja_processado' });
+    const r = await sugestaoParaTask(orgId, corridaSugestaoId);
+    expect(r).toEqual({ ok: false, erro: 'sugestao_ja_processada' });
 
     const todas = await db.select().from(tasks).where(eq(tasks.report_id, rep!.id));
     expect(todas).toHaveLength(0);

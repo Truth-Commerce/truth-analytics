@@ -16,3 +16,4 @@ export * from './task-templates';
 export * from './notifications';
 export * from './alerts';
 export * from './kit-suggestions';
+export * from './calendar-suggestions';

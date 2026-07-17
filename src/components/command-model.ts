@@ -28,6 +28,7 @@ export function buildCommands(variant: 'client' | 'admin' | 'analista'): Command
     { id: 'nav-conexoes', label: 'Ir para Conexões', group: 'Navegação', href: '/conexoes', keywords: 'bling produtos' },
     { id: 'nav-estoque', label: 'Ir para o Estoque', group: 'Navegação', href: '/dashboard/estoque', keywords: 'saldo cobertura reposicao produtos' },
     { id: 'nav-kits', label: 'Ir para Kits sugeridos', group: 'Navegação', href: '/dashboard/kits', keywords: 'kit combo sugestao vender junto' },
+    { id: 'nav-calendario', label: 'Ir para o Calendário comercial', group: 'Navegação', href: '/dashboard/calendario', keywords: 'datas sazonal black friday natal' },
     { id: 'nav-configuracoes', label: 'Ir para Configurações', group: 'Navegação', href: '/configuracoes', keywords: 'senha empresa conta plano' },
     { id: 'nav-plano-de-acao', label: 'Ir para o Plano de Ação', group: 'Navegação', href: '/dashboard/plano-de-acao', keywords: 'tasks tarefas kanban consultoria' },
     { id: 'acao-gerar-relatorio', label: 'Gerar relatório', group: 'Ações', href: '/dashboard#gerar-relatorio', keywords: 'análise ia relatório novo' },

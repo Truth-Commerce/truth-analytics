@@ -6,6 +6,7 @@ import type { DatabaseClient } from '@/db/client';
 import {
   alerts,
   auditLog,
+  calendarSuggestions,
   connections,
   kitSuggestions,
   loginAttempts,
@@ -78,6 +79,12 @@ export async function purgeOrg(
     kit_suggestions: await n(
       dbc.select({ n: count() }).from(kitSuggestions).where(eq(kitSuggestions.org_id, input.orgId)),
     ),
+    calendar_suggestions: await n(
+      dbc
+        .select({ n: count() })
+        .from(calendarSuggestions)
+        .where(eq(calendarSuggestions.org_id, input.orgId)),
+    ),
     alerts: await n(dbc.select({ n: count() }).from(alerts).where(eq(alerts.org_id, input.orgId))),
     market_snapshots: await n(
       dbc.select({ n: count() }).from(marketSnapshots).where(eq(marketSnapshots.org_id, input.orgId)),
@@ -122,11 +129,12 @@ export async function purgeOrg(
       await tx.delete(taskComments).where(inArray(taskComments.task_id, taskIds));
       await tx.delete(taskActivities).where(inArray(taskActivities.task_id, taskIds));
     }
-    // Tabelas escopadas por org (kit_suggestions antes de tasks/reports por
-    // kit_suggestions.report_id e kit_suggestions.task_id; tasks antes de
-    // reports por tasks.report_id; market_snapshots antes de reports por
+    // Tabelas escopadas por org (kit_suggestions/calendar_suggestions antes de
+    // tasks/reports por report_id e task_id; tasks antes de reports por
+    // tasks.report_id; market_snapshots antes de reports por
     // market_snapshots.report_id)
     await tx.delete(kitSuggestions).where(eq(kitSuggestions.org_id, input.orgId));
+    await tx.delete(calendarSuggestions).where(eq(calendarSuggestions.org_id, input.orgId));
     await tx.delete(tasks).where(eq(tasks.org_id, input.orgId));
     await tx.delete(alerts).where(eq(alerts.org_id, input.orgId));
     await tx.delete(marketSnapshots).where(eq(marketSnapshots.org_id, input.orgId));
