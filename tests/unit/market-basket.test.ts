@@ -49,4 +49,11 @@ describe('candidatosDeKits', () => {
     expect(r[0]!.skus).toEqual(['X', 'Y']);
     expect(r).toHaveLength(MAX_CANDIDATOS);
   });
+
+  it('sku com espaço não corrompe o par (chave inequívoca)', () => {
+    const r = candidatosDeKits([pedido('AB 12', 'CD'), pedido('AB 12', 'CD')]);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.skus).toEqual(['AB 12', 'CD']);
+    expect(r[0]!.pedidosJuntos).toBe(2);
+  });
 });

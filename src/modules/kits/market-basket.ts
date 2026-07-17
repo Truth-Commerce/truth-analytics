@@ -27,7 +27,7 @@ export function candidatosDeKits(pedidos: { itens: ItemPedido[] }[]): KitCandida
     }
     for (let i = 0; i < skus.length; i++) {
       for (let j = i + 1; j < skus.length; j++) {
-        const chave = `${skus[i]} ${skus[j]}`;
+        const chave = JSON.stringify([skus[i], skus[j]]);
         pares.set(chave, (pares.get(chave) ?? 0) + 1);
       }
     }
@@ -38,7 +38,7 @@ export function candidatosDeKits(pedidos: { itens: ItemPedido[] }[]): KitCandida
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
     .slice(0, MAX_CANDIDATOS)
     .map(([chave, pedidosJuntos]) => {
-      const [a, b] = chave.split(' ') as [string, string];
+      const [a, b] = JSON.parse(chave) as [string, string];
       return {
         skus: [a, b],
         nomes: [nomes.get(a) ?? a, nomes.get(b) ?? b],
