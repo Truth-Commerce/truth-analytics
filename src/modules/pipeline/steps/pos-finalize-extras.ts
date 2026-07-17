@@ -1,9 +1,10 @@
 import { logger } from '@/lib/logger';
+import { gerarBriefingDoCiclo } from '@/modules/analista/gerar-briefing';
 import { gerarCalendarioDoCiclo } from '@/modules/calendario/gerar-calendario';
 import { gerarKitsDoCiclo } from '@/modules/kits/gerar-kits';
 import { gravarNichoSeVazio, inferirNichoComIA } from '@/modules/pipeline/steps/nicho-ia';
 
-/** Contexto repassado ao passo de calendário. */
+/** Contexto repassado aos passos de calendário/briefing. */
 export type PosFinalizeExtrasCtx = {
   orgId: string;
   reportId: string;
@@ -19,14 +20,19 @@ export type PosFinalizeExtrasInput = PosFinalizeExtrasCtx & {
    * `gerarCalendarioDoCiclo` (implementação real) como default.
    */
   gerarCalendario?: (ctx: PosFinalizeExtrasCtx) => Promise<unknown>;
+  /**
+   * Seam de teste para o passo 4 (briefing) — sem valor injetado, usa
+   * `gerarBriefingDoCiclo` (implementação real) como default.
+   */
+  gerarBriefing?: (ctx: PosFinalizeExtrasCtx) => Promise<unknown>;
 };
 
 /**
- * Módulo único de extras pós-finalize do pipeline (H2/H3): nicho → kits →
- * calendário. SEMPRE best-effort — NUNCA lança (try/catch por passo, mais um
- * try/catch externo de defesa em profundidade) — pois roda depois de
- * `finalize`, quando o relatório principal já está gravado; nenhuma falha
- * aqui pode voltar a afetar o resultado do pipeline.
+ * Módulo único de extras pós-finalize do pipeline (H2/H3/H4): nicho → kits →
+ * calendário → briefing IA do analista. SEMPRE best-effort — NUNCA lança
+ * (try/catch por passo, mais um try/catch externo de defesa em profundidade)
+ * — pois roda depois de `finalize`, quando o relatório principal já está
+ * gravado; nenhuma falha aqui pode voltar a afetar o resultado do pipeline.
  */
 export async function executarExtrasPosFinalize(input: PosFinalizeExtrasInput): Promise<void> {
   try {
@@ -92,6 +98,26 @@ export async function executarExtrasPosFinalize(input: PosFinalizeExtrasInput): 
       });
     } catch (err) {
       logger.warn('extras.calendario_falhou', {
+        orgId: input.orgId,
+        reportId: input.reportId,
+        erro: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Passo 4: pauta IA do analista (H4) — mesmo padrão do passo 3, seam
+    // próprio de teste + try/catch isolado.
+    const gerarBriefing = input.gerarBriefing ?? gerarBriefingDoCiclo;
+    try {
+      await gerarBriefing({
+        orgId: input.orgId,
+        reportId: input.reportId,
+        orgName: input.orgName,
+        nicho,
+        ticketMedio: input.ticketMedio,
+        topProdutos: input.topProdutos,
+      });
+    } catch (err) {
+      logger.warn('extras.briefing_falhou', {
         orgId: input.orgId,
         reportId: input.reportId,
         erro: err instanceof Error ? err.message : String(err),

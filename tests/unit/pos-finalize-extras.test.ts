@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/modules/analista/gerar-briefing', () => ({ gerarBriefingDoCiclo: vi.fn() }));
 vi.mock('@/modules/calendario/gerar-calendario', () => ({ gerarCalendarioDoCiclo: vi.fn() }));
 vi.mock('@/modules/kits/gerar-kits', () => ({ gerarKitsDoCiclo: vi.fn() }));
 vi.mock('@/modules/pipeline/steps/nicho-ia', () => ({
@@ -7,6 +8,7 @@ vi.mock('@/modules/pipeline/steps/nicho-ia', () => ({
   gravarNichoSeVazio: vi.fn(),
 }));
 
+import { gerarBriefingDoCiclo } from '@/modules/analista/gerar-briefing';
 import { gerarCalendarioDoCiclo } from '@/modules/calendario/gerar-calendario';
 import { gerarKitsDoCiclo } from '@/modules/kits/gerar-kits';
 import { gravarNichoSeVazio, inferirNichoComIA } from '@/modules/pipeline/steps/nicho-ia';
@@ -69,5 +71,35 @@ describe('executarExtrasPosFinalize', () => {
     expect(gerarCalendarioDoCiclo).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: 'o1', reportId: 'r1', orgName: 'Loja', nicho: 'cozinha' }),
     );
+  });
+
+  it('gerarBriefing injetado roda apos calendario e falha dele tambem nao lança', async () => {
+    vi.mocked(gerarKitsDoCiclo).mockResolvedValue(null);
+    vi.mocked(gerarCalendarioDoCiclo).mockResolvedValue(null);
+    const gerarBriefing = vi.fn().mockRejectedValue(new Error('boom4'));
+    await expect(
+      executarExtrasPosFinalize({ ...BASE, gerarBriefing }),
+    ).resolves.toBeUndefined();
+    expect(gerarBriefing).toHaveBeenCalled();
+    expect(gerarBriefingDoCiclo).not.toHaveBeenCalled();
+  });
+
+  it('sem gerarBriefing injetado usa gerarBriefingDoCiclo como default', async () => {
+    vi.mocked(gerarKitsDoCiclo).mockResolvedValue(null);
+    vi.mocked(gerarCalendarioDoCiclo).mockResolvedValue(null);
+    vi.mocked(gerarBriefingDoCiclo).mockResolvedValue({ prioridades: 3 });
+    await executarExtrasPosFinalize(BASE);
+    expect(gerarBriefingDoCiclo).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'o1', reportId: 'r1', orgName: 'Loja', nicho: 'cozinha' }),
+    );
+  });
+
+  it('passo 3 (calendário) falha, passo 4 (briefing) roda', async () => {
+    vi.mocked(gerarKitsDoCiclo).mockResolvedValue(null);
+    vi.mocked(gerarCalendarioDoCiclo).mockRejectedValue(new Error('boom_calendario'));
+    vi.mocked(gerarBriefingDoCiclo).mockResolvedValue({ prioridades: 2 });
+    await expect(executarExtrasPosFinalize(BASE)).resolves.toBeUndefined();
+    expect(gerarCalendarioDoCiclo).toHaveBeenCalled();
+    expect(gerarBriefingDoCiclo).toHaveBeenCalled(); // rodou mesmo com o passo 3 explodindo
   });
 });
