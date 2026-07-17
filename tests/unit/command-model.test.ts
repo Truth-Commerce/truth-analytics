@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { buildCommands } from '@/components/command-model';
 
 describe('buildCommands', () => {
-  it('client: navegação completa (Estoque, Kits e Plano de Ação inclusos) + ações (comparar incluso)', () => {
+  it('client: navegação completa (Estoque, Kits, Calendário e Plano de Ação inclusos) + ações (comparar incluso)', () => {
     const cmds = buildCommands('client');
     expect(cmds.map((c) => c.id)).toEqual([
       'nav-dashboard',
       'nav-conexoes',
       'nav-estoque',
       'nav-kits',
+      'nav-calendario',
       'nav-configuracoes',
       'nav-plano-de-acao',
       'acao-gerar-relatorio',
@@ -25,6 +26,12 @@ describe('buildCommands', () => {
       label: 'Ir para Kits sugeridos',
       href: '/dashboard/kits',
       group: 'Navegação',
+    });
+    expect(cmds.find((c) => c.id === 'nav-calendario')).toMatchObject({
+      label: 'Ir para o Calendário comercial',
+      href: '/dashboard/calendario',
+      group: 'Navegação',
+      keywords: 'datas sazonal black friday natal',
     });
     expect(cmds.find((c) => c.id === 'nav-configuracoes')).toMatchObject({
       label: 'Ir para Configurações',

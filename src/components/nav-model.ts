@@ -21,6 +21,7 @@ export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
     { href: '/conexoes', label: 'Conexões' },
     { href: '/dashboard/estoque', label: 'Estoque' },
     { href: '/dashboard/kits', label: 'Kits' },
+    { href: '/dashboard/calendario', label: 'Calendário' },
     { href: '/dashboard/plano-de-acao', label: 'Plano de Ação', badge: true },
     { href: '/configuracoes', label: 'Configurações' },
   ];
