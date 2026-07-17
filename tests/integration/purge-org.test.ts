@@ -6,6 +6,7 @@ import postgres from 'postgres';
 import {
   alerts,
   auditLog,
+  calendarSuggestions,
   connections,
   kitSuggestions,
   loginAttempts,
@@ -79,6 +80,12 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
       titulo: `${NOME}-kit`,
       payload: {},
     });
+    await tdb.insert(calendarSuggestions).values({
+      org_id: orgId,
+      report_id: report.id,
+      titulo: `${NOME}-calendario`,
+      payload: {},
+    });
     await tdb.insert(orders).values({
       org_id: orgId,
       bling_order_id: `${RUN}`,
@@ -147,6 +154,7 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
       task_activities: 1,
       tasks: 1,
       kit_suggestions: 1,
+      calendar_suggestions: 1,
       alerts: 1,
       market_snapshots: 1,
       reports: 1,
