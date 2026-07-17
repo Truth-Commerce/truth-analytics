@@ -6,6 +6,7 @@ import {
   filaAtencaoHoje,
   motivoEhConexao,
   ordenarPorRisco,
+  orgsQuePrecisamAtencao,
   top3Motivos,
 } from '@/modules/analista/carteira-view-model';
 import type { RiscoOrg } from '@/modules/analista/score-risco';
@@ -57,6 +58,32 @@ describe('ordenarPorRisco — pura, sem I/O', () => {
     ordenarPorRisco(resumos);
 
     expect(resumos).toEqual(original);
+  });
+});
+
+describe('orgsQuePrecisamAtencao — pura', () => {
+  it('exclui orgs com nivel "ok" e mantém ordem por score desc entre as demais', () => {
+    const resumos = [
+      org({ orgId: 'a', orgName: 'Alfa', risco: risco(10, 'ok') }),
+      org({ orgId: 'b', orgName: 'Beta', risco: risco(60, 'critico') }),
+      org({ orgId: 'c', orgName: 'Gama', risco: risco(30, 'atencao') }),
+      org({ orgId: 'd', orgName: 'Delta', risco: risco(90, 'ok') }),
+    ];
+
+    expect(orgsQuePrecisamAtencao(resumos).map((r) => r.orgId)).toEqual(['b', 'c']);
+  });
+
+  it('carteira toda "ok" → []', () => {
+    const resumos = [
+      org({ orgId: 'a', risco: risco(10, 'ok') }),
+      org({ orgId: 'b', risco: risco(90, 'ok') }),
+    ];
+
+    expect(orgsQuePrecisamAtencao(resumos)).toEqual([]);
+  });
+
+  it('carteira vazia → []', () => {
+    expect(orgsQuePrecisamAtencao([])).toEqual([]);
   });
 });
 
@@ -120,7 +147,8 @@ describe('filaAtencaoHoje — pura, integra ordenação + top-3 + flag de conex�
 
     const fila = filaAtencaoHoje(resumos);
 
-    expect(fila.map((r) => r.orgId)).toEqual(['b', 'c', 'a']);
+    // Org A é 'ok' — não entra na fila "Atenção hoje".
+    expect(fila.map((r) => r.orgId)).toEqual(['b', 'c']);
 
     expect(fila[0]).toEqual({
       orgId: 'b',
@@ -134,7 +162,24 @@ describe('filaAtencaoHoje — pura, integra ordenação + top-3 + flag de conex�
 
     expect(fila[1].mostrarLinkConexoes).toBe(false);
     expect(fila[1].motivosTop3).toEqual(['Meta em risco']);
-    expect(fila[2].mostrarLinkConexoes).toBe(false);
+  });
+
+  it('exclui orgs com nivel "ok" mesmo quando têm o maior score', () => {
+    const resumos: OrgResumo[] = [
+      org({ orgId: 'a', orgName: 'Org A', risco: risco(95, 'ok', ['Meta em risco']) }),
+      org({ orgId: 'b', orgName: 'Org B', risco: risco(30, 'atencao', ['Meta em risco']) }),
+    ];
+
+    expect(filaAtencaoHoje(resumos).map((r) => r.orgId)).toEqual(['b']);
+  });
+
+  it('carteira toda "ok" → fila vazia', () => {
+    const resumos: OrgResumo[] = [
+      org({ orgId: 'a', risco: risco(10, 'ok') }),
+      org({ orgId: 'b', risco: risco(90, 'ok') }),
+    ];
+
+    expect(filaAtencaoHoje(resumos)).toEqual([]);
   });
 
   it('carteira vazia → fila vazia', () => {

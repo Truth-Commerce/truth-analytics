@@ -15,6 +15,15 @@ export function ordenarPorRisco(resumos: OrgResumo[]): OrgResumo[] {
   );
 }
 
+/**
+ * Orgs que precisam de atenção (`risco.nivel !== 'ok'`), ordenadas por
+ * `risco.score` desc (mesmo critério de `ordenarPorRisco`). Fonte de dados
+ * da fila "Atenção hoje" — orgs 'ok' não entram na fila.
+ */
+export function orgsQuePrecisamAtencao(resumos: OrgResumo[]): OrgResumo[] {
+  return ordenarPorRisco(resumos).filter((r) => r.risco.nivel !== 'ok');
+}
+
 /** Top-3 motivos — `calcularRisco` (T2) já devolve `motivos` ordenados por peso desc. */
 export function top3Motivos(motivos: string[]): string[] {
   return motivos.slice(0, TOP_MOTIVOS);
@@ -58,13 +67,14 @@ export type FilaAtencaoRow = {
 };
 
 /**
- * Monta a fila "Atenção hoje" do command center: todas as orgs da carteira
- * (escopo já resolvido por `carteiraResumo`, nunca por `access.orgId`),
+ * Monta a fila "Atenção hoje" do command center: só as orgs da carteira
+ * (escopo já resolvido por `carteiraResumo`, nunca por `access.orgId`) que
+ * precisam de atenção (`risco.nivel !== 'ok'`, via `orgsQuePrecisamAtencao`),
  * ordenadas por risco desc, com os top-3 motivos e a flag do link de
  * Conexões quando o motivo de maior risco é de token.
  */
 export function filaAtencaoHoje(resumos: OrgResumo[]): FilaAtencaoRow[] {
-  return ordenarPorRisco(resumos).map((r) => ({
+  return orgsQuePrecisamAtencao(resumos).map((r) => ({
     orgId: r.orgId,
     orgName: r.orgName,
     nicho: r.nicho,
