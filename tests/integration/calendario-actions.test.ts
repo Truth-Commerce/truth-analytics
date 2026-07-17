@@ -81,7 +81,7 @@ describe.skipIf(!url)('sugestão do calendário → task — integração', () =
 
     // 2ª chamada: sugestão já processada → ok:false e NENHUMA task nova.
     const r2 = await sugestaoParaTask(orgId, sugestaoId);
-    expect(r2.ok).toBe(false);
+    expect(r2).toEqual({ ok: false, erro: 'sugestao_ja_processada' });
     const todas = await db.select().from(tasks).where(eq(tasks.org_id, orgId));
     expect(todas).toHaveLength(1);
   });

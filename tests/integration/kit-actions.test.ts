@@ -82,7 +82,7 @@ describe.skipIf(!url)('kit → task — integração', () => {
 
     // 2ª chamada: kit já processado → ok:false e NENHUMA task nova.
     const r2 = await kitParaTask(orgId, kitId);
-    expect(r2.ok).toBe(false);
+    expect(r2).toEqual({ ok: false, erro: 'kit_ja_processado' });
     const todas = await db.select().from(tasks).where(eq(tasks.org_id, orgId));
     expect(todas).toHaveLength(1);
   });
