@@ -86,4 +86,47 @@ describe.skipIf(!url)('kit → task — integração', () => {
     const todas = await db.select().from(tasks).where(eq(tasks.org_id, orgId));
     expect(todas).toHaveLength(1);
   });
+
+  it('corrida: kit reservado (virou_task sem task_id) — kitParaTask não cria task', async () => {
+    const [rep] = await db
+      .insert(reports)
+      .values({
+        org_id: orgId,
+        status: 'done',
+        periodo_inicio: new Date('2026-07-01'),
+        periodo_fim: new Date('2026-07-08'),
+      })
+      .returning({ id: reports.id });
+    const [kit] = await db
+      .insert(kitSuggestions)
+      .values({
+        org_id: orgId,
+        report_id: rep!.id,
+        titulo: 'Kit Corrida',
+        payload: {
+          itens: [
+            { sku: 'C', nome: 'Xícara' },
+            { sku: 'D', nome: 'Bule' },
+          ],
+          precoSugerido: 59.9,
+          argumento: 'Vendem juntos.',
+          canalRecomendado: 'Shopee',
+          evidencia: { pedidosJuntos: 3 },
+        },
+      })
+      .returning({ id: kitSuggestions.id });
+    const corridaKitId = kit!.id;
+
+    // Simula o estado "reservado, ainda criando a task" de um caller concorrente.
+    await db
+      .update(kitSuggestions)
+      .set({ status: 'virou_task', task_id: null })
+      .where(eq(kitSuggestions.id, corridaKitId));
+
+    const r = await kitParaTask(orgId, corridaKitId);
+    expect(r).toEqual({ ok: false, erro: 'kit_ja_processado' });
+
+    const todas = await db.select().from(tasks).where(eq(tasks.report_id, rep!.id));
+    expect(todas).toHaveLength(0);
+  });
 });

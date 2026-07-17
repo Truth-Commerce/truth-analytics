@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { kitSuggestions, reports, type KitSuggestionRecord } from '@/db/schema';
@@ -71,6 +71,43 @@ export async function marcarKitStatus(
     )
     .returning({ id: kitSuggestions.id });
   return rows.length > 0;
+}
+
+/**
+ * Grava o task_id na reserva já feita por marcarKitStatus (kit já está em
+ * 'virou_task' sem task_id). Escopado por org + status para nunca sobrescrever
+ * um kit que não seja a reserva em curso.
+ */
+export async function setKitTaskId(orgId: string, kitId: string, taskId: string): Promise<void> {
+  await db
+    .update(kitSuggestions)
+    .set({ task_id: taskId })
+    .where(
+      and(
+        eq(kitSuggestions.id, kitId),
+        eq(kitSuggestions.org_id, orgId),
+        eq(kitSuggestions.status, 'virou_task'),
+      ),
+    );
+}
+
+/**
+ * Compensa uma reserva ('virou_task' sem task_id) quando createTask falha
+ * após marcarKitStatus reservar o kit. `task_id IS NULL` garante que nunca
+ * desfaz um kit que já tem tarefa vinculada.
+ */
+export async function reverterKitParaSugerido(orgId: string, kitId: string): Promise<void> {
+  await db
+    .update(kitSuggestions)
+    .set({ status: 'sugerido' })
+    .where(
+      and(
+        eq(kitSuggestions.id, kitId),
+        eq(kitSuggestions.org_id, orgId),
+        eq(kitSuggestions.status, 'virou_task'),
+        isNull(kitSuggestions.task_id),
+      ),
+    );
 }
 
 export async function setKitsIaUsage(reportId: string, usage: unknown): Promise<void> {
