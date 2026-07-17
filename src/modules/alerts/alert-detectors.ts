@@ -1,15 +1,17 @@
 import { formatBRL, formatData } from '@/lib/format';
+import type { CoberturaProduto } from '@/modules/estoque/stock-coverage';
 import type { Metricas } from '@/modules/pipeline/contracts';
 import {
   CONCORRENTE_CRITICO_PCT,
   CONCORRENTE_MARGEM_MINIMA,
+  ESTOQUE_MAX_ALERTAS,
   PRODUTO_PARADO_DIAS,
   QUEDA_BASE_MINIMA_SEMANAL,
   QUEDA_VENDAS_CRITICO,
   QUEDA_VENDAS_LIMIAR,
 } from './alerts.constants';
 
-export type TipoAlerta = 'queda_vendas' | 'concorrente_preco' | 'produto_parado';
+export type TipoAlerta = 'queda_vendas' | 'concorrente_preco' | 'produto_parado' | 'estoque_critico';
 export type SeveridadeAlerta = 'atencao' | 'critico';
 
 export type AlertaCandidato = {
@@ -104,6 +106,37 @@ export function detectarProdutoParado(
     });
   }
   return out;
+}
+
+/** (d) Estoque crítico: cobertura < ESTOQUE_CRITICO_DIAS no ritmo de venda atual. Pura. */
+export function detectarEstoqueCritico(produtos: CoberturaProduto[]): AlertaCandidato[] {
+  return produtos
+    .filter((p) => p.estado === 'critico')
+    // Teto de rajada (ex.: primeira sincronização de um catálogo grande) — a
+    // entrada já vem ordenada por prioridade/vendas via montarCobertura.
+    .slice(0, ESTOQUE_MAX_ALERTAS)
+    .map((p) => {
+      const coberturaDias = p.coberturaDias ?? 0;
+      const titulo =
+        p.saldo <= 0
+          ? `Estoque de ${p.nome} esgotado — e o produto segue vendendo`
+          : coberturaDias <= 0
+            ? `Estoque de ${p.nome} acaba em menos de 1 dia`
+            : `Estoque de ${p.nome} acaba em ~${coberturaDias} dia(s)`;
+      return {
+        tipo: 'estoque_critico' as const,
+        severidade: 'critico' as const,
+        titulo: titulo.slice(0, 255),
+        corpo: `${p.nome} (${p.sku}) tem ${p.saldo} un. em estoque e vendeu ${p.vendas30d} un. nos últimos 30 dias — no ritmo atual a cobertura é de ${coberturaDias} dia(s). Reponha para não perder vendas.`,
+        dados: {
+          sku: p.sku,
+          saldo: p.saldo,
+          vendas30d: p.vendas30d,
+          coberturaDias,
+        },
+        chaveDedup: `estoque_critico:${p.sku}`,
+      };
+    });
 }
 
 /** Dedup puro: descarta candidato cujo tipo+chaveDedup já tem alerta ABERTO. */

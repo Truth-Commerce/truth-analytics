@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
 import {
   detectarConcorrenteAbaixo,
+  detectarEstoqueCritico,
   detectarProdutoParado,
   detectarQuedaVendas,
   filtrarNaoDuplicados,
@@ -23,6 +24,8 @@ import {
   JANELA_RELATORIO_RECENTE_DIAS,
   PRODUTO_HISTORICO_DIAS,
 } from '@/modules/alerts/alerts.constants';
+import { montarCobertura } from '@/modules/estoque/stock-coverage';
+import { getStockRows, getVendas30dPorSku } from '@/modules/estoque/stock.repository';
 import { sendAlertasDigestEmail } from '@/modules/notifications/email';
 import { notify } from '@/modules/notifications/notification.repository';
 import { getOrgPrimaryUser } from '@/modules/notifications/recipients';
@@ -66,13 +69,15 @@ export async function GET(req: Request): Promise<Response> {
     try {
       const agoraEfetivo = await getUltimaDataPedido(orgId);
 
-      const [semanais, posicao, parado, dedupBase] = await Promise.all([
+      const [semanais, posicao, parado, dedupBase, stockRows, vendas30d] = await Promise.all([
         agoraEfetivo ? getTotaisSemanais(orgId, agoraEfetivo) : Promise.resolve(null),
         getPosicaoPrecoUltimoDone(orgId),
         agoraEfetivo
           ? getUltimaVendaPorSku(orgId, PRODUTO_HISTORICO_DIAS, agoraEfetivo)
           : Promise.resolve(null),
         listAlertasParaDedup(orgId, agora),
+        getStockRows(orgId),
+        agoraEfetivo ? getVendas30dPorSku(orgId, agoraEfetivo) : Promise.resolve(new Map<string, number>()),
       ]);
 
       const queda = semanais ? detectarQuedaVendas(semanais) : null;
@@ -81,6 +86,9 @@ export async function GET(req: Request): Promise<Response> {
         ...detectarConcorrenteAbaixo(posicao),
         ...(parado && agoraEfetivo
           ? detectarProdutoParado(parado.produtos, parado.ultimaVendaPorSku, agoraEfetivo)
+          : []),
+        ...(agoraEfetivo && stockRows.length > 0
+          ? detectarEstoqueCritico(montarCobertura(stockRows, vendas30d))
           : []),
       ];
       const novos = filtrarNaoDuplicados(candidatos, dedupBase);

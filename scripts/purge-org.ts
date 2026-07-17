@@ -13,6 +13,7 @@ import {
   orders,
   organizations,
   passwordResetTokens,
+  productStock,
   reports,
   taskActivities,
   taskComments,
@@ -82,6 +83,9 @@ export async function purgeOrg(
     tracked_products: await n(
       dbc.select({ n: count() }).from(trackedProducts).where(eq(trackedProducts.org_id, input.orgId)),
     ),
+    product_stock: await n(
+      dbc.select({ n: count() }).from(productStock).where(eq(productStock.org_id, input.orgId)),
+    ),
     connections: await n(
       dbc.select({ n: count() }).from(connections).where(eq(connections.org_id, input.orgId)),
     ),
@@ -122,6 +126,7 @@ export async function purgeOrg(
     await tx.delete(reports).where(eq(reports.org_id, input.orgId));
     await tx.delete(orders).where(eq(orders.org_id, input.orgId));
     await tx.delete(trackedProducts).where(eq(trackedProducts.org_id, input.orgId));
+    await tx.delete(productStock).where(eq(productStock.org_id, input.orgId));
     await tx.delete(connections).where(eq(connections.org_id, input.orgId));
     if (userIds.length > 0) {
       await tx.delete(passwordResetTokens).where(inArray(passwordResetTokens.user_id, userIds));
