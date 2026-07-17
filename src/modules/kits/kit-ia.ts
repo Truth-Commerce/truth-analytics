@@ -110,13 +110,15 @@ type RespostaClaude = {
 
 /**
  * 1 chamada por ciclo (+ 1 retentativa idêntica se o parse falhar); falha
- * graciosa (null) em refusal/truncado/parse-inválido-após-retentativa — o
+ * graciosa (`kits: null`) em refusal/truncado/parse-inválido-após-retentativa
+ * — mas `usage` acumulado é sempre retornado (nunca descartado), mesmo
+ * quando os kits falham, para a governança de custo não perder gasto real. O
  * chamador loga e o pipeline segue intacto (kits são um "bônus", nunca
  * bloqueiam o relatório principal).
  */
 export async function gerarKitsComIA(
   input: KitIaInput,
-): Promise<{ kits: KitIa[]; usage: IaUsage } | null> {
+): Promise<{ kits: KitIa[] | null; usage: IaUsage }> {
   const { system, user } = buildKitMessages(input);
   const usage: IaUsage = {
     input_tokens: 0,
@@ -145,17 +147,17 @@ export async function gerarKitsComIA(
     response = (await getAnthropic().messages.create(callParams)) as RespostaClaude;
   } catch (err) {
     logger.warn('kits_ia.falha', { motivo: 'erro_rede', erro: err instanceof Error ? err.message : String(err) });
-    return null;
+    return { kits: null, usage };
   }
   acumularUsage(usage, response.usage);
 
   if (response.stop_reason === 'refusal') {
     logger.warn('kits_ia.falha', { motivo: 'refusal' });
-    return null;
+    return { kits: null, usage };
   }
   if (response.stop_reason === 'max_tokens') {
     logger.warn('kits_ia.falha', { motivo: 'max_tokens', maxTokens: MAX_TOKENS_KITS });
-    return null;
+    return { kits: null, usage };
   }
 
   const text1 = extractTextBlock(response.content);
@@ -174,17 +176,17 @@ export async function gerarKitsComIA(
     response2 = (await getAnthropic().messages.create(callParams)) as RespostaClaude;
   } catch (err) {
     logger.warn('kits_ia.falha', { motivo: 'erro_rede_retentativa', erro: err instanceof Error ? err.message : String(err) });
-    return null;
+    return { kits: null, usage };
   }
   acumularUsage(usage, response2.usage);
 
   if (response2.stop_reason === 'refusal') {
     logger.warn('kits_ia.falha', { motivo: 'refusal_retentativa' });
-    return null;
+    return { kits: null, usage };
   }
   if (response2.stop_reason === 'max_tokens') {
     logger.warn('kits_ia.falha', { motivo: 'max_tokens_retentativa', maxTokens: MAX_TOKENS_KITS });
-    return null;
+    return { kits: null, usage };
   }
 
   const text2 = extractTextBlock(response2.content);
@@ -197,10 +199,10 @@ export async function gerarKitsComIA(
         motivo: 'parse_invalido',
         erro: (err instanceof Error ? err.message : String(err)).slice(0, 500),
       });
-      return null;
+      return { kits: null, usage };
     }
   }
 
   logger.warn('kits_ia.falha', { motivo: 'sem_bloco_texto' });
-  return null;
+  return { kits: null, usage };
 }

@@ -57,11 +57,10 @@ export async function marcarKitStatus(
   orgId: string,
   kitId: string,
   status: 'virou_task' | 'descartado',
-  taskId?: string,
 ): Promise<boolean> {
   const rows = await db
     .update(kitSuggestions)
-    .set({ status, ...(taskId ? { task_id: taskId } : {}) })
+    .set({ status })
     .where(
       and(
         eq(kitSuggestions.id, kitId),
@@ -110,6 +109,9 @@ export async function reverterKitParaSugerido(orgId: string, kitId: string): Pro
     );
 }
 
-export async function setKitsIaUsage(reportId: string, usage: unknown): Promise<void> {
-  await db.update(reports).set({ kits_ia_usage: usage }).where(eq(reports.id, reportId));
+export async function setKitsIaUsage(orgId: string, reportId: string, usage: unknown): Promise<void> {
+  await db
+    .update(reports)
+    .set({ kits_ia_usage: usage })
+    .where(and(eq(reports.id, reportId), eq(reports.org_id, orgId)));
 }

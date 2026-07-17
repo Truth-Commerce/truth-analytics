@@ -20,9 +20,8 @@ export type GerarKitsInput = {
 };
 
 /**
- * Gera os kits do ciclo — best-effort: retorna null (sem kits) em qualquer
- * caminho sem sinal/IA; NUNCA lança (o hook do orquestrador ainda embrulha em
- * try/catch por segurança).
+ * Gera os kits do ciclo — best-effort: caminhos sem sinal/IA retornam null;
+ * erros de DB propagam e são capturados pelo try/catch do orquestrador.
  */
 export async function gerarKitsDoCiclo(input: GerarKitsInput): Promise<{ kits: number } | null> {
   const ancora = await getUltimaDataPedido(input.orgId);
@@ -45,10 +44,16 @@ export async function gerarKitsDoCiclo(input: GerarKitsInput): Promise<{ kits: n
     candidatos,
     ticketMedio: input.ticketMedio,
   });
-  if (!resultado || resultado.kits.length === 0) return null;
+
+  // Custo é real mesmo quando os kits falham (refusal/truncado/parse) — grava
+  // o usage sempre que houve ao menos 1 chamada, para a governança de custo
+  // nunca descartar gasto já efetuado.
+  if (resultado.usage.tentativas > 0) {
+    await setKitsIaUsage(input.orgId, input.reportId, resultado.usage);
+  }
+  if (!resultado.kits || resultado.kits.length === 0) return null;
 
   const n = await insertKits(input.orgId, input.reportId, resultado.kits, candidatos);
-  await setKitsIaUsage(input.reportId, resultado.usage);
   logger.info('kits.gerados', { orgId: input.orgId, reportId: input.reportId, kits: n });
   return { kits: n };
 }

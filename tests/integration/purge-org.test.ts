@@ -7,6 +7,7 @@ import {
   alerts,
   auditLog,
   connections,
+  kitSuggestions,
   loginAttempts,
   marketSnapshots,
   notifications,
@@ -71,6 +72,12 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
       fonte: 'ml_publico',
       keyword: 'kw',
       dados: {},
+    });
+    await tdb.insert(kitSuggestions).values({
+      org_id: orgId,
+      report_id: report.id,
+      titulo: `${NOME}-kit`,
+      payload: {},
     });
     await tdb.insert(orders).values({
       org_id: orgId,
@@ -139,6 +146,7 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
       task_comments: 1,
       task_activities: 1,
       tasks: 1,
+      kit_suggestions: 1,
       alerts: 1,
       market_snapshots: 1,
       reports: 1,

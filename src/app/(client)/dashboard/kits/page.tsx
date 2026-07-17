@@ -38,8 +38,8 @@ export default async function KitsPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <ul className="text-sm text-muted">
-                  {k.itens.map((i) => (
-                    <li key={i.sku}>
+                  {k.itens.map((i, idx) => (
+                    <li key={`${i.sku}-${idx}`}>
                       {i.nome} <span className="font-mono text-xs">{i.sku}</span>
                     </li>
                   ))}
