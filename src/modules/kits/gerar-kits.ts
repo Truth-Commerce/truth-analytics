@@ -21,7 +21,8 @@ export type GerarKitsInput = {
 
 /**
  * Gera os kits do ciclo — best-effort: caminhos sem sinal/IA retornam null;
- * erros de DB propagam e são capturados pelo try/catch do orquestrador.
+ * erros de DB propagam e são capturados pelo try/catch do módulo de extras
+ * pós-finalize (pos-finalize-extras.ts).
  */
 export async function gerarKitsDoCiclo(input: GerarKitsInput): Promise<{ kits: number } | null> {
   const ancora = await getUltimaDataPedido(input.orgId);
