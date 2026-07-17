@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { getUltimaDataPedido } from '@/modules/alerts/alert-data.repository';
 import { gerarCalendarioComIA } from '@/modules/calendario/calendario-ia';
 import { insertSugestoes, setCalendarIaUsage } from '@/modules/calendario/calendario.repository';
+import { inicioDoDiaUtc } from '@/modules/calendario/calendario-view-model';
 import type { RawOrderItem } from '@/modules/providers/types';
 
 /** Janela de evidência (dias) — mesma janela usada para as datas comerciais. */
@@ -30,7 +31,7 @@ export type GerarCalendarioInput = {
 export async function gerarCalendarioDoCiclo(
   input: GerarCalendarioInput,
 ): Promise<{ sugestoes: number } | null> {
-  const datas = proximasDatas(new Date(), JANELA_CALENDARIO_DIAS).map((d) => ({
+  const datas = proximasDatas(inicioDoDiaUtc(new Date()), JANELA_CALENDARIO_DIAS).map((d) => ({
     nome: d.nome,
     dataISO: d.data.toISOString().slice(0, 10),
     dica: d.dica,
