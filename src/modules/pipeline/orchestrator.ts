@@ -4,7 +4,6 @@ import { db } from '@/db/client';
 import { reports } from '@/db/schema';
 import { createLogger } from '@/lib/logger';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
-import { gerarKitsDoCiclo } from '@/modules/kits/gerar-kits';
 import { sendPipelineFailedEmail } from '@/modules/notifications/email';
 import { getAdminAlertEmail, getOrgPrimaryEmail } from '@/modules/notifications/recipients';
 import { collectBlingOrders } from '@/modules/pipeline/steps/collect-bling';
@@ -13,6 +12,7 @@ import { computeMetrics } from '@/modules/pipeline/steps/compute-metrics';
 import { analyzeWithIA } from '@/modules/pipeline/steps/analyze-ia';
 import { buildAnalysisContext } from '@/modules/pipeline/steps/analysis-context';
 import { finalize } from '@/modules/pipeline/steps/finalize';
+import { executarExtrasPosFinalize } from '@/modules/pipeline/steps/pos-finalize-extras';
 import type { ReportEtapa } from '@/modules/reports/report.types';
 
 /** Limita o erro persistido a 2000 chars para legibilidade no painel. */
@@ -104,20 +104,16 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     }
     await finalize({ reportId, orgId, metricas, analise, plano, periodo, clientEmail, iaUsage });
 
-    // H2: kits do ciclo — best-effort, NUNCA afeta o resultado do pipeline.
-    try {
-      await gerarKitsDoCiclo({
-        orgId,
-        reportId,
-        orgName,
-        nicho,
-        ticketMedio: metricas.ticketMedio,
-      });
-    } catch (err) {
-      log.warn('kits.geracao_falhou', {
-        erro: err instanceof Error ? err.message : String(err),
-      });
-    }
+    // H2/H3: extras pós-finalize (nicho → kits → calendário) — best-effort,
+    // NUNCA afetam o resultado do pipeline (módulo nunca lança).
+    await executarExtrasPosFinalize({
+      orgId,
+      reportId,
+      orgName,
+      nicho,
+      ticketMedio: metricas.ticketMedio,
+      topProdutos: metricas.topProdutos.map((p) => p.nome),
+    });
 
     log.info('pipeline concluído');
     return { reportId, status: 'done' };
