@@ -12,7 +12,10 @@ export type CommandItem = {
  */
 export function buildCommands(variant: 'client' | 'admin' | 'analista'): CommandItem[] {
   if (variant === 'analista') {
-    return [{ id: 'nav-analista', label: 'Ir para a Carteira', group: 'Navegação', href: '/analista', keywords: 'clientes tasks kanban revisão' }];
+    return [
+      { id: 'nav-analista', label: 'Ir para a Carteira', group: 'Navegação', href: '/analista', keywords: 'clientes tasks kanban revisão' },
+      { id: 'nav-comparativo', label: 'Ir para o Comparativo', group: 'Navegação', href: '/analista/comparativo', keywords: 'carteira benchmark ranking clientes' },
+    ];
   }
 
   if (variant === 'admin') {
@@ -20,6 +23,9 @@ export function buildCommands(variant: 'client' | 'admin' | 'analista'): Command
       { id: 'nav-admin', label: 'Ir para Clientes', group: 'Navegação', href: '/admin', keywords: 'clientes orgs' },
       { id: 'nav-playbooks', label: 'Ir para Playbooks', group: 'Navegação', href: '/admin/playbooks', keywords: 'templates tasks' },
       { id: 'nav-consultoria', label: 'Ir para Consultoria', group: 'Navegação', href: '/admin/consultoria', keywords: 'métricas analistas' },
+      { id: 'nav-performance', label: 'Ir para Performance', group: 'Navegação', href: '/admin/performance', keywords: 'visão global clientes métricas' },
+      { id: 'nav-operacoes', label: 'Ir para Operações', group: 'Navegação', href: '/admin/operacoes', keywords: 'crons heartbeat filas reprocessar' },
+      { id: 'nav-usuarios', label: 'Ir para Usuários', group: 'Navegação', href: '/admin/usuarios', keywords: 'contas equipe carteira transferir' },
     ];
   }
 

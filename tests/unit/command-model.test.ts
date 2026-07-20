@@ -50,16 +50,24 @@ describe('buildCommands', () => {
     });
   });
 
-  it('admin: só navegação do papel admin (sem rotas nem ações de cliente)', () => {
+  it('admin: só navegação do papel admin (sem rotas nem ações de cliente), com Performance, Operações e Usuários (H4/T13)', () => {
     const cmds = buildCommands('admin');
-    expect(cmds.map((c) => c.id)).toEqual(['nav-admin', 'nav-playbooks', 'nav-consultoria']);
+    expect(cmds.map((c) => c.id)).toEqual([
+      'nav-admin',
+      'nav-playbooks',
+      'nav-consultoria',
+      'nav-performance',
+      'nav-operacoes',
+      'nav-usuarios',
+    ]);
     expect(cmds.every((c) => c.group === 'Navegação')).toBe(true);
   });
 
-  it('analista: só a navegação da carteira', () => {
+  it('analista: navegação da carteira e do comparativo (H4/T13)', () => {
     const cmds = buildCommands('analista');
     expect(cmds).toEqual([
       { id: 'nav-analista', label: 'Ir para a Carteira', group: 'Navegação', href: '/analista', keywords: 'clientes tasks kanban revisão' },
+      { id: 'nav-comparativo', label: 'Ir para o Comparativo', group: 'Navegação', href: '/analista/comparativo', keywords: 'carteira benchmark ranking clientes' },
     ]);
   });
 });
