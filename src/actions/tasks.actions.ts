@@ -11,6 +11,7 @@ import { logger } from '@/lib/logger';
 import { hojeBrt, isDataCalendarioValida } from '@/lib/timezone';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
+import { assertNaoImpersonando } from '@/modules/auth/require-active-org';
 import { requireSession } from '@/modules/auth/require-session';
 import type { UserAccess } from '@/modules/auth/user.types';
 import { CHECKLIST_UNCHECKED } from '@/modules/tasks/checklist-line';
@@ -69,6 +70,12 @@ const prazoDate = z
 async function resolveTaskContext(
   formData: FormData,
 ): Promise<{ access: UserAccess; orgId: string; ator: TaskAtor }> {
+  // Guard de impersonação — PRIMEIRA linha, antes de qualquer outra lógica.
+  // Este módulo resolve contexto via requireSession direto (não via
+  // requireActiveOrg), então é cego ao cookie de impersonação por padrão; ver
+  // comentário no topo de require-active-org.ts. Fecha C2 (mutação de task de
+  // cliente sob impersonação via orgId vindo do form).
+  await assertNaoImpersonando();
   const access = await requireSession();
   if (access.role === 'client') {
     if (access.orgStatus !== 'active') redirect('/aguardando');
@@ -629,6 +636,11 @@ export async function createTasksFromReportAction(
   _prev: TaskActionState & { criadas?: number },
   formData: FormData,
 ): Promise<TaskActionState & { criadas?: number }> {
+  // Guard de impersonação — PRIMEIRA linha. Esta action não passa por
+  // resolveTaskContext (bypassa requireActiveOrg de propósito, ver comentário
+  // acima), então precisa do mesmo guard explicitamente. Fecha C1 (admin
+  // impersonando cria tasks na org do cliente a partir do reportId sozinho).
+  await assertNaoImpersonando();
   const access = await requireSession();
   if (access.role === 'client' && access.orgStatus !== 'active') redirect('/aguardando');
 

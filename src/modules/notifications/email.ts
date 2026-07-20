@@ -1,5 +1,6 @@
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { buildPasswordResetUrl } from '@/modules/auth/password-reset.repository';
 import type { Plano } from '@/modules/auth/user.types';
 import {
   accountActivatedTemplate,
@@ -117,7 +118,7 @@ export async function sendBlingConnectionFailedEmail(to: string): Promise<void> 
  * Envia o link de redefinição de senha. Nunca lança.
  */
 export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
-  const link = `${serverEnv.APP_URL}/redefinir-senha/${token}`;
+  const link = buildPasswordResetUrl(token);
   const content = passwordResetTemplate(link);
   await sendEmail({ to, ...content });
 }

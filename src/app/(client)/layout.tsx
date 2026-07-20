@@ -1,6 +1,8 @@
 import { AppShell } from '@/components/app-shell';
+import { getImpersonationBanner } from '@/modules/auth/require-active-org';
 import { getSessionContext } from '@/modules/auth/session';
 import { countTasksAbertas } from '@/modules/tasks/task.repository';
+import { ImpersonationBanner } from './impersonation-banner';
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
   const access = await getSessionContext();
@@ -8,10 +10,16 @@ export default async function ClientLayout({ children }: { children: React.React
     access && access.role === 'client' && access.orgStatus === 'active'
       ? await countTasksAbertas(access.orgId)
       : 0;
+  // Cliente real: access.role é sempre 'client', getImpersonationBanner
+  // devolve null sem sequer olhar o cookie — 0 custo extra no caminho comum.
+  const impersonation = await getImpersonationBanner(access);
 
   return (
-    <AppShell variant="client" planoDeAcaoCount={planoDeAcaoCount}>
-      {children}
-    </AppShell>
+    <>
+      {impersonation ? <ImpersonationBanner orgName={impersonation.orgName} /> : null}
+      <AppShell variant="client" planoDeAcaoCount={planoDeAcaoCount}>
+        {children}
+      </AppShell>
+    </>
   );
 }

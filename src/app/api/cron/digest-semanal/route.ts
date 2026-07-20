@@ -1,5 +1,6 @@
 import { serverEnv } from '@/lib/env';
 import { secretsMatch } from '@/lib/secret-compare';
+import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 import { processarDigestSemanal } from '@/modules/tasks/digest-semanal';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ export async function GET(req: Request): Promise<Response> {
   if (!secretsMatch(req.headers.get('authorization'), `Bearer ${serverEnv.CRON_SECRET}`)) {
     return new Response('unauthorized', { status: 401 });
   }
-  const { orgs, enviados } = await processarDigestSemanal(new Date());
-  return Response.json({ orgs, enviados });
+  const resposta = await processarDigestSemanal(new Date());
+  await registrarHeartbeat('digest-semanal', true, resposta);
+  return Response.json(resposta);
 }

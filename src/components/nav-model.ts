@@ -11,10 +11,17 @@ export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
       // G3/T10: admin precisa de caminho até a fila de revisão do analista
       // (acesso a /analista permitido para admin_truth).
       { href: '/analista', label: 'Carteira' },
+      // H4/T13: painéis de operação e gestão.
+      { href: '/admin/performance', label: 'Performance' },
+      { href: '/admin/operacoes', label: 'Operações' },
+      { href: '/admin/usuarios', label: 'Usuários' },
     ];
   }
   if (variant === 'analista') {
-    return [{ href: '/analista', label: 'Carteira' }];
+    return [
+      { href: '/analista', label: 'Carteira' },
+      { href: '/analista/comparativo', label: 'Comparativo' },
+    ];
   }
   return [
     { href: '/dashboard', label: 'Dashboard' },

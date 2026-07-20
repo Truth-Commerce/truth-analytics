@@ -7,6 +7,7 @@ import type { AlertaCandidato } from '@/modules/alerts/alert-detectors';
 import {
   criarAlertas,
   listAlertasAbertos,
+  listAlertasTimeline,
   resolverAlerta,
 } from '@/modules/alerts/alert.repository';
 
@@ -103,5 +104,35 @@ describe.skipIf(!url)('alert.repository — integração multi-tenant', () => {
 
     expect(await resolverAlerta(alvo.id, orgAId)).toBe(true);
     expect(await resolverAlerta(alvo.id, orgAId)).toBe(false);
+  });
+
+  it('listAlertasTimeline: abertos primeiro, escopado por org, respeita o limite', async () => {
+    // Estado desta suite em orgA neste ponto: 'queda_vendas' resolvido, 'concorrente_preco:A' resolvido
+    // (pelos testes anteriores). Adiciona um 3º alerta aberto para provar a ordenação.
+    await criarAlertas(orgAId, [candidato({ chaveDedup: 'produto_parado:X', tipo: 'produto_parado', titulo: 'Parado X' })]);
+    await criarAlertas(orgBId, [candidato({ chaveDedup: 'produto_parado:B', tipo: 'produto_parado', titulo: 'Parado B (outra org)' })]);
+
+    const timeline = await listAlertasTimeline(orgAId, 20);
+
+    // Isolamento multi-tenant: nada da orgB aparece.
+    expect(timeline.map((a) => a.chaveDedup)).not.toContain('produto_parado:B');
+
+    // Abertos primeiro: o único alerta aberto de orgA é o primeiro da lista.
+    expect(timeline[0]!.chaveDedup).toBe('produto_parado:X');
+    expect(timeline[0]!.resolvido).toBe(false);
+    expect(timeline[0]!.resolvidoEm).toBeNull();
+
+    // Os demais (resolvidos) vêm depois, com resolvidoEm preenchido.
+    const resolvidos = timeline.slice(1);
+    expect(resolvidos.length).toBeGreaterThan(0);
+    for (const r of resolvidos) {
+      expect(r.resolvido).toBe(true);
+      expect(r.resolvidoEm).not.toBeNull();
+    }
+
+    // Limite respeitado.
+    const limitado = await listAlertasTimeline(orgAId, 1);
+    expect(limitado).toHaveLength(1);
+    expect(limitado[0]!.chaveDedup).toBe('produto_parado:X');
   });
 });

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
+import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 import { sendAutoGeracaoPausadaEmail } from '@/modules/notifications/email';
 import { getAdminAlertEmail } from '@/modules/notifications/recipients';
 import { enqueueReport } from '@/modules/pipeline/enqueue';
@@ -81,5 +82,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ elegiveis: elegiveis.length, pausadas, resultados });
+  const resposta = { elegiveis: elegiveis.length, pausadas, resultados };
+  await registrarHeartbeat('gerar-relatorios', true, resposta);
+  return NextResponse.json(resposta);
 }

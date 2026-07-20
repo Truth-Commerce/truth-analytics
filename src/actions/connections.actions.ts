@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { requireActiveOrg } from '@/modules/auth/require-active-org';
+import { requireActiveOrgParaMutacao } from '@/modules/auth/require-active-org';
 import { disconnectBling } from '@/modules/connections/connection.repository';
 import {
   addTrackedProduct,
@@ -18,7 +18,7 @@ export async function disconnectBlingAction(
   _prev: ConnState,
   _formData: FormData,
 ): Promise<ConnState> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   await disconnectBling(access.orgId);
   revalidatePath('/conexoes');
   return { ok: true };
@@ -28,7 +28,7 @@ export async function addTrackedProductAction(
   _prev: ConnState,
   formData: FormData,
 ): Promise<ConnState> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const nome = String(formData.get('nome') ?? '').trim();
   const sku = String(formData.get('sku') ?? '').trim() || null;
   const keywords = String(formData.get('keywords') ?? '')
@@ -59,7 +59,7 @@ export async function toggleTrackedProductAction(
   _prev: ConnState,
   formData: FormData,
 ): Promise<ConnState> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const id = String(formData.get('id') ?? '');
   const ativo = String(formData.get('ativo') ?? '') === 'true';
   if (!id) return { error: 'Produto inválido.' };
@@ -72,7 +72,7 @@ export async function removeTrackedProductAction(
   _prev: ConnState,
   formData: FormData,
 ): Promise<ConnState> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const id = String(formData.get('id') ?? '');
   if (!id) return { error: 'Produto inválido.' };
   await removeTrackedProduct({ orgId: access.orgId, id });
@@ -84,7 +84,7 @@ export async function toggleGeracaoAutomaticaAction(
   _prev: { error?: string; ok?: boolean },
   formData: FormData,
 ): Promise<{ error?: string; ok?: boolean }> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const ativa = formData.get('ativa') === 'true';
   await setGeracaoAutomatica(access.orgId, ativa);
   revalidatePath('/conexoes');

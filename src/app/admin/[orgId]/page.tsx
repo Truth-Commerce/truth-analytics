@@ -29,6 +29,7 @@ import { NichoForm } from './nicho-form';
 import { OrgUsers } from './org-users';
 import { ReportActions } from './report-actions';
 import { GenerateNow } from './generate-now';
+import { VerComoCliente } from './ver-como-cliente';
 
 const SAUDE_BADGE = {
   ok: { variant: 'success', label: 'Conectada' },
@@ -68,7 +69,16 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
         ← Clientes
       </Link>
 
-      <PageHeader eyebrow="Cliente" title={org.name} actions={<GenerateNow orgId={org.id} />}>
+      <PageHeader
+        eyebrow="Cliente"
+        title={org.name}
+        actions={
+          <div className="flex items-center gap-2">
+            {org.status === 'active' ? <VerComoCliente orgId={org.id} /> : null}
+            <GenerateNow orgId={org.id} />
+          </div>
+        }
+      >
         <Badge variant={org.status === 'active' ? 'success' : org.status === 'suspended' ? 'danger' : 'warn'}>
           {STATUS_ORG_LABEL[org.status]}
         </Badge>

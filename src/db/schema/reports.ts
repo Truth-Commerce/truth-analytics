@@ -29,6 +29,7 @@ export const reports = pgTable(
     ia_usage: jsonb('ia_usage'),
     kits_ia_usage: jsonb('kits_ia_usage'),
     calendar_ia_usage: jsonb('calendar_ia_usage'),
+    briefing_ia_usage: jsonb('briefing_ia_usage'),
     erro: text('erro'),
     created_at: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .defaultNow()

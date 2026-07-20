@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, or } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { alerts } from '@/db/schema';
@@ -13,6 +13,11 @@ export type AlertaAberto = {
   corpo: string;
   chaveDedup: string;
   createdAt: Date;
+};
+
+export type AlertaTimeline = AlertaAberto & {
+  resolvido: boolean;
+  resolvidoEm: Date | null;
 };
 
 /**
@@ -34,6 +39,31 @@ export async function listAlertasAbertos(orgId: string): Promise<AlertaAberto[]>
     corpo: r.corpo,
     chaveDedup: String((r.dados as Record<string, unknown>)?.chave_dedup ?? ''),
     createdAt: r.created_at,
+  }));
+}
+
+/**
+ * Linha do tempo de alertas de uma org: os `limite` mais recentes, ABERTOS
+ * primeiro (dentro de cada grupo, mais recente primeiro) — visão 360 do
+ * analista (H4 T6). Escopado por org_id.
+ */
+export async function listAlertasTimeline(orgId: string, limite = 20): Promise<AlertaTimeline[]> {
+  const rows = await db
+    .select()
+    .from(alerts)
+    .where(eq(alerts.org_id, orgId))
+    .orderBy(asc(alerts.resolvido), desc(alerts.created_at))
+    .limit(limite);
+  return rows.map((r) => ({
+    id: r.id,
+    tipo: r.tipo,
+    severidade: r.severidade,
+    titulo: r.titulo,
+    corpo: r.corpo,
+    chaveDedup: String((r.dados as Record<string, unknown>)?.chave_dedup ?? ''),
+    createdAt: r.created_at,
+    resolvido: r.resolvido,
+    resolvidoEm: r.resolvido_em,
   }));
 }
 

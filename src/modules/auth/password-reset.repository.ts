@@ -4,6 +4,7 @@ import { and, eq, gt, isNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { passwordResetTokens, users } from '@/db/schema';
+import { serverEnv } from '@/lib/env';
 import { hashPassword } from '@/modules/auth/password';
 import { getUserByEmail } from '@/modules/auth/user.repository';
 
@@ -11,6 +12,16 @@ const EXPIRACAO_MINUTOS = 60;
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Monta a URL pública do fluxo de redefinição a partir de um token em claro —
+ * fonte única de verdade do formato do link, reaproveitada tanto pelo e-mail
+ * de "esqueci minha senha" quanto pela geração manual do admin (H4 T11), que
+ * exibe o LINK para o admin copiar e NUNCA envia/mostra uma senha.
+ */
+export function buildPasswordResetUrl(token: string): string {
+  return `${serverEnv.APP_URL}/redefinir-senha/${token}`;
 }
 
 /**

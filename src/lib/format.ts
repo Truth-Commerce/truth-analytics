@@ -16,6 +16,16 @@ export function formatData(d: Date | string): string {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(date);
 }
 
+/** Data + hora (instante real) em America/Sao_Paulo — telas operacionais onde o horário importa (crons, auditoria). */
+export function formatDataHora(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d;
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 /** Dias-calendário codificados em UTC (fronteiras de período). */
 export function formatDataUtc(d: Date | string): string {
   const date = typeof d === 'string' ? new Date(d) : d;

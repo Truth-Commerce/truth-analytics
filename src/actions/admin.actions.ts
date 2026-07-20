@@ -2,13 +2,27 @@
 
 import { randomBytes } from 'node:crypto';
 
+import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { logger } from '@/lib/logger';
-import { setOrgAnalista } from '@/modules/analista/analista.repository';
+import { setOrgAnalista, transferCarteiraEmLote } from '@/modules/analista/analista.repository';
+import { buildPasswordResetUrl, createPasswordResetToken } from '@/modules/auth/password-reset.repository';
+import {
+  IMPERSONATION_COOKIE,
+  IMPERSONATION_TTL_MS,
+  assinarImpersonation,
+  verificarImpersonation,
+} from '@/modules/auth/impersonation';
 import { requireAdmin } from '@/modules/auth/require-admin';
-import { createOrgClientUser, normalizeEmail } from '@/modules/auth/user.repository';
+import {
+  createOrgClientUser,
+  createUserInOrg,
+  getUserWithOrgById,
+  normalizeEmail,
+} from '@/modules/auth/user.repository';
 import {
   activateOrganization,
   getOrgConnectionHealth,
@@ -133,6 +147,8 @@ export async function adminReprocessReportAction(
     return { error: 'Não foi possível disparar o pipeline. Tente novamente.' };
   }
   revalidatePath(`/admin/${res.orgId}`);
+  // A fila do centro de operações (H4 T10) também reprocessa relatórios failed daqui — revalida as duas telas.
+  revalidatePath('/admin/operacoes');
   return { ok: true };
 }
 
@@ -311,4 +327,213 @@ export async function adminCreateOrgUserAction(
   }
   revalidatePath(`/admin/${orgId}`);
   return { ok: true, email: normalizeEmail(parsed.data), senhaTemporaria };
+}
+
+// ---------------------------------------------------------------------------
+// Gestão de contas cross-org (H4 T11) — /admin/usuarios.
+// ---------------------------------------------------------------------------
+
+const CriarUsuarioCrossOrgSchema = z.object({
+  orgId: z.string().trim().min(1, 'Selecione uma organização.'),
+  email: z.string().trim().email('E-mail inválido.'),
+  // Só 'client' | 'analista' passam no zod — 'admin_truth' (ou qualquer outro
+  // valor arbitrário de FormData) já cai fora aqui. `createUserInOrg` repete a
+  // mesma checagem no repositório (defesa em profundidade: nenhum admin_truth
+  // é criável por este caminho mesmo que a validação da action seja driblada).
+  role: z.enum(['client', 'analista'], { errorMap: () => ({ message: 'Papel inválido.' }) }),
+});
+
+export type CriarUsuarioCrossOrgState = {
+  error?: string;
+  ok?: boolean;
+  email?: string;
+  senhaTemporaria?: string;
+};
+
+/**
+ * Cria um usuário em QUALQUER org (client ou analista) — /admin/usuarios.
+ * Mesmo modelo de segurança do `adminCreateOrgUserAction`: senha temporária
+ * gerada aqui, devolvida só no state (exibida uma vez), nunca em audit/log.
+ */
+export async function adminCreateUserAction(
+  _prev: CriarUsuarioCrossOrgState,
+  formData: FormData,
+): Promise<CriarUsuarioCrossOrgState> {
+  const admin = await requireAdmin();
+  const parsed = CriarUsuarioCrossOrgSchema.safeParse({
+    orgId: formData.get('orgId'),
+    email: formData.get('email'),
+    role: formData.get('role'),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
+  }
+  const { orgId, email, role } = parsed.data;
+
+  const org = await getOrganizationById(orgId);
+  if (!org) return { error: 'Organização inválida.' };
+
+  const senhaTemporaria = randomBytes(9).toString('base64url'); // 12 chars
+  try {
+    const { userId } = await createUserInOrg({ orgId, email, role, senha: senhaTemporaria });
+    await recordAudit({
+      orgId,
+      userId: admin.id,
+      acao: 'user.criado_admin',
+      detalhes: { email: normalizeEmail(email), novoUserId: userId, role },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'email_em_uso') {
+      return { error: 'Já existe uma conta com este e-mail.' };
+    }
+    if (e instanceof Error && e.message === 'limite_usuarios') {
+      return { error: 'Limite de usuários desta organização atingido (máx. 3).' };
+    }
+    if (e instanceof Error && e.message === 'role_invalida') {
+      return { error: 'Papel inválido.' };
+    }
+    throw e;
+  }
+  revalidatePath('/admin/usuarios');
+  return { ok: true, email: normalizeEmail(email), senhaTemporaria };
+}
+
+export type ResetLinkState = { error?: string; ok?: boolean; email?: string; link?: string };
+
+/**
+ * Gera o link de redefinição de senha (mesmo fluxo de "esqueci minha senha")
+ * para o admin copiar e repassar ao cliente. NUNCA mostra/gera uma senha
+ * diretamente — só o link de uso único (expira em 60min, ver
+ * password-reset.repository.ts).
+ */
+export async function adminGenerateResetLinkAction(
+  _prev: ResetLinkState,
+  formData: FormData,
+): Promise<ResetLinkState> {
+  const admin = await requireAdmin();
+  const userId = String(formData.get('userId') ?? '');
+  if (!userId) return { error: 'Usuário inválido.' };
+
+  const alvo = await getUserWithOrgById(userId);
+  if (!alvo) return { error: 'Usuário inválido.' };
+
+  const token = await createPasswordResetToken(alvo.email);
+  if (!token) return { error: 'Não foi possível gerar o link.' };
+
+  const link = buildPasswordResetUrl(token);
+
+  // Audit registra QUEM foi alvo, nunca o token/link em claro.
+  await recordAudit({
+    orgId: alvo.orgId,
+    userId: admin.id,
+    acao: 'user.reset_link_gerado_admin',
+    detalhes: { targetUserId: alvo.id },
+  });
+
+  return { ok: true, email: alvo.email, link };
+}
+
+export type TransferCarteiraState = { error?: string; ok?: boolean; count?: number };
+
+/**
+ * Transferência em lote da carteira: move TODAS as orgs do analista de
+ * origem para o de destino. Decisão de audit (ver comentário em
+ * `transferCarteiraEmLote`): 1 registro de audit por org, reaproveitando
+ * `setOrgAnalista` — não um único audit "em lote".
+ */
+export async function adminTransferCarteiraAction(
+  _prev: TransferCarteiraState,
+  formData: FormData,
+): Promise<TransferCarteiraState> {
+  const admin = await requireAdmin();
+  const origemAnalistaUserId = String(formData.get('origemAnalistaUserId') ?? '');
+  const destinoAnalistaUserId = String(formData.get('destinoAnalistaUserId') ?? '');
+  if (!origemAnalistaUserId || !destinoAnalistaUserId) {
+    return { error: 'Selecione o analista de origem e o de destino.' };
+  }
+  if (origemAnalistaUserId === destinoAnalistaUserId) {
+    return { error: 'Origem e destino precisam ser diferentes.' };
+  }
+
+  let orgIds: string[];
+  try {
+    ({ orgIds } = await transferCarteiraEmLote({
+      origemAnalistaUserId,
+      destinoAnalistaUserId,
+      actorUserId: admin.id,
+    }));
+  } catch (e) {
+    if (e instanceof Error && (e.message === 'analista_invalido' || e.message === 'origem_igual_destino')) {
+      return { error: 'Selecione analistas válidos e diferentes.' };
+    }
+    throw e;
+  }
+
+  revalidatePath('/admin/usuarios');
+  revalidatePath('/admin/performance');
+  revalidatePath('/admin');
+  return { ok: true, count: orgIds.length };
+}
+
+// ---------------------------------------------------------------------------
+// Impersonação ("ver como cliente" — Task 12 H4). Read-only por construção:
+// o cookie `ta_impersonate` só é lido dentro de requireActiveOrg (que nunca
+// escreve nada) — requireActiveOrgParaMutacao (usado por toda action de
+// mutação do cliente) rejeita qualquer chamada feita sob impersonação. Estas
+// duas actions são as ÚNICAS que escrevem o cookie.
+// ---------------------------------------------------------------------------
+
+/**
+ * Inicia a impersonação: só admin_truth, só para org cliente ATIVA. Grava um
+ * cookie httpOnly+secure assinado (30min) e redireciona pro dashboard do
+ * cliente — dali em diante requireActiveOrg devolve um UserAccess sintético
+ * (role 'client', orgId da org alvo) até o cookie vencer ou "Sair" ser clicado.
+ */
+export async function iniciarImpersonationAction(orgId: string): Promise<void> {
+  const admin = await requireAdmin();
+
+  const org = await getOrganizationById(orgId);
+  if (!org || org.status !== 'active') {
+    throw new Error('Só é possível ver como um cliente com a conta ativa.');
+  }
+
+  const valor = assinarImpersonation(org.id, admin.id, new Date());
+  cookies().set(IMPERSONATION_COOKIE, valor, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: Math.floor(IMPERSONATION_TTL_MS / 1000),
+  });
+
+  await recordAudit({
+    orgId: org.id,
+    userId: admin.id,
+    acao: 'admin.impersonation_iniciada',
+  });
+
+  redirect('/dashboard');
+}
+
+/**
+ * Encerra a impersonação em curso (chamado pelo botão "Sair" da faixa no
+ * layout do cliente) — apaga o cookie e volta pro admin. Segue exigindo
+ * requireAdmin: a sessão REAL nunca deixa de ser admin_truth durante a
+ * impersonação (o papel sintético é local a requireActiveOrg, não ao
+ * NextAuth), então esta action só é alcançável pelo admin dono da sessão.
+ */
+export async function encerrarImpersonationAction(): Promise<void> {
+  const admin = await requireAdmin();
+
+  const cookieValue = cookies().get(IMPERSONATION_COOKIE)?.value;
+  const verificado = cookieValue ? verificarImpersonation(cookieValue, new Date()) : null;
+  cookies().delete(IMPERSONATION_COOKIE);
+
+  await recordAudit({
+    orgId: verificado?.orgId ?? null,
+    userId: admin.id,
+    acao: 'admin.impersonation_encerrada',
+  });
+
+  redirect('/admin');
 }

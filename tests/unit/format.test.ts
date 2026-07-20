@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBRL, formatData, formatPeriodo } from '@/lib/format';
+import { formatBRL, formatData, formatDataHora, formatPeriodo } from '@/lib/format';
 
 describe('formatBRL', () => {
   it('formata valor positivo com separadores pt-BR', () => {
@@ -28,6 +28,18 @@ describe('formatData', () => {
     const result = formatData('2026-01-15T12:00:00Z');
     expect(result).toContain('2026');
     expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+  });
+});
+
+describe('formatDataHora', () => {
+  it('formata data + hora no padrão dd/mm/aaaa, hh:mm', () => {
+    const result = formatDataHora(new Date('2026-06-24T12:00:00Z'));
+    expect(result).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    expect(result).toMatch(/\d{2}:\d{2}/);
+  });
+
+  it('usa America/Sao_Paulo (12:00Z → 09:00 BRT)', () => {
+    expect(formatDataHora(new Date('2026-06-24T12:00:00.000Z'))).toContain('09:00');
   });
 });
 

@@ -62,6 +62,55 @@ export async function setOrgAnalista(input: {
   });
 }
 
+/**
+ * Transferência em lote da carteira (H4 T11 — /admin/usuarios): move TODAS as
+ * orgs hoje atribuídas a `origemAnalistaUserId` para `destinoAnalistaUserId`.
+ *
+ * Decisão de audit (anotada por pedido do brief): reaproveita `setOrgAnalista`
+ * num loop por org, em vez de um único registro de audit "em lote" com a
+ * lista de orgIds. Motivo — é o padrão JÁ EXISTENTE no resto do
+ * admin.repository (activateOrganization, suspendOrganization, setPlano etc.
+ * sempre auditam 1 registro por org, com `orgId` preenchido), então o loop:
+ * (a) mantém o audit visível no filtro por org da tela de operações
+ *     (um audit com orgId:null some desse filtro);
+ * (b) reaproveita a validação + UPDATE + audit já testados de `setOrgAnalista`
+ *     em vez de introduzir um formato de audit novo;
+ * (c) é aceitável em custo — carteiras são pequenas (dezenas de orgs, mesma
+ *     premissa já documentada em `getImpactoPorOrg`).
+ */
+export async function transferCarteiraEmLote(input: {
+  origemAnalistaUserId: string;
+  destinoAnalistaUserId: string;
+  actorUserId: string;
+}): Promise<{ orgIds: string[] }> {
+  if (input.origemAnalistaUserId === input.destinoAnalistaUserId) {
+    throw new Error('origem_igual_destino');
+  }
+
+  const [[origem], [destino]] = await Promise.all([
+    db.select({ role: users.role }).from(users).where(eq(users.id, input.origemAnalistaUserId)).limit(1),
+    db.select({ role: users.role }).from(users).where(eq(users.id, input.destinoAnalistaUserId)).limit(1),
+  ]);
+  if (!origem || origem.role !== 'analista') throw new Error('analista_invalido');
+  if (!destino || destino.role !== 'analista') throw new Error('analista_invalido');
+
+  const orgs = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.analista_id, input.origemAnalistaUserId));
+  const orgIds = orgs.map((o) => o.id);
+
+  for (const orgId of orgIds) {
+    await setOrgAnalista({
+      orgId,
+      analistaUserId: input.destinoAnalistaUserId,
+      actorUserId: input.actorUserId,
+    });
+  }
+
+  return { orgIds };
+}
+
 // ---------------------------------------------------------------------------
 // Painel do analista (Task 11) — carteira por org e fila de revisão.
 //

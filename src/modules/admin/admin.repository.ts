@@ -1,4 +1,4 @@
-import { and, count, desc, eq, exists, ilike, not } from 'drizzle-orm';
+import { and, asc, count, desc, eq, exists, ilike, not } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { connections, organizations, reports, users } from '@/db/schema';
@@ -50,6 +50,25 @@ export async function listClientOrganizations(): Promise<ClientOrganization[]> {
     .where(eq(isInternalOrg(), false))
     .orderBy(desc(organizations.created_at));
   return rows.map(rowToClient);
+}
+
+export type OrgOption = { id: string; name: string; isInternal: boolean };
+
+/**
+ * TODAS as orgs (cliente + interna), id+nome, p/ o select de "criar usuário
+ * em qualquer org" do /admin/usuarios (H4 T11) — diferente de
+ * `listClientOrganizations`, que exclui a org interna de propósito (é a
+ * listagem de CLIENTES). Aqui o admin precisa alcançar a org interna também,
+ * porque é onde as contas 'analista' costumam residir (mesmo padrão do
+ * scripts/seed-analista.ts). "Interna" = tem ao menos um admin_truth.
+ */
+export async function listAllOrganizationsMinimal(): Promise<OrgOption[]> {
+  const [orgs, adminOrgRows] = await Promise.all([
+    db.select({ id: organizations.id, name: organizations.name }).from(organizations).orderBy(asc(organizations.name)),
+    db.selectDistinct({ orgId: users.org_id }).from(users).where(eq(users.role, 'admin_truth')),
+  ]);
+  const internalIds = new Set(adminOrgRows.map((r) => r.orgId));
+  return orgs.map((o) => ({ ...o, isInternal: internalIds.has(o.id) }));
 }
 
 export async function getOrganizationById(

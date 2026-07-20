@@ -1,6 +1,7 @@
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
+import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 import {
   detectarConcorrenteAbaixo,
   detectarEstoqueCritico,
@@ -140,5 +141,7 @@ export async function GET(req: Request): Promise<Response> {
     logger.error('cron.lembretes_prazo.erro', { erro: err instanceof Error ? err.message : String(err) });
   }
 
-  return Response.json({ orgs: orgIds.length, alertasCriados: criadosTotal, lembretesEnviados });
+  const resposta = { orgs: orgIds.length, alertasCriados: criadosTotal, lembretesEnviados };
+  await registrarHeartbeat('verificar-alertas', true, resposta);
+  return Response.json(resposta);
 }

@@ -15,15 +15,26 @@ describe('navItems — nav por papel', () => {
     ]);
   });
 
-  it('admin NÃO vê rotas de cliente, mas tem a Carteira (G3/T10)', () => {
+  it('admin NÃO vê rotas de cliente, mas tem Carteira, Performance, Operações e Usuários (G3/T10, H4/T13)', () => {
     const hrefs = navItems('admin').map((i) => i.href);
-    expect(hrefs).toEqual(['/admin', '/admin/playbooks', '/admin/consultoria', '/analista']);
+    expect(hrefs).toEqual([
+      '/admin',
+      '/admin/playbooks',
+      '/admin/consultoria',
+      '/analista',
+      '/admin/performance',
+      '/admin/operacoes',
+      '/admin/usuarios',
+    ]);
     expect(hrefs).not.toContain('/dashboard');
     expect(hrefs).not.toContain('/conexoes');
   });
 
-  it('analista vê só a Carteira', () => {
-    expect(navItems('analista')).toEqual([{ href: '/analista', label: 'Carteira' }]);
+  it('analista vê a Carteira e o Comparativo (H4/T13)', () => {
+    expect(navItems('analista')).toEqual([
+      { href: '/analista', label: 'Carteira' },
+      { href: '/analista/comparativo', label: 'Comparativo' },
+    ]);
   });
 });
 
