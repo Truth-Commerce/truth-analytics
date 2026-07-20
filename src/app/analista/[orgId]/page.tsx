@@ -19,7 +19,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { PageHeader } from '@/components/page-header';
 import { Reveal } from '@/components/reveal';
 import { PLANO_LABEL } from '@/lib/labels';
-import { formatBRL, formatData, formatDataCurta, formatPeriodo } from '@/lib/format';
+import { formatBRL, formatData, formatDataCurta, formatDataUtc, formatPeriodo } from '@/lib/format';
 import { hojeBrt } from '@/lib/timezone';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { orgResumoUnico } from '@/modules/analista/carteira-data.repository';
@@ -95,7 +95,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
   const dadosAte = conn?.last_sync_at
     ? formatData(conn.last_sync_at)
     : ultimaDataPedido
-      ? formatData(ultimaDataPedido)
+      ? formatDataUtc(ultimaDataPedido)
       : null;
   const acao = latestDone ? acaoNumeroUm(latestDone.analiseIa) : null;
 
