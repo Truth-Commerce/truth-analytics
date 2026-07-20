@@ -37,5 +37,15 @@ test('kanban do cliente: criar task própria, mover e concluir; task da IA vai p
   await page.getByText('Nova task').click();
   await page.fill('[data-testid="nova-task-form"] input[name="titulo"]', `${E2E_PREFIX}minha-task`);
   await page.click('[data-testid="nova-task-form"] button[type="submit"]');
-  await expect(page.getByTestId('kanban-col-backlog').getByTestId('task-card')).toHaveCount(1);
+  const colBacklog = page.getByTestId('kanban-col-backlog');
+  await expect(colBacklog.getByTestId('task-card')).toHaveCount(1);
+
+  // F3b (revisão H5/T11): com um filtro ativo, a lista visível vira um
+  // subconjunto da coluna real — os botões de reordenar (▲/▼) precisam sumir
+  // (mesmo sem esconder nenhum card), pra não mover a task além de um vizinho
+  // escondido pelo filtro. Sem filtro, o botão aparece normalmente.
+  await expect(colBacklog.locator('[aria-label="Mover para cima na coluna"]').first()).toBeVisible();
+  await page.fill('[data-testid="crm-board-filtro-texto"]', E2E_PREFIX);
+  await expect(colBacklog.getByTestId('task-card')).toHaveCount(1); // filtro não escondeu nada aqui
+  await expect(colBacklog.locator('[aria-label="Mover para cima na coluna"]')).toHaveCount(0);
 });

@@ -35,8 +35,19 @@ import {
 // por época/responsável, uma coluna "todo" da raia A é um subconjunto
 // diferente da coluna "todo" da raia B, e mover engenharia extra de detecção
 // cross-raia não paga o custo aqui — quando swimlanePor !== 'nenhum' o DnD
-// fica DESLIGADO (só os botões ▲/▼/MoverTaskSelect funcionam, que sempre
-// funcionam, com ou sem raias).
+// fica DESLIGADO (só o MoverTaskSelect funciona, que sempre funciona, com ou
+// sem raias).
+//
+// MESMO problema quando um FILTRO (texto/prioridade/label/épico/responsável)
+// está ativo (F3b, revisão H5/T11): a lista visível de uma coluna vira um
+// SUBCONJUNTO da coluna real (`ordenarColuna`/`reorderTask` operam sobre
+// TODAS as tasks daquele status, filtradas ou não) — arrastar/clicar ▲▼ entre
+// dois cards visíveis calcula passos como se eles fossem vizinhos, quando na
+// verdade pode haver cards ESCONDIDOS pelo filtro entre eles; os passos
+// resultantes moveriam a task além do vizinho errado. Por isso `dndAtivo`
+// (abaixo) reusa a MESMA flag `temFiltroAtivo` que já desliga o DnD sob
+// raias — sem raias E sem filtro é o único modo em que a lista visível bate
+// 1:1 com a coluna real, condição para o cálculo de vizinhos ser confiável.
 //
 // Cross-coluna (mudança de status) reusa o MESMO onMove/moveTaskAction já
 // otimista do board (T6) — dropar noutra coluna muda o status; drop numa
@@ -444,9 +455,12 @@ export function KanbanBoard({
       return ordenarColuna(base);
     }
 
-    // DnD só no modo padrão (sem raias agrupadas) — ver nota de escopo no
-    // topo do arquivo. Fora dele, só os botões/select (sempre presentes) valem.
-    const dndAtivo = swimlanePor === 'nenhum';
+    // DnD (arraste + botões ▲/▼) só no modo padrão: sem raias agrupadas E sem
+    // nenhum filtro ativo — ver nota de escopo no topo do arquivo (F3b,
+    // revisão H5/T11: `temFiltroAtivo` já inclui `swimlanePor !== 'nenhum'`
+    // como uma das condições, então reusá-la cobre os dois casos numa
+    // flag só). Fora dele, só o MoverTaskSelect (sempre presente) vale.
+    const dndAtivo = !temFiltroAtivo;
 
     return (
       <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible md:pb-0 xl:grid-cols-5">
@@ -489,15 +503,19 @@ export function KanbanBoard({
                         usuarios={usuarios}
                         onQuickEdit={ator === 'cliente' ? undefined : onQuickEdit}
                         editandoId={editandoId}
-                        onReorder={(taskId, direcao) => {
-                          const idx = idsColuna.indexOf(taskId);
-                          if (idx === -1) return;
-                          const alvoIdx = direcao === 'up' ? idx - 1 : idx + 1;
-                          if (alvoIdx < 0 || alvoIdx >= idsColuna.length) return; // já no extremo da coluna
-                          const nova = [...idsColuna];
-                          [nova[idx], nova[alvoIdx]] = [nova[alvoIdx], nova[idx]];
-                          executarReorder(taskId, direcao, 1, { status, ids: nova });
-                        }}
+                        onReorder={
+                          dndAtivo
+                            ? (taskId, direcao) => {
+                                const idx = idsColuna.indexOf(taskId);
+                                if (idx === -1) return;
+                                const alvoIdx = direcao === 'up' ? idx - 1 : idx + 1;
+                                if (alvoIdx < 0 || alvoIdx >= idsColuna.length) return; // já no extremo da coluna
+                                const nova = [...idsColuna];
+                                [nova[idx], nova[alvoIdx]] = [nova[alvoIdx], nova[idx]];
+                                executarReorder(taskId, direcao, 1, { status, ids: nova });
+                              }
+                            : undefined
+                        }
                         arrastando={arrasto?.taskId === task.id}
                         onDragPointerDown={
                           dndAtivo ? (e, taskId, taskStatus) => onCardPointerDown(e, taskId, taskStatus, laneChave) : undefined
