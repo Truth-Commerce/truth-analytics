@@ -9,7 +9,12 @@ import { getCarteira, type CarteiraOrg } from '@/modules/analista/analista.repos
 import { calcularRisco, type InsumosRisco, type RiscoOrg } from '@/modules/analista/score-risco';
 import type { Plano, UserAccess } from '@/modules/auth/user.types';
 import { montarCobertura } from '@/modules/estoque/stock-coverage';
-import { getStockRows, getVendas30dPorSku } from '@/modules/estoque/stock.repository';
+import {
+  getStockRows,
+  getStockRowsBatch,
+  getVendas30dPorSku,
+  getVendas30dPorSkuBatch,
+} from '@/modules/estoque/stock.repository';
 import { diasDoPlano } from '@/modules/pipeline/plan-lock';
 import { deltaNumero, paceMeta } from '@/modules/reports/compare';
 import { diasDesde } from '@/modules/tasks/sla';
@@ -22,8 +27,9 @@ import { diasDesde } from '@/modules/tasks/sla';
 // reusada diretamente (não reimplementada) para não divergir do escopo já
 // testado ali. Os demais insumos (vendas, conexão, relatórios, estoque, meta)
 // são coletados em queries batched por IN(orgIds) — uma query por insumo para
-// a carteira INTEIRA, nunca uma query por org (exceto estoque: aceito por-org
-// aqui, carteiras são pequenas — mesma decisão do plano).
+// a carteira INTEIRA, nunca uma query por org (estoque também batched desde
+// H4 T8 — `contarSkusCriticosBatch` — depois que o escopo admin, com dezenas
+// de orgs cliente, deixou de ser "pequeno" e o loop por-org virou o gargalo).
 // ---------------------------------------------------------------------------
 
 export type OrgResumo = {
@@ -215,9 +221,9 @@ async function getReportsInfoBatch(orgIds: string[], agora: Date): Promise<Map<s
 }
 
 /**
- * SKUs em estoque crítico por org — POR ORG (aceito explicitamente pelo
- * plano: carteiras são pequenas). Reusa `getStockRows` + `getVendas30dPorSku`
- * + `montarCobertura` (mesmo pipeline do módulo de estoque).
+ * SKUs em estoque crítico de UMA org — usado só por `orgResumoUnico` (T6,
+ * uma org de cada vez). Reusa `getStockRows` + `getVendas30dPorSku` +
+ * `montarCobertura` (mesmo pipeline do módulo de estoque).
  */
 async function contarSkusCriticos(orgId: string, agora: Date): Promise<number> {
   const [stock, vendas30d] = await Promise.all([getStockRows(orgId), getVendas30dPorSku(orgId, agora)]);
@@ -225,12 +231,40 @@ async function contarSkusCriticos(orgId: string, agora: Date): Promise<number> {
 }
 
 /**
+ * SKUs em estoque crítico de TODA a carteira, em UMA query por insumo
+ * (`getStockRowsBatch`/`getVendas30dPorSkuBatch`, IN orgIds) — versão batched
+ * de `contarSkusCriticos`, usada por `carteiraResumo`.
+ *
+ * Substituiu um loop de 2 queries POR ORG (aceito no T3 assumindo "carteiras
+ * são pequenas"): virou um problema real quando o admin (escopo = TODAS as
+ * orgs cliente) chama `carteiraResumo` — no ambiente de teste (122 orgs
+ * cliente), o loop por-org media ~4.8s, estourando o timeout do e2e
+ * `admin.spec.ts` após uma ação (revalidatePath re-renderiza `/admin`, que
+ * agora também chama `carteiraResumo`). Batched, o mesmo cálculo cai para 2
+ * queries no total — mesmo resultado por org (mesmas linhas, só agrupadas em
+ * JS em vez de N idas ao banco), `montarCobertura` (pura) inalterada.
+ */
+async function contarSkusCriticosBatch(orgIds: string[], agora: Date): Promise<Map<string, number>> {
+  const [stockPorOrg, vendasPorOrg] = await Promise.all([
+    getStockRowsBatch(orgIds),
+    getVendas30dPorSkuBatch(orgIds, agora),
+  ]);
+  const result = new Map<string, number>();
+  for (const orgId of orgIds) {
+    const stock = stockPorOrg.get(orgId) ?? [];
+    const vendas = vendasPorOrg.get(orgId) ?? new Map<string, number>();
+    result.set(orgId, montarCobertura(stock, vendas).filter((p) => p.estado === 'critico').length);
+  }
+  return result;
+}
+
+/**
  * Resumo de carteira por org, escopado pelo PAPEL (analista: só a carteira
  * própria; admin: todas as orgs cliente) — escopo e contagem de tasks vêm
  * direto de `getCarteira` (NUNCA reimplementados aqui, para não divergir).
- * Os demais insumos do risco são coletados em queries batched (IN orgIds);
- * só o estoque é por-org (decisão do plano). `calcularRisco` (T2) fecha o
- * score/nível/motivos de cada org.
+ * Todos os insumos do risco são coletados em queries batched (IN orgIds),
+ * incluindo o estoque (`contarSkusCriticosBatch`, H4 T8). `calcularRisco`
+ * (T2) fecha o score/nível/motivos de cada org.
  */
 type InsumosPorOrg = {
   detalhes: Map<string, OrgDetalhes>;
@@ -288,15 +322,14 @@ export async function carteiraResumo(access: UserAccess, agora: Date): Promise<O
   const orgIds = carteira.map((c) => c.orgId);
   const hoje = hojeBrt(agora);
 
-  const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos] = await Promise.all([
+  const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticosMap] = await Promise.all([
     getOrgDetalhesBatch(orgIds),
     getTotaisMensaisBatch(orgIds, agora),
     getTotaisSemanaisBatch(orgIds, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
-    Promise.all(orgIds.map((id) => contarSkusCriticos(id, agora))),
+    contarSkusCriticosBatch(orgIds, agora),
   ]);
-  const skusCriticosMap = new Map(orgIds.map((id, i) => [id, skusCriticos[i]!]));
   const insumos: InsumosPorOrg = { detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos: skusCriticosMap };
 
   return carteira.map((c) => montarResumoOrg(c, insumos, hoje));

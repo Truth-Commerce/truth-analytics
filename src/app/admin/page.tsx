@@ -1,5 +1,8 @@
+import Link from 'next/link';
+
 import { requireAdmin } from '@/modules/auth/require-admin';
 import { listClientOrganizationsPage } from '@/modules/admin/admin.repository';
+import { carteiraResumo, kpisDaCarteira } from '@/modules/analista/carteira-data.repository';
 import { Table, THead, TBody, TR, TH } from '@/components/ui/Table';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -7,6 +10,8 @@ import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { PageHeader } from '@/components/page-header';
 import { Reveal } from '@/components/reveal';
+import { KpisCarteiraHero } from '@/app/analista/kpis-carteira';
+import { FilaAtencaoHoje } from '@/app/analista/fila-atencao';
 import { ClientRow } from './client-row';
 import { SystemStatusCard } from './system-status-card';
 
@@ -21,18 +26,43 @@ export default async function AdminPage({
 }: {
   searchParams: { q?: string; page?: string };
 }) {
-  await requireAdmin();
+  const access = await requireAdmin();
   const q = searchParams.q?.trim() || undefined;
   const page = Math.max(1, Number(searchParams.page) || 1);
-  const { items, total } = await listClientOrganizationsPage({ q, page, pageSize: PAGE_SIZE });
+  // Visão global (H4 T8): MESMO hero de KPIs + fila "Atenção hoje" do
+  // command center do analista (T3/T5), aqui com access admin — carteiraResumo
+  // devolve TODAS as orgs cliente (nunca escopado por access.orgId).
+  const [{ items, total }, resumosCarteira] = await Promise.all([
+    listClientOrganizationsPage({ q, page, pageSize: PAGE_SIZE }),
+    carteiraResumo(access, new Date()),
+  ]);
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const kpis = kpisDaCarteira(resumosCarteira);
 
   const hrefFor = (p: number) =>
     `/admin?${new URLSearchParams({ ...(q ? { q } : {}), page: String(p) }).toString()}`;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
+    <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8" data-testid="admin-page">
       <PageHeader eyebrow="Operação Truth" title="Clientes" />
+
+      <Reveal>
+        <KpisCarteiraHero kpis={kpis} />
+      </Reveal>
+
+      <Reveal className="space-y-3" data-testid="admin-atencao-hoje">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-heading text-lg font-semibold text-white">Atenção hoje</h2>
+          <Link
+            href="/admin/performance"
+            data-testid="admin-link-performance"
+            className="text-sm text-brand outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
+          >
+            Ver performance por analista →
+          </Link>
+        </div>
+        <FilaAtencaoHoje resumos={resumosCarteira} />
+      </Reveal>
 
       <form method="get" action="/admin" className="flex max-w-sm items-center gap-2">
         <Input

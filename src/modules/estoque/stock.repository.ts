@@ -1,4 +1,4 @@
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { orders, productStock } from '@/db/schema';
@@ -72,4 +72,61 @@ export async function getVendas30dPorSku(orgId: string, agora: Date): Promise<Ma
     }
   }
   return mapa;
+}
+
+/**
+ * Snapshot atual de VÁRIAS orgs, em UMA query (IN orgIds) — versão batched de
+ * `getStockRows`, usada por agregações cross-org (ex.: `carteiraResumo` em
+ * carteira-data.repository.ts, admin_truth escopo = todas as orgs cliente).
+ * Mesmas linhas/campos de `getStockRows`, só agrupadas por orgId em JS.
+ */
+export async function getStockRowsBatch(
+  orgIds: string[],
+): Promise<Map<string, { sku: string; nome: string; saldo: number }[]>> {
+  if (orgIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      orgId: productStock.org_id,
+      sku: productStock.sku,
+      nome: productStock.nome,
+      saldo: productStock.saldo,
+    })
+    .from(productStock)
+    .where(inArray(productStock.org_id, orgIds));
+
+  const map = new Map<string, { sku: string; nome: string; saldo: number }[]>();
+  for (const r of rows) {
+    const arr = map.get(r.orgId) ?? [];
+    arr.push({ sku: r.sku, nome: r.nome, saldo: Number(r.saldo) });
+    map.set(r.orgId, arr);
+  }
+  return map;
+}
+
+/**
+ * Vendas 30d por sku de VÁRIAS orgs, em UMA query (IN orgIds) — versão
+ * batched de `getVendas30dPorSku` (mesma janela `JANELA_VELOCIDADE_DIAS`),
+ * usada pelo mesmo cenário cross-org de `getStockRowsBatch`.
+ */
+export async function getVendas30dPorSkuBatch(
+  orgIds: string[],
+  agora: Date,
+): Promise<Map<string, Map<string, number>>> {
+  if (orgIds.length === 0) return new Map();
+  const desde = new Date(agora.getTime() - JANELA_VELOCIDADE_DIAS * 86_400_000);
+  const rows = await db
+    .select({ orgId: orders.org_id, itens: orders.itens })
+    .from(orders)
+    .where(and(inArray(orders.org_id, orgIds), gte(orders.data, desde)));
+
+  const map = new Map<string, Map<string, number>>();
+  for (const o of rows) {
+    const mapa = map.get(o.orgId) ?? new Map<string, number>();
+    for (const item of (o.itens as RawOrderItem[]) ?? []) {
+      if (!item.sku) continue;
+      mapa.set(item.sku, (mapa.get(item.sku) ?? 0) + Number(item.quantidade ?? 0));
+    }
+    map.set(o.orgId, mapa);
+  }
+  return map;
 }
