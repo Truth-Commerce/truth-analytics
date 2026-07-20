@@ -1,15 +1,17 @@
 'use client';
 
-import { Fragment, useMemo, useState, useTransition } from 'react';
+import { Fragment, useMemo, useRef, useState, useTransition } from 'react';
 
-import { moveTaskAction, updateTaskAction } from '@/actions/tasks.actions';
+import { moveTaskAction, reorderTaskFormAction, updateTaskAction } from '@/actions/tasks.actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskCard, type CampoEdicaoRapida } from '@/components/tasks/TaskCard';
 import { useToast } from '@/components/ui/Toast';
 import { agruparSwimlanes, filtrarTasks, type BoardFiltros, type SwimlanePor } from '@/modules/tasks/board-view';
+import { indiceAlvoPorPonteiro, itemSobPonteiro, passosReordenar } from '@/modules/tasks/dnd';
 import { ordenarColuna } from '@/modules/tasks/kanban-order';
 import type { TaskCardInfo } from '@/modules/tasks/task.repository';
+import { podeTransicionar } from '@/modules/tasks/task-transitions';
 import {
   PRIORIDADE_TASK_LABEL,
   STATUS_TASK_LABEL,
@@ -19,6 +21,49 @@ import {
   type TaskPrioridade,
   type TaskStatus,
 } from '@/modules/tasks/task.types';
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop nativo por pointer events (H5/T7).
+//
+// DECISÃO: nativo (pointerdown/move/up), sem @dnd-kit — o board só oferece 5
+// colunas fixas (TASK_STATUSES) e reordenar dentro de uma coluna curta; hit-
+// test é 2 comparações de retângulo (itemSobPonteiro/indiceAlvoPorPonteiro,
+// puras e testadas em tests/unit/dnd.test.ts). O escopo NÃO inclui: preview
+// "ao vivo" da lista durante o arraste (reflow custaria uma medição de DOM a
+// cada pointermove) — a carta arrastada só fica com opacidade reduzida no
+// lugar; e drag entre RAIAS (swimlanes) — como cada raia particiona as tasks
+// por época/responsável, uma coluna "todo" da raia A é um subconjunto
+// diferente da coluna "todo" da raia B, e mover engenharia extra de detecção
+// cross-raia não paga o custo aqui — quando swimlanePor !== 'nenhum' o DnD
+// fica DESLIGADO (só os botões ▲/▼/MoverTaskSelect funcionam, que sempre
+// funcionam, com ou sem raias).
+//
+// Cross-coluna (mudança de status) reusa o MESMO onMove/moveTaskAction já
+// otimista do board (T6) — dropar noutra coluna muda o status; drop numa
+// coluna que podeTransicionar rejeitaria NÃO chama a action (snap back
+// silencioso).
+// Reorder-dentro-da-coluna chama reorderTaskFormAction (existente, sem UI até
+// esta task) N vezes em sequência — reorderTask troca com o vizinho imediato
+// por `ordem`, então N chamadas = N passos.
+// ---------------------------------------------------------------------------
+
+type ColInfo = { el: HTMLElement; status: TaskStatus; laneChave: string };
+
+type ArrastoState = {
+  taskId: string;
+  origemStatus: TaskStatus;
+  origemLaneChave: string;
+  pointerId: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  x: number;
+  y: number;
+  alvo: ColInfo | null;
+  alvoValido: boolean;
+};
+
+const LIMIAR_ARRASTE_PX = 6;
 
 const SWIMLANE_LABEL: Record<SwimlanePor, string> = {
   nenhum: 'Sem raias',
@@ -55,6 +100,32 @@ export function KanbanBoard({
   const [pendenteId, setPendenteId] = useState<string | null>(null);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Drag-and-drop (H5/T7) — ver nota de escopo/decisão no topo do arquivo.
+  // `ordemOverride` é o mesmo padrão otimista de `movidas`/`edicoes` acima:
+  // sobrepõe a ordem de UMA coluna (a que acabou de ser reordenada) até a
+  // action settlar; `arrasto` é o estado "ao vivo" do gesto em andamento
+  // (ghost + destaque da coluna-alvo).
+  const [ordemOverride, setOrdemOverride] = useState<{ status: TaskStatus; ids: string[] } | null>(null);
+  const [arrasto, setArrasto] = useState<ArrastoState | null>(null);
+  // Registro de colunas visíveis (chave "raia::status" → elemento + info) —
+  // preenchido pelos refs dos wrappers de coluna em renderColunas, consultado
+  // nos handlers de pointer pra achar "qual coluna está sob o ponteiro".
+  const colInfoRef = useRef(new Map<string, ColInfo>());
+  const pendingDragRef = useRef<{
+    taskId: string;
+    status: TaskStatus;
+    laneChave: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    el: HTMLElement;
+  } | null>(null);
+  // true a partir do momento em que um arraste de VERDADE começou (passou do
+  // limiar) — usado só pra suprimir o "click" fantasma que o navegador dispara
+  // depois do pointerup (evita que soltar o card em cima do título dispare a
+  // navegação do Link). Resetado no PRÓXIMO pointerdown, não no fim do drag.
+  const dragOcorreuRef = useRef(false);
 
   // Board turbinado (H5/T6): filtros combináveis + raias — tudo client-side
   // sobre as tasks já carregadas (nenhum fetch novo; filtrarTasks/
@@ -142,6 +213,175 @@ export function KanbanBoard({
     });
   }
 
+  // Reordenar dentro da coluna (H5/T7) — chama reorderTaskFormAction `passos`
+  // vezes em sequência (cada chamada troca com o vizinho imediato por
+  // `ordem`). `override` é a ordem final já calculada por quem chamou (drop
+  // do drag ou clique nos botões ▲/▼) — aplicada de imediato (otimista) e
+  // limpa no finally, igual ao padrão de onMove/movidas acima. Sem
+  // useActionState porque reorderTaskFormAction não devolve estado (void).
+  function executarReorder(
+    taskId: string,
+    direcao: 'up' | 'down',
+    passos: number,
+    override: { status: TaskStatus; ids: string[] },
+  ) {
+    setOrdemOverride(override);
+    setPendenteId(taskId);
+    startTransition(async () => {
+      try {
+        for (let i = 0; i < passos; i += 1) {
+          const fd = new FormData();
+          fd.set('taskId', taskId);
+          fd.set('direcao', direcao);
+          if (orgId) fd.set('orgId', orgId);
+          // Sequencial de propósito: cada chamada precisa da `ordem` já
+          // atualizada pela anterior no servidor (reorderTask troca com o
+          // vizinho imediato) — não dá pra paralelizar com Promise.all.
+          await reorderTaskFormAction(fd);
+        }
+      } catch {
+        toast({ variant: 'error', title: 'Não foi possível reordenar.', description: 'Tente novamente.' });
+      } finally {
+        setOrdemOverride(null);
+        setPendenteId(null);
+      }
+    });
+  }
+
+  // Única porta de transição pro drag também: mesma podeTransicionar que
+  // TaskCard usa pra montar destinosValidos do MoverTaskSelect — um drop
+  // numa coluna que ela rejeitaria não chama onMove (snap back silencioso).
+  function transicaoValida(taskId: string, paraStatus: TaskStatus): boolean {
+    const task = efetivas.find((t) => t.id === taskId);
+    if (!task) return false;
+    return podeTransicionar({ ator, criadoPor: task.criadoPor, de: task.status, para: paraStatus });
+  }
+
+  function encontrarColunaAlvo(ponto: { x: number; y: number }): ColInfo | null {
+    const candidatos = Array.from(colInfoRef.current.values()).map((info) => ({
+      valor: info,
+      rect: info.el.getBoundingClientRect(),
+    }));
+    return itemSobPonteiro(candidatos, ponto);
+  }
+
+  function onCardPointerDown(
+    e: React.PointerEvent<HTMLDivElement>,
+    taskId: string,
+    status: TaskStatus,
+    laneChave: string,
+  ) {
+    dragOcorreuRef.current = false;
+    if (e.pointerType === 'mouse' && e.button !== 0) return; // só botão esquerdo
+    const alvoEl = e.target as HTMLElement;
+    // Não intercepta pointerdown originado em controles existentes (select de
+    // mover, botões ▲/▼/Concluir, link do título) — eles continuam 100%
+    // clicáveis/navegáveis, arraste só começa a partir da área "morta" do card.
+    if (alvoEl.closest('a, button, select, input, textarea')) return;
+    pendingDragRef.current = {
+      taskId,
+      status,
+      laneChave,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      el: e.currentTarget,
+    };
+  }
+
+  function onCardPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (arrasto) {
+      if (arrasto.pointerId !== e.pointerId) return;
+      const alvo = encontrarColunaAlvo({ x: e.clientX, y: e.clientY });
+      const alvoValido =
+        alvo == null ? false : alvo.status === arrasto.origemStatus ? true : transicaoValida(arrasto.taskId, alvo.status);
+      setArrasto((prev) => (prev ? { ...prev, x: e.clientX, y: e.clientY, alvo, alvoValido } : prev));
+      return;
+    }
+    const pend = pendingDragRef.current;
+    if (!pend || pend.pointerId !== e.pointerId) return;
+    const dx = e.clientX - pend.startX;
+    const dy = e.clientY - pend.startY;
+    if (Math.hypot(dx, dy) < LIMIAR_ARRASTE_PX) return; // ainda dentro do limiar — pode ser só um clique
+    const rect = pend.el.getBoundingClientRect();
+    try {
+      pend.el.setPointerCapture(pend.pointerId);
+    } catch {
+      // jsdom/alguns browsers não implementam Pointer Capture — segue sem capturar
+      // (o pointermove some se o ponteiro sair do elemento; degradação aceitável).
+    }
+    dragOcorreuRef.current = true;
+    setArrasto({
+      taskId: pend.taskId,
+      origemStatus: pend.status,
+      origemLaneChave: pend.laneChave,
+      pointerId: pend.pointerId,
+      offsetX: pend.startX - rect.left,
+      offsetY: pend.startY - rect.top,
+      width: rect.width,
+      x: e.clientX,
+      y: e.clientY,
+      alvo: { el: pend.el, status: pend.status, laneChave: pend.laneChave }, // começa sobre a própria coluna
+      alvoValido: true,
+    });
+  }
+
+  function onCardPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const pend = pendingDragRef.current;
+    pendingDragRef.current = null;
+    if (pend && pend.pointerId === e.pointerId) {
+      try {
+        pend.el.releasePointerCapture(e.pointerId);
+      } catch {
+        // idem — best effort.
+      }
+    }
+    if (!arrasto || arrasto.pointerId !== e.pointerId) return;
+    const { taskId, origemStatus, origemLaneChave } = arrasto;
+    setArrasto(null);
+
+    const alvo = encontrarColunaAlvo({ x: e.clientX, y: e.clientY });
+    // Fora de qualquer coluna, OU numa raia diferente da origem (limitação
+    // documentada — DnD só é oferecido com swimlanePor === 'nenhum', então
+    // isto só dispararia numa borda de re-render no meio do gesto): sem efeito.
+    if (!alvo || alvo.laneChave !== origemLaneChave) return;
+
+    if (alvo.status !== origemStatus) {
+      // Drop noutra coluna = mudança de status. A MESMA porta de validação do
+      // select (podeTransicionar) decide — inválida não chama a action.
+      if (!transicaoValida(taskId, alvo.status)) return;
+      onMove(taskId, alvo.status);
+      return;
+    }
+
+    // Mesma coluna → reordenar. O card arrastado continua no DOM (só dimmed,
+    // ver nota de escopo no topo do arquivo — sem preview "ao vivo"), então dá
+    // pra medir a posição de todo mundo agora mesmo, no momento do drop.
+    const cards = Array.from(alvo.el.querySelectorAll<HTMLElement>('[data-task-id]'));
+    const medidas = cards
+      .map((el) => ({ id: el.dataset.taskId ?? '', rect: el.getBoundingClientRect() }))
+      .sort((a, b) => a.rect.top - b.rect.top);
+    const deIndex = medidas.findIndex((c) => c.id === taskId);
+    if (deIndex === -1) return; // segurança — não deveria acontecer
+    const semArrastada = medidas.filter((c) => c.id !== taskId);
+    const midpoints = semArrastada.map((c) => c.rect.top + c.rect.height / 2);
+    const k = indiceAlvoPorPonteiro(midpoints, e.clientY);
+    const passo = passosReordenar(deIndex, k);
+    if (!passo) return; // soltou onde já estava
+    const idsBase = semArrastada.map((c) => c.id);
+    const novaOrdem = [...idsBase.slice(0, k), taskId, ...idsBase.slice(k)];
+    executarReorder(taskId, passo.direcao, passo.passos, { status: alvo.status, ids: novaOrdem });
+  }
+
+  function onDragClickCapture(e: React.MouseEvent<HTMLDivElement>) {
+    if (dragOcorreuRef.current) {
+      // Suprime o click sintético pós-drag (ex.: soltar o card em cima do
+      // título não deve navegar pra página de detalhe da task).
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
   // Edição rápida (H5/T6) — reusa updateTaskAction (mesmo guard de
   // impersonação + "cliente não edita" do form completo de edição). Chamada
   // direta (sem useActionState), mesmo padrão de onMove/moveTaskAction acima.
@@ -180,19 +420,52 @@ export function KanbanBoard({
     );
   }
 
-  function renderColunas(itens: TaskCardInfo[]) {
+  function renderColunas(itens: TaskCardInfo[], laneChave: string) {
     const grupos = Object.fromEntries(TASK_STATUSES.map((s) => [s, [] as TaskCardInfo[]])) as Record<
       TaskStatus,
       TaskCardInfo[]
     >;
     for (const t of itens) grupos[t.status]?.push(t);
 
+    // Ordem exibida na coluna: a override otimista do reorder (se for A
+    // coluna que acabou de ser reordenada) ganha de ordenarColuna até a action
+    // settlar — mesmo padrão de `movidas`/`edicoes` (efetivas) acima.
+    function coluna(status: TaskStatus): TaskCardInfo[] {
+      const base = grupos[status];
+      if (ordemOverride && ordemOverride.status === status) {
+        const porId = new Map(base.map((t) => [t.id, t]));
+        const ordenada = ordemOverride.ids
+          .map((id) => porId.get(id))
+          .filter((t): t is TaskCardInfo => t !== undefined);
+        const idsConhecidos = new Set(ordemOverride.ids);
+        const extras = base.filter((t) => !idsConhecidos.has(t.id));
+        return [...ordenada, ...extras];
+      }
+      return ordenarColuna(base);
+    }
+
+    // DnD só no modo padrão (sem raias agrupadas) — ver nota de escopo no
+    // topo do arquivo. Fora dele, só os botões/select (sempre presentes) valem.
+    const dndAtivo = swimlanePor === 'nenhum';
+
     return (
       <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible md:pb-0 xl:grid-cols-5">
         {TASK_STATUSES.map((status) => {
-          const itensColuna = ordenarColuna(grupos[status]);
+          const itensColuna = coluna(status);
+          const idsColuna = itensColuna.map((t) => t.id);
+          const destacada = arrasto != null && arrasto.alvo?.status === status && arrasto.alvo?.laneChave === laneChave;
+          const anelClasse = destacada ? (arrasto!.alvoValido ? 'ring-2 ring-brand' : 'ring-2 ring-danger') : '';
           return (
-            <div key={status} data-testid={`kanban-col-${status}`} className="w-64 flex-shrink-0 md:w-auto">
+            <div
+              key={status}
+              data-testid={`kanban-col-${status}`}
+              ref={(el) => {
+                const chave = `${laneChave}::${status}`;
+                if (el) colInfoRef.current.set(chave, { el, status, laneChave });
+                else colInfoRef.current.delete(chave);
+              }}
+              className={`w-64 flex-shrink-0 rounded-2xl transition-shadow md:w-auto ${anelClasse}`}
+            >
               <Card className="flex h-full flex-col gap-3">
                 <CardHeader className="mb-0">
                   <CardTitle as="h3" className="text-sm">
@@ -216,6 +489,22 @@ export function KanbanBoard({
                         usuarios={usuarios}
                         onQuickEdit={ator === 'cliente' ? undefined : onQuickEdit}
                         editandoId={editandoId}
+                        onReorder={(taskId, direcao) => {
+                          const idx = idsColuna.indexOf(taskId);
+                          if (idx === -1) return;
+                          const alvoIdx = direcao === 'up' ? idx - 1 : idx + 1;
+                          if (alvoIdx < 0 || alvoIdx >= idsColuna.length) return; // já no extremo da coluna
+                          const nova = [...idsColuna];
+                          [nova[idx], nova[alvoIdx]] = [nova[alvoIdx], nova[idx]];
+                          executarReorder(taskId, direcao, 1, { status, ids: nova });
+                        }}
+                        arrastando={arrasto?.taskId === task.id}
+                        onDragPointerDown={
+                          dndAtivo ? (e, taskId, taskStatus) => onCardPointerDown(e, taskId, taskStatus, laneChave) : undefined
+                        }
+                        onDragPointerMove={dndAtivo ? onCardPointerMove : undefined}
+                        onDragPointerUp={dndAtivo ? onCardPointerUp : undefined}
+                        onDragClickCapture={dndAtivo ? onDragClickCapture : undefined}
                       />
                     ))
                   )}
@@ -331,16 +620,27 @@ export function KanbanBoard({
 
       {lanes.map((lane) =>
         swimlanePor === 'nenhum' ? (
-          <Fragment key={lane.chave}>{renderColunas(lane.tasks)}</Fragment>
+          <Fragment key={lane.chave}>{renderColunas(lane.tasks, lane.chave)}</Fragment>
         ) : (
           <div key={lane.chave} data-testid="crm-board-swimlane" className="space-y-2">
             <h3 className="font-heading text-sm font-semibold text-white">
               {swimlanePor === 'responsavel' ? (emailPorUsuario.get(lane.chave) ?? lane.label) : lane.label}
             </h3>
-            {renderColunas(lane.tasks)}
+            {renderColunas(lane.tasks, lane.chave)}
           </div>
         ),
       )}
+
+      {arrasto ? (
+        <div
+          aria-hidden="true"
+          data-testid="crm-board-drag-ghost"
+          className="pointer-events-none fixed z-50 rounded-xl border border-brand bg-bg-elevated px-3 py-2 text-sm font-medium text-white shadow-lg"
+          style={{ left: arrasto.x - arrasto.offsetX, top: arrasto.y - arrasto.offsetY, width: arrasto.width }}
+        >
+          {efetivas.find((t) => t.id === arrasto.taskId)?.titulo ?? ''}
+        </div>
+      ) : null}
     </div>
   );
 }

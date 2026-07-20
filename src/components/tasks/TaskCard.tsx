@@ -50,6 +50,12 @@ export function TaskCard({
   usuarios = [],
   onQuickEdit,
   editandoId,
+  onReorder,
+  arrastando,
+  onDragPointerDown,
+  onDragPointerMove,
+  onDragPointerUp,
+  onDragClickCapture,
 }: {
   task: TaskCardInfo;
   ator: TaskAtor;
@@ -62,9 +68,22 @@ export function TaskCard({
   /** Edição rápida (prioridade/prazo/responsável) — omitido = card sem controles (cliente). */
   onQuickEdit?: (taskId: string, campo: CampoEdicaoRapida, valor: string) => void;
   editandoId?: string | null;
+  /** Reordenar dentro da coluna (H5/T7) — fallback acessível por botão do drag-and-drop. */
+  onReorder?: (taskId: string, direcao: 'up' | 'down') => void;
+  /** true enquanto ESTE card é o que está sendo arrastado (dimming visual). */
+  arrastando?: boolean;
+  /** Drag-and-drop nativo por pointer events (H5/T7) — omitidos = card não-arrastável
+   * (ex.: modo com raias, onde o DnD é desligado; ver KanbanBoard). */
+  onDragPointerDown?: (e: React.PointerEvent<HTMLDivElement>, taskId: string, status: TaskStatus) => void;
+  onDragPointerMove?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onDragPointerUp?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  /** Suprime o "click fantasma" (ex.: navegação do título) que o navegador
+   * dispara depois de um arraste real — ver comentário em KanbanBoard. */
+  onDragClickCapture?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   const somenteLeitura = ator === 'cliente' && (task.status === 'em_revisao' || task.status === 'concluida');
   const mostrarConcluir = !somenteLeitura && ator === 'cliente' && task.status === 'em_andamento';
+  const podeArrastar = !somenteLeitura && !!onDragPointerDown;
   // Edição rápida é restrita a analista/admin — mesmo guard de updateTaskAction
   // no servidor (o cliente nunca vê os controles; o servidor também bloqueia).
   const podeEditarInline = ator !== 'cliente' && !!onQuickEdit;
@@ -87,7 +106,18 @@ export function TaskCard({
   const prazoStatus = statusPrazo(task.status === 'concluida' ? null : task.prazo);
 
   return (
-    <div data-testid="task-card" className="rounded-xl border border-line bg-bg-elevated p-3">
+    <div
+      data-testid="task-card"
+      data-task-id={task.id}
+      className={`select-none rounded-xl border border-line bg-bg-elevated p-3 transition-opacity ${
+        arrastando ? 'opacity-40' : ''
+      } ${podeArrastar ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      onPointerDown={podeArrastar ? (e) => onDragPointerDown!(e, task.id, task.status) : undefined}
+      onPointerMove={podeArrastar ? onDragPointerMove : undefined}
+      onPointerUp={podeArrastar ? onDragPointerUp : undefined}
+      onPointerCancel={podeArrastar ? onDragPointerUp : undefined}
+      onClickCapture={podeArrastar ? onDragClickCapture : undefined}
+    >
       <Link
         href={`${taskHrefBase}/${task.id}`}
         className="text-sm font-medium text-white outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
@@ -173,7 +203,33 @@ export function TaskCard({
 
       {!somenteLeitura ? (
         <div className="mt-3 flex items-center justify-between gap-2">
-          <MoverTaskSelect taskId={task.id} destinosValidos={destinosValidos} onMove={onMove} pendente={pendente} />
+          <div className="flex items-center gap-1.5">
+            <MoverTaskSelect taskId={task.id} destinosValidos={destinosValidos} onMove={onMove} pendente={pendente} />
+            {onReorder ? (
+              // Fallback acessível do reorder-por-arraste (H5/T7) — botões de
+              // teclado/clique que chamam a MESMA reorderTaskFormAction do drag.
+              <span className="flex flex-col" data-testid={`reorder-botoes-${task.id}`}>
+                <button
+                  type="button"
+                  aria-label="Mover para cima na coluna"
+                  disabled={pendente}
+                  onClick={() => onReorder(task.id, 'up')}
+                  className="leading-none text-dim outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  aria-label="Mover para baixo na coluna"
+                  disabled={pendente}
+                  onClick={() => onReorder(task.id, 'down')}
+                  className="leading-none text-dim outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
+                >
+                  ▼
+                </button>
+              </span>
+            ) : null}
+          </div>
           {mostrarConcluir ? (
             <form action={concluirTaskFormAction}>
               <input type="hidden" name="taskId" value={task.id} />
