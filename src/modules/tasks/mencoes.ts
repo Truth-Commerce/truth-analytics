@@ -34,3 +34,37 @@ export function extrairMencoes(texto: string): string[] {
 export function handleFromEmail(email: string): string {
   return (email.split('@')[0] ?? '').toLowerCase();
 }
+
+export type SegmentoMencao = { tipo: 'texto'; valor: string } | { tipo: 'mencao'; valor: string };
+
+/**
+ * Divide um texto livre em segmentos alternando texto comum e `@handle`
+ * (mesma convenção/regex de `extrairMencoes`) — insumo para renderizar o
+ * handle destacado em componentes React SEM `dangerouslySetInnerHTML` (H5/T5,
+ * ver `TaskComments.tsx`). O valor do segmento `mencao` preserva a grafia
+ * original (inclui o "@"), só sem a pontuação de fim de frase colada (mesmo
+ * trim de `extrairMencoes` — o texto destacado é exatamente o que dispara
+ * `notificarMencoes`, nem mais nem menos).
+ */
+export function dividirPorMencoes(texto: string): SegmentoMencao[] {
+  if (!texto) return [];
+
+  const segmentos: SegmentoMencao[] = [];
+  let cursor = 0;
+
+  for (const match of texto.matchAll(MENCAO_RE)) {
+    const inicio = match.index ?? 0;
+    const bruto = match[0];
+    const pontuacaoFinal = /[._+-]+$/.exec(bruto)?.[0] ?? '';
+    const mencao = pontuacaoFinal ? bruto.slice(0, bruto.length - pontuacaoFinal.length) : bruto;
+    if (mencao === '@') continue; // handle vazio após tirar a pontuação (ex.: "@.") não é destaque real
+
+    if (inicio > cursor) segmentos.push({ tipo: 'texto', valor: texto.slice(cursor, inicio) });
+    segmentos.push({ tipo: 'mencao', valor: mencao });
+    cursor = inicio + mencao.length;
+  }
+
+  if (cursor < texto.length) segmentos.push({ tipo: 'texto', valor: texto.slice(cursor) });
+
+  return segmentos;
+}

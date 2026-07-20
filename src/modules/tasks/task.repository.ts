@@ -295,6 +295,16 @@ export async function setTaskLabels(taskId: string, orgId: string, labels: unkno
 }
 
 /**
+ * Labels de TODAS as tasks da org (H5/T5) — insumo bruto para
+ * `sugerirLabels` (que agrega por frequência). Consulta enxuta (só a coluna
+ * `labels`), sem paginação — o volume por org é o mesmo de `listTasksByOrg`.
+ */
+export async function listLabelsUsadas(orgId: string): Promise<string[][]> {
+  const rows = await db.select({ labels: tasks.labels }).from(tasks).where(eq(tasks.org_id, orgId));
+  return rows.map((r) => (Array.isArray(r.labels) ? (r.labels as string[]) : []));
+}
+
+/**
  * Toggle atômico de item de checklist: transação + SELECT ... FOR UPDATE
  * serializa toggles concorrentes — o read-modify-write via updateTask podia
  * perder um update quando dois cliques chegavam juntos. Devolve true se a

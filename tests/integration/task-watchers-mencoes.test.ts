@@ -189,6 +189,17 @@ describe.skipIf(!url)('watcher.repository + setTaskLabels + notificarMencoes/not
     await expect(setTaskLabels(taskAId, orgBId, ['x'])).rejects.toThrow('task_nao_encontrada');
   });
 
+  it('listLabelsUsadas(orgA) devolve as labels da taskA (já normalizadas) e nunca as de orgB', async () => {
+    const { listLabelsUsadas } = await import('@/modules/tasks/task.repository');
+    const { sugerirLabels } = await import('@/modules/tasks/labels');
+
+    const usadas = await listLabelsUsadas(orgAId);
+    expect(usadas).toEqual([['Promo', 'a'.repeat(20)]]);
+    expect(sugerirLabels(usadas)).toEqual(['Promo', 'a'.repeat(20)]);
+
+    expect(await listLabelsUsadas(orgBId)).toEqual([[]]); // taskB sem labels — array vazio, não ausência de linha
+  });
+
   // ---------------------------------------------------------------------
   // notificarMencoes
   // ---------------------------------------------------------------------

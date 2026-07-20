@@ -4,8 +4,10 @@ import { aprovarTaskFormAction, concluirTaskFormAction } from '@/actions/tasks.a
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Markdown } from '@/components/ui/Markdown';
 import { formatBRL, formatData, formatDataUtc } from '@/lib/format';
 import { CHECKLIST_CHECKED, CHECKLIST_UNCHECKED, parseChecklist } from '@/modules/tasks/checklist-line';
+import { labelPrazo, statusPrazo, type StatusPrazo } from '@/modules/tasks/sla';
 import type { TaskImpact } from '@/modules/tasks/task-impact';
 import {
   PRIORIDADE_TASK_LABEL,
@@ -17,12 +19,16 @@ import {
   type TaskDetail as TaskDetailModel,
   type TaskPrioridade,
   type TaskStatus,
+  type TaskSummary,
 } from '@/modules/tasks/task.types';
+import type { Watcher } from '@/modules/tasks/watcher.repository';
 
 import { DevolverTaskButton } from './DevolverTaskButton';
 import { TaskChecklist } from './TaskChecklist';
 import { TaskComments } from './TaskComments';
 import { TaskEditForm } from './TaskEditForm';
+import { TaskLabels } from './TaskLabels';
+import { TaskWatchers } from './TaskWatchers';
 
 const PRIORIDADE_BADGE_VARIANT: Record<TaskPrioridade, 'danger' | 'warn' | 'neutral'> = {
   alta: 'danger',
@@ -35,6 +41,18 @@ const CRIADO_POR_LABEL: Record<TaskCriadoPor, string> = {
   analista: 'Criada pela consultoria',
   cliente: 'Criada pelo cliente',
 };
+
+const SLA_BADGE_VARIANT: Record<StatusPrazo, 'danger' | 'warn' | 'neutral'> = {
+  atrasada: 'danger',
+  vence_em_breve: 'warn',
+  no_prazo: 'neutral',
+  sem_prazo: 'neutral',
+};
+
+/** Caminho de detalhe de uma task (H5/T5, pai/filhas) — espelha os `hrefX` de task-notifications.ts. */
+function taskHrefBase(ator: TaskAtor, orgId: string | undefined): string {
+  return ator === 'cliente' ? '/dashboard/plano-de-acao' : `/analista/${orgId}/tasks`;
+}
 
 const EVENTO_LABEL: Record<string, string> = {
   criada: 'Task criada',
@@ -82,6 +100,11 @@ export function TaskDetail({
   activities,
   impact,
   backHref,
+  currentUserId,
+  watchers,
+  sugestoesLabels,
+  pai,
+  filhas,
 }: {
   task: TaskDetailModel;
   ator: TaskAtor;
@@ -97,6 +120,12 @@ export function TaskDetail({
   }>;
   impact: TaskImpact;
   backHref: string;
+  /** Usuário logado — só ele pode seguir/deixar de seguir a PRÓPRIA observação (H5/T5). */
+  currentUserId: string;
+  watchers: Watcher[];
+  sugestoesLabels: string[];
+  pai: TaskSummary | null;
+  filhas: TaskSummary[];
 }) {
   const atrasada = isTaskAtrasada(task);
   const itensChecklist = parseChecklist(task.descricao);
@@ -106,6 +135,11 @@ export function TaskDetail({
   // (aprovar/devolver são exclusivos do analista/admin — Task 11).
   const mostrarConcluir = ator === 'cliente' && task.status === 'em_andamento';
   const mostrarAprovarDevolver = ator !== 'cliente' && task.status === 'em_revisao';
+
+  // SLA (H5/T5) — mesma convenção de TaskCard: prazo de task concluída não conta.
+  const prazoParaSla = task.status === 'concluida' ? null : task.prazo;
+  const slaStatus = statusPrazo(prazoParaSla);
+  const slaLabel = labelPrazo(prazoParaSla);
 
   return (
     <div className="space-y-6">
@@ -152,11 +186,30 @@ export function TaskDetail({
           </Badge>
           {atrasada ? <Badge variant="danger">Atrasada</Badge> : null}
           {task.descricao.includes('_Reincidente:') ? <Badge variant="warn">Reincidente</Badge> : null}
+          {slaLabel ? (
+            <Badge variant={SLA_BADGE_VARIANT[slaStatus]} data-testid="crm-sla-badge">
+              {slaLabel}
+            </Badge>
+          ) : null}
         </div>
 
         {/* task.prazo é dia-calendário 'yyyy-mm-dd' (date-only): formatDataUtc
             não desloca o dia (formatData/BRT tiraria 1 dia — bug da Task 2). */}
         {task.prazo ? <p className="mt-2 text-xs text-dim">Prazo: {formatDataUtc(task.prazo)}</p> : null}
+
+        {/* Relatório de origem (H5/T5) — só a página do cliente tem uma rota
+            de detalhe de relatório; analista/admin não têm equivalente hoje. */}
+        {ator === 'cliente' && task.reportId ? (
+          <p className="mt-2 text-xs">
+            <Link
+              href={`/dashboard/relatorios/${task.reportId}`}
+              data-testid="crm-link-relatorio"
+              className="text-brand underline-offset-2 hover:underline"
+            >
+              Ver relatório de origem
+            </Link>
+          </p>
+        ) : null}
       </header>
 
       {ator !== 'cliente' && orgId ? (
@@ -174,13 +227,76 @@ export function TaskDetail({
         />
       ) : null}
 
+      {pai || filhas.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2" className="text-sm">Hierarquia</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3" data-testid="crm-hierarquia">
+            {pai ? (
+              <p className="text-sm text-white/80">
+                Task-pai:{' '}
+                <Link
+                  href={`${taskHrefBase(ator, orgId)}/${pai.id}`}
+                  data-testid="crm-link-pai"
+                  className="text-brand underline-offset-2 hover:underline"
+                >
+                  {pai.titulo}
+                </Link>
+              </p>
+            ) : null}
+            {filhas.length > 0 ? (
+              <div>
+                <p className="mb-1.5 text-xs text-dim">Subtarefas</p>
+                <ul className="space-y-1">
+                  {filhas.map((f) => (
+                    <li key={f.id} className="flex items-center gap-2 text-sm">
+                      <Link
+                        href={`${taskHrefBase(ator, orgId)}/${f.id}`}
+                        data-testid="crm-link-filha"
+                        className="text-brand underline-offset-2 hover:underline"
+                      >
+                        {f.titulo}
+                      </Link>
+                      <span className="text-xs text-dim">{STATUS_TASK_LABEL[f.status]}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle as="h2" className="text-sm">Labels</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TaskLabels taskId={task.id} orgId={orgId} labels={task.labels} sugestoes={sugestoesLabels} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle as="h2" className="text-sm">Observadores</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TaskWatchers taskId={task.id} orgId={orgId} watchers={watchers} currentUserId={currentUserId} />
+        </CardContent>
+      </Card>
+
       {textoLivre || itensChecklist.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle as="h2" className="text-sm">Descrição</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {textoLivre ? <p className="whitespace-pre-wrap text-sm text-white/90">{textoLivre}</p> : null}
+            {textoLivre ? (
+              <div data-testid="crm-descricao-markdown">
+                <Markdown texto={textoLivre} />
+              </div>
+            ) : null}
             <TaskChecklist taskId={task.id} itens={itensChecklist} orgId={orgId} />
           </CardContent>
         </Card>
