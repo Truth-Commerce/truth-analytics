@@ -133,6 +133,8 @@ export async function adminReprocessReportAction(
     return { error: 'Não foi possível disparar o pipeline. Tente novamente.' };
   }
   revalidatePath(`/admin/${res.orgId}`);
+  // A fila do centro de operações (H4 T10) também reprocessa relatórios failed daqui — revalida as duas telas.
+  revalidatePath('/admin/operacoes');
   return { ok: true };
 }
 
