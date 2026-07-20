@@ -1,7 +1,7 @@
 import { and, count, desc, eq, inArray, max, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { taskComments, taskActivities, tasks } from '@/db/schema';
+import { taskComments, taskActivities, taskWatchers, tasks } from '@/db/schema';
 import { parseChecklist, toggleChecklistLine } from './checklist-line';
 import { nivelFilhoValido, progressoEpico, type Nivel, type ProgressoEpico } from './hierarquia';
 import { normalizarLabels } from './labels';
@@ -396,10 +396,27 @@ export async function reorderTask(input: { taskId: string; orgId: string; direca
   });
 }
 
+/**
+ * Exclui uma task (F1, revisão H5/T11): migration 0016 adicionou duas FKs
+ * `ON DELETE no action` apontando pra tasks — `task_watchers.task_id` e
+ * `tasks.parent_id` (auto-FK da hierarquia) — nenhuma das duas era limpa
+ * aqui. Resultado: excluir uma task com um watcher, ou um épico com filhas,
+ * violava a FK no Postgres; `deleteTaskFormAction` engolia o erro (catch →
+ * logger.warn) e a task ficava para sempre indeletável, sem nenhum aviso na UI.
+ *
+ * Fix: dentro da MESMA transação, (a) remove os watchers da task e (b) para
+ * os FILHOS (parent_id = taskId), política escolhida — órfãos, não cascata:
+ * `parent_id` vira null e eles sobrevivem como tasks/subtasks de raiz. Uma
+ * subtask cujo pai (task) é excluído continua existindo, só perde o vínculo
+ * de hierarquia — mais simples e não-destrutivo que apagar a árvore inteira,
+ * e evita que excluir um épico por engano leve dezenas de tasks-filhas junto.
+ */
 export async function deleteTask(taskId: string, orgId: string): Promise<void> {
   const task = await getTaskById(taskId, orgId);
   if (!task) throw new Error('task_nao_encontrada');
   await db.transaction(async (tx) => {
+    await tx.delete(taskWatchers).where(eq(taskWatchers.task_id, taskId));
+    await tx.update(tasks).set({ parent_id: null }).where(and(eq(tasks.parent_id, taskId), eq(tasks.org_id, orgId)));
     await tx.delete(taskComments).where(eq(taskComments.task_id, taskId));
     await tx.delete(taskActivities).where(eq(taskActivities.task_id, taskId));
     await tx.delete(tasks).where(and(eq(tasks.id, taskId), eq(tasks.org_id, orgId)));
