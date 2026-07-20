@@ -52,6 +52,11 @@ export type TaskCardInfo = TaskSummary & {
   checklistFeitos: number;
   checklistTotal: number;
   reincidente: boolean;
+  /** Board turbinado (H5/T6) — insumo de filtrarTasks/agruparSwimlanes/board-view. */
+  labels: string[];
+  parentId: string | null;
+  assigneeUserId: string | null;
+  nivel: Nivel;
 };
 
 /** Kanban rico: summary + nº de comentários (agregado em SQL) + checklist (parse da descricao). */
@@ -74,6 +79,10 @@ export async function listTasksKanban(orgId: string): Promise<TaskCardInfo[]> {
       checklistFeitos: itens.filter((i) => i.feito).length,
       checklistTotal: itens.length,
       reincidente: task.descricao.includes('_Reincidente:'),
+      labels: Array.isArray(task.labels) ? (task.labels as string[]) : [],
+      parentId: task.parent_id,
+      assigneeUserId: task.assignee_user_id,
+      nivel: task.nivel as Nivel,
     };
   });
 }

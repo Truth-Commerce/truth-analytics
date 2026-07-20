@@ -26,6 +26,7 @@ import { orgResumoUnico } from '@/modules/analista/carteira-data.repository';
 import { badgeDoNivel, top3Motivos } from '@/modules/analista/carteira-view-model';
 import { getVisao360 } from '@/modules/analista/visao360.repository';
 import { requireAnalista } from '@/modules/auth/require-analista';
+import { listOrgUsers } from '@/modules/auth/user.repository';
 import { statusSugestaoBadge } from '@/modules/calendario/calendario-view-model';
 import { badgeDoEstado, labelCobertura, resumoEstoque } from '@/modules/estoque/estoque-view-model';
 import { statusKitBadge } from '@/modules/kits/kits-view-model';
@@ -67,13 +68,14 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
   const ator = atorFromRole(access.role);
   const agora = new Date();
 
-  const [resumo, dashboardData, visao360, tarefas, templates, produtos] = await Promise.all([
+  const [resumo, dashboardData, visao360, tarefas, templates, produtos, usuariosOrg] = await Promise.all([
     orgResumoUnico(access, orgId, agora),
     getDashboardData(orgId),
     getVisao360(orgId, agora),
     listTasksKanban(orgId),
     listTemplates(true),
     listTrackedProducts(orgId),
+    listOrgUsers(orgId),
   ]);
 
   const { org, historico, latestDone, doneAnterior, settings, totalMes, conn, ultimaDataPedido, titulosTasksUltimoDone } =
@@ -423,7 +425,13 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
             id: 'kanban',
             label: 'Kanban',
             content: (
-              <KanbanBoard tasks={tarefas} ator={ator} taskHrefBase={`/analista/${orgId}/tasks`} orgId={orgId} />
+              <KanbanBoard
+                tasks={tarefas}
+                ator={ator}
+                taskHrefBase={`/analista/${orgId}/tasks`}
+                orgId={orgId}
+                usuarios={usuariosOrg.map((u) => ({ id: u.id, email: u.email }))}
+              />
             ),
           },
           {
