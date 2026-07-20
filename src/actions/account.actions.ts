@@ -8,7 +8,7 @@ import { recordAudit } from '@/modules/audit/audit.repository';
 import { hashPassword, verifyPassword } from '@/modules/auth/password';
 import { invalidateUserResetTokens } from '@/modules/auth/password-reset.repository';
 import { isTrocaSenhaRateLimited, recordAttempt } from '@/modules/auth/rate-limit';
-import { requireActiveOrg } from '@/modules/auth/require-active-org';
+import { requireActiveOrgParaMutacao } from '@/modules/auth/require-active-org';
 import { getUserAuthById, setUserPasswordHash } from '@/modules/auth/user.repository';
 import { sendPasswordChangedEmail } from '@/modules/notifications/email';
 import { renameOrganization } from '@/modules/organizations/organization-settings.repository';
@@ -30,7 +30,7 @@ export async function changePasswordAction(
   _prev: AccountState,
   formData: FormData,
 ): Promise<AccountState> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const parsed = trocarSenhaSchema.safeParse({
     senhaAtual: formData.get('senhaAtual'),
     novaSenha: formData.get('novaSenha'),
@@ -82,7 +82,7 @@ export async function updateOrgNameAction(
   _prev: AccountState,
   formData: FormData,
 ): Promise<AccountState> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const parsed = nomeEmpresaSchema.safeParse({ nome: formData.get('nome') });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
 

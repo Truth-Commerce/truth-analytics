@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('next/headers', () => ({ headers: () => new Headers() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/modules/auth/require-active-org', () => ({
-  requireActiveOrg: vi.fn().mockResolvedValue({
+  requireActiveOrgParaMutacao: vi.fn().mockResolvedValue({
     id: 'u1', orgId: 'o1', role: 'client', orgStatus: 'active', plano: 'monthly',
   }),
 }));

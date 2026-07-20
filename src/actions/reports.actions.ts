@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { serverEnv } from '@/lib/env';
-import { requireActiveOrg } from '@/modules/auth/require-active-org';
+import { requireActiveOrgParaMutacao } from '@/modules/auth/require-active-org';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { getConnection } from '@/modules/connections/connection.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
@@ -30,7 +30,7 @@ export async function generateReportAction(
   _prev: GenerateState,
   _formData: FormData,
 ): Promise<GenerateState> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
 
   const org = await getOrganizationById(access.orgId);
   if (!org) return { error: 'org_nao_encontrada' };

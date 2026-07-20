@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { requireActiveOrg } from '@/modules/auth/require-active-org';
+import { requireActiveOrgParaMutacao } from '@/modules/auth/require-active-org';
 import { resolverAlerta } from '@/modules/alerts/alert.repository';
 
 export async function resolverAlertaAction(formData: FormData): Promise<void> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const alertId = String(formData.get('alertId') ?? '');
   if (!alertId) return;
   await resolverAlerta(alertId, access.orgId); // escopado por org — id alheio é no-op

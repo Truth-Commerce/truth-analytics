@@ -2,14 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { requireActiveOrg } from '@/modules/auth/require-active-org';
+import { requireActiveOrgParaMutacao } from '@/modules/auth/require-active-org';
 import { marcarSugestaoStatus } from '@/modules/calendario/calendario.repository';
 import { sugestaoParaTask } from '@/modules/calendario/sugestao-to-task';
 
 export async function virarTarefaSugestaoAction(
   sugestaoId: string,
 ): Promise<{ ok: boolean; erro?: string }> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const r = await sugestaoParaTask(access.orgId, sugestaoId);
   if (r.ok) {
     revalidatePath('/dashboard/calendario');
@@ -19,7 +19,7 @@ export async function virarTarefaSugestaoAction(
 }
 
 export async function descartarSugestaoAction(sugestaoId: string): Promise<{ ok: boolean }> {
-  const access = await requireActiveOrg();
+  const access = await requireActiveOrgParaMutacao();
   const ok = await marcarSugestaoStatus(access.orgId, sugestaoId, 'descartado');
   if (ok) revalidatePath('/dashboard/calendario');
   return { ok };

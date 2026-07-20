@@ -2,12 +2,20 @@
 
 import { randomBytes } from 'node:crypto';
 
+import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { logger } from '@/lib/logger';
 import { setOrgAnalista, transferCarteiraEmLote } from '@/modules/analista/analista.repository';
 import { buildPasswordResetUrl, createPasswordResetToken } from '@/modules/auth/password-reset.repository';
+import {
+  IMPERSONATION_COOKIE,
+  IMPERSONATION_TTL_MS,
+  assinarImpersonation,
+  verificarImpersonation,
+} from '@/modules/auth/impersonation';
 import { requireAdmin } from '@/modules/auth/require-admin';
 import {
   createOrgClientUser,
@@ -465,4 +473,67 @@ export async function adminTransferCarteiraAction(
   revalidatePath('/admin/performance');
   revalidatePath('/admin');
   return { ok: true, count: orgIds.length };
+}
+
+// ---------------------------------------------------------------------------
+// Impersonação ("ver como cliente" — Task 12 H4). Read-only por construção:
+// o cookie `ta_impersonate` só é lido dentro de requireActiveOrg (que nunca
+// escreve nada) — requireActiveOrgParaMutacao (usado por toda action de
+// mutação do cliente) rejeita qualquer chamada feita sob impersonação. Estas
+// duas actions são as ÚNICAS que escrevem o cookie.
+// ---------------------------------------------------------------------------
+
+/**
+ * Inicia a impersonação: só admin_truth, só para org cliente ATIVA. Grava um
+ * cookie httpOnly+secure assinado (30min) e redireciona pro dashboard do
+ * cliente — dali em diante requireActiveOrg devolve um UserAccess sintético
+ * (role 'client', orgId da org alvo) até o cookie vencer ou "Sair" ser clicado.
+ */
+export async function iniciarImpersonationAction(orgId: string): Promise<void> {
+  const admin = await requireAdmin();
+
+  const org = await getOrganizationById(orgId);
+  if (!org || org.status !== 'active') {
+    throw new Error('Só é possível ver como um cliente com a conta ativa.');
+  }
+
+  const valor = assinarImpersonation(org.id, admin.id, new Date());
+  cookies().set(IMPERSONATION_COOKIE, valor, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: Math.floor(IMPERSONATION_TTL_MS / 1000),
+  });
+
+  await recordAudit({
+    orgId: org.id,
+    userId: admin.id,
+    acao: 'admin.impersonation_iniciada',
+  });
+
+  redirect('/dashboard');
+}
+
+/**
+ * Encerra a impersonação em curso (chamado pelo botão "Sair" da faixa no
+ * layout do cliente) — apaga o cookie e volta pro admin. Segue exigindo
+ * requireAdmin: a sessão REAL nunca deixa de ser admin_truth durante a
+ * impersonação (o papel sintético é local a requireActiveOrg, não ao
+ * NextAuth), então esta action só é alcançável pelo admin dono da sessão.
+ */
+export async function encerrarImpersonationAction(): Promise<void> {
+  const admin = await requireAdmin();
+
+  const cookieValue = cookies().get(IMPERSONATION_COOKIE)?.value;
+  const verificado = cookieValue ? verificarImpersonation(cookieValue, new Date()) : null;
+  cookies().delete(IMPERSONATION_COOKIE);
+
+  await recordAudit({
+    orgId: verificado?.orgId ?? null,
+    userId: admin.id,
+    acao: 'admin.impersonation_encerrada',
+  });
+
+  redirect('/admin');
 }
