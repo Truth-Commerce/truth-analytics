@@ -366,6 +366,34 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
     await expect(ativarCiclo(orgAId, cicloFechado)).rejects.toThrow('transicao_invalida');
   });
 
+  // ---------------------------------------------------------------------
+  // F5 (revisão H5/T11) — ativarCiclo não demovia o ciclo 'ativo' anterior;
+  // duas orgs podiam acabar com dois ciclos 'ativo' simultâneos.
+  // ---------------------------------------------------------------------
+  it('ativarCiclo demove qualquer OUTRO ciclo ativo da org (fecha via fecharCiclo — só um ativo por vez)', async () => {
+    const { criarCiclo, ativarCiclo, getCicloAtivo } = await import('@/modules/tasks/cycle.repository');
+    const [org] = await tdb
+      .insert(organizations)
+      .values({ name: `${PREFIX}unico-ativo-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    const orgUnicoAtivoId = org!.id;
+    orgIds.push(orgUnicoAtivoId);
+
+    const cicloA = await criarCiclo(orgUnicoAtivoId, { nome: 'Sprint A' });
+    const cicloB = await criarCiclo(orgUnicoAtivoId, { nome: 'Sprint B' });
+
+    await ativarCiclo(orgUnicoAtivoId, cicloA);
+    await ativarCiclo(orgUnicoAtivoId, cicloB);
+
+    const [rowA] = await tdb.select().from(cycles).where(eq(cycles.id, cicloA));
+    const [rowB] = await tdb.select().from(cycles).where(eq(cycles.id, cicloB));
+    expect(rowA?.status).toBe('fechado'); // demovido (via fecharCiclo) ao ativar o B
+    expect(rowB?.status).toBe('ativo');
+
+    const ativo = await getCicloAtivo(orgUnicoAtivoId);
+    expect(ativo?.id).toBe(cicloB); // só um ativo — o mais recente
+  });
+
   it('duas ativações concorrentes do MESMO ciclo: só uma vence (UPDATE condicional fecha a corrida — H5/T10)', async () => {
     const { criarCiclo, ativarCiclo } = await import('@/modules/tasks/cycle.repository');
     const cicloId = await criarCiclo(orgAId, { nome: 'Sprint corrida' });

@@ -168,6 +168,21 @@ export async function ativarCiclo(orgId: string, cycleId: string): Promise<void>
     .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId), eq(cycles.status, 'planejado')))
     .returning({ id: cycles.id });
   if (!ativado) throw new Error('transicao_invalida');
+
+  // F5 (revisão H5/T11): nada aqui demovia o ciclo ATIVO anterior — ativar um
+  // segundo ciclo deixava dois 'ativo' na mesma org simultaneamente, o que
+  // confunde `getCicloAtivo` (devolve só o mais recente, escondendo o outro)
+  // e a UI (qual é "o" ciclo corrente?). Fix: fecha (via `fecharCiclo` — reusa
+  // o MESMO efeito colateral do F4: tasks não concluídas do ciclo demovido
+  // voltam pro pool) qualquer OUTRO ciclo 'ativo' da org — normalmente no
+  // máximo um, mas o loop cobre defensivamente um estado pré-fix com vários.
+  const outrosAtivos = await db
+    .select({ id: cycles.id })
+    .from(cycles)
+    .where(and(eq(cycles.org_id, orgId), eq(cycles.status, 'ativo'), ne(cycles.id, cycleId)));
+  for (const outro of outrosAtivos) {
+    await fecharCiclo(orgId, outro.id);
+  }
 }
 
 /** Tasks de um ciclo, org-scoped (filtra por `org_id` E `cycle_id`). */
