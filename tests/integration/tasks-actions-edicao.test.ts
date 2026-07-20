@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Sem contexto de request nos testes de action: revalidatePath e a sessão
 // precisam de stub (padrão password-reset-actions.test.ts).
@@ -10,10 +10,37 @@ vi.mock('@/modules/auth/require-session', () => ({
   requireSession: async () => sessaoMock.access,
 }));
 
+// resolveTaskContext agora chama assertNaoImpersonando() (fix pós-Task 12),
+// que lê cookies() de next/headers — indisponível fora de um request real do
+// Next (mesmo problema documentado em tests/integration/impersonation-flow.test.ts).
+// Cookie store compartilhado: os testes de edição/exclusão nunca plantam o
+// cookie de impersonação (get() devolve undefined, comportamento "sem
+// cookie" de antes desta mudança); o describe de impersonação no fim do
+// arquivo planta e limpa o cookie a cada teste (afterEach próprio).
+const cookieStore = new Map<string, string>();
+vi.mock('next/headers', () => ({
+  cookies: () => ({
+    get: (name: string) => (cookieStore.has(name) ? { name, value: cookieStore.get(name)! } : undefined),
+    set: (name: string, value: string) => {
+      cookieStore.set(name, value);
+    },
+    delete: (name: string) => {
+      cookieStore.delete(name);
+    },
+  }),
+}));
+
 import { db } from '@/db/client';
-import { organizations, taskActivities, tasks, taskTemplates, users } from '@/db/schema';
-import { createTaskAction, deleteTaskFormAction, updateTaskAction } from '@/actions/tasks.actions';
+import { notifications, organizations, reports, taskActivities, tasks, taskTemplates, users } from '@/db/schema';
+import {
+  concluirTaskFormAction,
+  createTaskAction,
+  createTasksFromReportAction,
+  deleteTaskFormAction,
+  updateTaskAction,
+} from '@/actions/tasks.actions';
 import { hojeBrt } from '@/lib/timezone';
+import { assinarImpersonation, IMPERSONATION_COOKIE } from '@/modules/auth/impersonation';
 import { somarDias } from '@/modules/tasks/sla';
 
 const url = process.env.DATABASE_URL_TEST;
@@ -262,5 +289,197 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
         await db.delete(taskTemplates).where(eq(taskTemplates.id, tpl!.id));
       }
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Impersonação — fix pós-Task 12 (2 breaches achados na revisão H4 T12):
+// C1 createTasksFromReportAction e C2 concluirTaskFormAction/
+// resolveTaskContext mutavam a org do CLIENTE mesmo com o admin em modo "ver
+// como cliente". Root cause: os dois resolvem contexto via requireSession()
+// direto — que devolve a sessão REAL (admin_truth), nunca o UserAccess
+// sintético que só requireActiveOrg enxerga. O guard assertNaoImpersonando
+// planta/lê o MESMO cookie HMAC que iniciarImpersonationAction gravaria.
+// ---------------------------------------------------------------------------
+const SAMPLE_ANALISE_IMPERSON = {
+  resumoExecutivo: 'Resumo de teste para o fluxo de impersonação.',
+  gargalos: ['Gargalo de teste para impersonação'],
+  sugestoesMelhoria: [],
+  ideiasVenda: [],
+  recomendacoesPreco: [],
+};
+
+describe.skipIf(!url)('impersonação — tasks.actions.ts bloqueia mutações (fix pós-Task 12)', () => {
+  const PREFIX_I = 'ta-test-edicao-imperson-';
+  // Escopo próprio (independente do describe de edição/exclusão acima — `let
+  // orgId`/`let adminId` daquele bloco não são visíveis aqui): org "casa" do
+  // admin_truth + a própria conta admin.
+  let orgAdminId = '';
+  let adminId = '';
+  let orgClienteId = '';
+  let clienteRealId = '';
+  let reportId = '';
+  let taskId2 = '';
+
+  beforeAll(async () => {
+    const [orgAdmin] = await db
+      .insert(organizations)
+      .values({ name: `${PREFIX_I}admin-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    orgAdminId = orgAdmin!.id;
+
+    const [admin] = await db
+      .insert(users)
+      .values({ org_id: orgAdminId, email: `${PREFIX_I}admin-${RUN}@example.com`, senha_hash: 'h', role: 'admin_truth' })
+      .returning({ id: users.id });
+    adminId = admin!.id;
+
+    const [orgCliente] = await db
+      .insert(organizations)
+      .values({ name: `${PREFIX_I}cliente-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    orgClienteId = orgCliente!.id;
+
+    // Usuário cliente REAL (não o admin impersonando) — precisa existir de
+    // verdade: task_activities.user_id é FK p/ users(id) (uuid), então o
+    // teste de regressão do cliente real usa este id, não um literal.
+    const [clienteReal] = await db
+      .insert(users)
+      .values({
+        org_id: orgClienteId,
+        email: `${PREFIX_I}cliente-real-${RUN}@example.com`,
+        senha_hash: 'h',
+        role: 'client',
+      })
+      .returning({ id: users.id });
+    clienteRealId = clienteReal!.id;
+
+    const [report] = await db
+      .insert(reports)
+      .values({
+        org_id: orgClienteId,
+        status: 'done',
+        periodo_inicio: new Date('2026-06-01'),
+        periodo_fim: new Date('2026-06-30'),
+        analise_ia: SAMPLE_ANALISE_IMPERSON,
+      })
+      .returning({ id: reports.id });
+    reportId = report!.id;
+
+    const [t] = await db
+      .insert(tasks)
+      .values({
+        org_id: orgClienteId,
+        titulo: `${PREFIX_I}task-${RUN}`,
+        criado_por: 'analista',
+        prioridade: 'media',
+      })
+      .returning({ id: tasks.id });
+    taskId2 = t!.id;
+  });
+
+  afterAll(async () => {
+    const restantes = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.org_id, orgClienteId));
+    const ids = restantes.map((r) => r.id);
+    if (ids.length > 0) await db.delete(taskActivities).where(inArray(taskActivities.task_id, ids));
+    await db.delete(tasks).where(eq(tasks.org_id, orgClienteId));
+    await db.delete(reports).where(eq(reports.org_id, orgClienteId));
+    // notifyTasksDoRelatorio (regressão sem cookie) grava notificação in-app
+    // pro cliente real — FK notifications.user_id → users.id bloquearia o
+    // delete de users abaixo se não limparmos primeiro.
+    await db.delete(notifications).where(eq(notifications.user_id, clienteRealId));
+    await db.delete(users).where(eq(users.org_id, orgClienteId));
+    await db.delete(organizations).where(eq(organizations.id, orgClienteId));
+    await db.delete(users).where(eq(users.org_id, orgAdminId));
+    await db.delete(organizations).where(eq(organizations.id, orgAdminId));
+  });
+
+  afterEach(() => {
+    cookieStore.clear();
+  });
+
+  it('C1 fechado: admin_truth REAL sob impersonação (cookie válido p/ orgCliente) → createTasksFromReportAction lança "Modo visualização" e cria ZERO tasks', async () => {
+    // A sessão REAL nunca deixa de ser admin_truth durante impersonação —
+    // requireSession() (usado por esta action) só enxerga essa sessão real.
+    sessaoMock.access = { id: adminId, orgId: orgAdminId, role: 'admin_truth', orgStatus: 'active', plano: null };
+    cookieStore.set(IMPERSONATION_COOKIE, assinarImpersonation(orgClienteId, adminId, new Date()));
+
+    await expect(
+      createTasksFromReportAction(
+        {},
+        form({ reportId, itens: JSON.stringify([{ fonte: 'gargalos', indice: 0 }]) }),
+      ),
+    ).rejects.toThrow('Modo visualização: ações desabilitadas');
+
+    const rows = await db.select().from(tasks).where(eq(tasks.report_id, reportId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it('C2 fechado: admin_truth REAL sob impersonação + orgId do cliente no form (hidden input do TaskDetail durante "ver como cliente") → concluirTaskFormAction lança e a task fica INTACTA', async () => {
+    sessaoMock.access = { id: adminId, orgId: orgAdminId, role: 'admin_truth', orgStatus: 'active', plano: null };
+    cookieStore.set(IMPERSONATION_COOKIE, assinarImpersonation(orgClienteId, adminId, new Date()));
+
+    const [antes] = await db.select().from(tasks).where(eq(tasks.id, taskId2));
+    expect(antes!.status).toBe('backlog');
+
+    // orgId = orgCliente: exatamente o que TaskDetail.tsx manda no hidden
+    // input <input name="orgId" value={access.orgId}> quando access.orgId
+    // vem do UserAccess sintético (requireActiveOrg) durante impersonação.
+    await expect(
+      concluirTaskFormAction(form({ taskId: taskId2, orgId: orgClienteId })),
+    ).rejects.toThrow('Modo visualização: ações desabilitadas');
+
+    const [depois] = await db.select().from(tasks).where(eq(tasks.id, taskId2));
+    expect(depois!.status).toBe('backlog'); // nunca chegou a mover — moveTask não rodou
+  });
+
+  it('regressão: admin_truth SEM cookie de impersonação → createTasksFromReportAction continua funcionando normalmente', async () => {
+    sessaoMock.access = { id: adminId, orgId: orgAdminId, role: 'admin_truth', orgStatus: 'active', plano: null };
+    // sem cookie plantado
+
+    const r = await createTasksFromReportAction(
+      {},
+      form({ reportId, itens: JSON.stringify([{ fonte: 'gargalos', indice: 0 }]) }),
+    );
+    expect(r.ok).toBe(true);
+    expect(r.criadas).toBe(1);
+
+    const rows = await db.select().from(tasks).where(eq(tasks.report_id, reportId));
+    expect(rows).toHaveLength(1);
+  });
+
+  it('regressão: cliente real (sem cookie) continua concluindo a própria task normalmente', async () => {
+    sessaoMock.access = {
+      id: clienteRealId,
+      orgId: orgClienteId,
+      role: 'client',
+      orgStatus: 'active',
+      plano: 'monthly',
+    };
+    // sem cookie plantado
+
+    await concluirTaskFormAction(form({ taskId: taskId2 }));
+
+    const [t] = await db.select().from(tasks).where(eq(tasks.id, taskId2));
+    expect(t!.status).toBe('em_revisao'); // proximoStatusAoConcluir('analista')
+  });
+
+  it('assertNaoImpersonando: só um cookie de impersonação VÁLIDO e NÃO vencido bloqueia — ausente/vencido/adulterado nunca bloqueiam', async () => {
+    const { assertNaoImpersonando } = await import('@/modules/auth/require-active-org');
+
+    await expect(assertNaoImpersonando()).resolves.toBeUndefined(); // sem cookie
+
+    const vencido = new Date(Date.now() - 60 * 60 * 1000);
+    cookieStore.set(IMPERSONATION_COOKIE, assinarImpersonation(orgClienteId, adminId, vencido));
+    await expect(assertNaoImpersonando()).resolves.toBeUndefined(); // vencido
+    cookieStore.clear();
+
+    const valido = assinarImpersonation(orgClienteId, adminId, new Date());
+    cookieStore.set(IMPERSONATION_COOKIE, `${valido}adulterado`);
+    await expect(assertNaoImpersonando()).resolves.toBeUndefined(); // assinatura quebrada
+    cookieStore.clear();
+
+    cookieStore.set(IMPERSONATION_COOKIE, valido);
+    await expect(assertNaoImpersonando()).rejects.toThrow('Modo visualização: ações desabilitadas'); // válido → bloqueia
   });
 });

@@ -9,9 +9,11 @@ import type { UserAccess } from '@/modules/auth/user.types';
 // ---------------------------------------------------------------------------
 // Impersonação ("ver como cliente" — Task 12 H4). Invariante cardinal: SÓ
 // requireActiveOrg (leitura) enxerga o cookie; requireActiveOrgParaMutacao
-// bloqueia qualquer escrita quando a sessão é sintética. Fora daqui (ex.:
-// tasks.actions.ts, que resolve contexto via requireSession direto) o cookie
-// não tem NENHUM efeito — é só um detalhe interno deste módulo.
+// bloqueia qualquer escrita quando a sessão é sintética. `tasks.actions.ts`
+// resolve contexto via requireSession direto (não passa por
+// requireActiveOrg) — por isso expõe `assertNaoImpersonando`, abaixo, como um
+// segundo guard independente para essa camada (fix pós-Task 12: dois
+// breaches de escrita durante impersonação em tasks.actions.ts).
 //
 // lerImpersonacaoAtiva: dado o UserAccess REAL (de requireSession/
 // getSessionContext), decide se há uma impersonação válida em curso.
@@ -69,6 +71,30 @@ export async function requireActiveOrgParaMutacao(): Promise<UserAccess> {
     throw new Error('Modo visualização: ações desabilitadas');
   }
   return access;
+}
+
+/**
+ * Guard independente de sessão para camadas que NÃO passam por
+ * requireActiveOrg — hoje só `tasks.actions.ts` (resolve contexto via
+ * `requireSession` direto, então nunca vê o UserAccess sintético). Lê o
+ * cookie de impersonação diretamente: uma assinatura HMAC válida SÓ pode ter
+ * sido produzida por `iniciarImpersonationAction` (gated por `requireAdmin`),
+ * então a mera presença de um cookie válido e não vencido já basta para saber
+ * que a sessão está em modo "ver como cliente" — não precisa recarregar a
+ * sessão real nem revalidar a org no banco (isso é próprio do caminho de
+ * LEITURA em `lerImpersonacaoAtiva`, que decide o que a sessão sintética pode
+ * ver; aqui só importa se ela existe, para barrar a escrita).
+ *
+ * Mesma mensagem de erro de `requireActiveOrgParaMutacao` — os dois guards
+ * protegem a mesma invariante ("ver como cliente" é read-only por
+ * construção), só por portas de entrada diferentes.
+ */
+export async function assertNaoImpersonando(): Promise<void> {
+  const cookieValue = cookies().get(IMPERSONATION_COOKIE)?.value;
+  if (!cookieValue) return;
+  if (verificarImpersonation(cookieValue, new Date())) {
+    throw new Error('Modo visualização: ações desabilitadas');
+  }
 }
 
 /**
