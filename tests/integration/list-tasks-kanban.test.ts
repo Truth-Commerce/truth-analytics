@@ -31,6 +31,21 @@ describe.skipIf(!url)('listTasksKanban — integração', () => {
       .returning({ id: users.id });
     userId = user!.id;
 
+    const [epico] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgId,
+        titulo: 'Épico pai',
+        tipo: 'catalogo',
+        prioridade: 'alta',
+        status: 'todo',
+        criado_por: 'analista',
+        nivel: 'epico',
+        ordem: 1,
+      })
+      .returning({ id: tasks.id });
+    const epicoId = epico!.id;
+
     const [rica] = await tdb
       .insert(tasks)
       .values({
@@ -42,6 +57,9 @@ describe.skipIf(!url)('listTasksKanban — integração', () => {
         status: 'todo',
         criado_por: 'analista',
         ordem: 1,
+        parent_id: epicoId,
+        assignee_user_id: userId,
+        labels: ['bug', 'urgente'],
       })
       .returning({ id: tasks.id });
     taskRicaId = rica!.id;
@@ -93,5 +111,37 @@ describe.skipIf(!url)('listTasksKanban — integração', () => {
     const vazia = lista.find((t) => t.id === taskVaziaId)!;
     expect(vazia.comentarios).toBe(0);
     expect(vazia.checklistTotal).toBe(0);
+  });
+
+  it('listTasksKanban expõe labels/parentId/assigneeUserId (board turbinado H5/T6)', async () => {
+    const { listTasksKanban } = await import('@/modules/tasks/task.repository');
+    const lista = await listTasksKanban(orgId);
+    const rica = lista.find((t) => t.id === taskRicaId)!;
+    expect(rica.labels).toEqual(['bug', 'urgente']);
+    expect(rica.parentId).not.toBeNull();
+    expect(rica.assigneeUserId).toBe(userId);
+    const vazia = lista.find((t) => t.id === taskVaziaId)!;
+    expect(vazia.labels).toEqual([]);
+    expect(vazia.parentId).toBeNull();
+    expect(vazia.assigneeUserId).toBeNull();
+  });
+
+  it('listTasksKanban expõe progresso agregado no card de épico, batched (H5/T10)', async () => {
+    const { listTasksKanban } = await import('@/modules/tasks/task.repository');
+    const lista = await listTasksKanban(orgId);
+
+    // taskRicaId é filha direta do épico seedado em beforeAll (parent_id = epicoId);
+    // taskVaziaId é raiz solta (sem parent) — nenhuma das duas é o épico em si.
+    const epicoCard = lista.find((t) => t.nivel === 'epico')!;
+    expect(epicoCard).toBeDefined();
+    // 1 filha direta (taskRicaId, status 'todo') -> total=1, concluidas=0.
+    expect(epicoCard.progresso).toEqual({ total: 1, concluidas: 0, pct: 0 });
+
+    // Cards que NÃO são épico (task/subtask) não carregam progresso.
+    const rica = lista.find((t) => t.id === taskRicaId)!;
+    expect(rica.nivel).toBe('task');
+    expect(rica.progresso).toBeNull();
+    const vazia = lista.find((t) => t.id === taskVaziaId)!;
+    expect(vazia.progresso).toBeNull();
   });
 });

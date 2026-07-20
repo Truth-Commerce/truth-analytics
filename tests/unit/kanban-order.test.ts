@@ -9,20 +9,37 @@ const t = (prioridade: 'alta' | 'media' | 'baixa', prazo: string | null, ordem: 
 });
 
 describe('ordenarColuna', () => {
-  it('prioridade primeiro, depois prazo asc (null por último), depois ordem', () => {
+  it('ordem manual é a chave PRIMÁRIA — prevalece mesmo cruzando prioridades/prazos diferentes (F3a)', () => {
+    const entrada = [
+      t('baixa', '2026-07-01', 4),
+      t('alta', null, 1),
+      t('alta', '2026-07-20', 5),
+      t('alta', '2026-07-10', 2),
+      t('media', '2026-07-05', 3),
+    ];
+    expect(ordenarColuna(entrada).map((x) => x.ordem)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('empate em ordem cai pro critério antigo: prioridade, depois prazo asc (null por último)', () => {
     const entrada = [
       t('baixa', '2026-07-01', 1),
-      t('alta', null, 2),
-      t('alta', '2026-07-20', 3),
-      t('alta', '2026-07-10', 4),
-      t('media', '2026-07-05', 5),
+      t('alta', null, 1),
+      t('alta', '2026-07-20', 1),
+      t('alta', '2026-07-10', 1),
+      t('media', '2026-07-05', 1),
     ];
-    expect(ordenarColuna(entrada).map((x) => x.ordem)).toEqual([4, 3, 2, 5, 1]);
+    expect(ordenarColuna(entrada).map((x) => [x.prioridade, x.prazo])).toEqual([
+      ['alta', '2026-07-10'],
+      ['alta', '2026-07-20'],
+      ['alta', null],
+      ['media', '2026-07-05'],
+      ['baixa', '2026-07-01'],
+    ]);
   });
 
   it('não muta o array original', () => {
-    const entrada = [t('baixa', null, 1), t('alta', null, 2)];
+    const entrada = [t('baixa', null, 2), t('alta', null, 1)];
     ordenarColuna(entrada);
-    expect(entrada.map((x) => x.ordem)).toEqual([1, 2]);
+    expect(entrada.map((x) => x.ordem)).toEqual([2, 1]);
   });
 });

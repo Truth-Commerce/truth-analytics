@@ -6,6 +6,7 @@ interface BadgeProps {
   variant?: BadgeVariant;
   className?: string;
   children?: React.ReactNode;
+  'data-testid'?: string;
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
@@ -19,9 +20,9 @@ const variantClasses: Record<BadgeVariant, string> = {
     'text-[11px] text-white/60 bg-white/10 border border-white/10 rounded-full px-3 py-1',
 };
 
-export function Badge({ variant = 'neutral', className = '', children }: BadgeProps) {
+export function Badge({ variant = 'neutral', className = '', children, ...rest }: BadgeProps) {
   return (
-    <span className={`inline-flex items-center ${variantClasses[variant]} ${className}`}>
+    <span className={`inline-flex items-center ${variantClasses[variant]} ${className}`} {...rest}>
       {children}
     </span>
   );

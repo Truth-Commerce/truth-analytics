@@ -9,6 +9,7 @@ import {
   auditLog,
   calendarSuggestions,
   connections,
+  cycles,
   kitSuggestions,
   loginAttempts,
   marketSnapshots,
@@ -20,6 +21,7 @@ import {
   reports,
   taskActivities,
   taskComments,
+  taskWatchers,
   tasks,
   trackedProducts,
   users,
@@ -68,6 +70,10 @@ export async function purgeOrg(
       userIds.length === 0
         ? 0
         : await n(dbc.select({ n: count() }).from(notifications).where(inArray(notifications.user_id, userIds))),
+    task_watchers:
+      taskIds.length === 0
+        ? 0
+        : await n(dbc.select({ n: count() }).from(taskWatchers).where(inArray(taskWatchers.task_id, taskIds))),
     task_comments:
       taskIds.length === 0
         ? 0
@@ -77,6 +83,7 @@ export async function purgeOrg(
         ? 0
         : await n(dbc.select({ n: count() }).from(taskActivities).where(inArray(taskActivities.task_id, taskIds))),
     tasks: taskIds.length,
+    cycles: await n(dbc.select({ n: count() }).from(cycles).where(eq(cycles.org_id, input.orgId))),
     kit_suggestions: await n(
       dbc.select({ n: count() }).from(kitSuggestions).where(eq(kitSuggestions.org_id, input.orgId)),
     ),
@@ -133,6 +140,8 @@ export async function purgeOrg(
       await tx.delete(notifications).where(inArray(notifications.user_id, userIds));
     }
     if (taskIds.length > 0) {
+      // task_watchers referencia tasks → deleta ANTES de tasks.
+      await tx.delete(taskWatchers).where(inArray(taskWatchers.task_id, taskIds));
       await tx.delete(taskComments).where(inArray(taskComments.task_id, taskIds));
       await tx.delete(taskActivities).where(inArray(taskActivities.task_id, taskIds));
     }
@@ -144,6 +153,8 @@ export async function purgeOrg(
     await tx.delete(calendarSuggestions).where(eq(calendarSuggestions.org_id, input.orgId));
     await tx.delete(analystBriefings).where(eq(analystBriefings.org_id, input.orgId));
     await tx.delete(tasks).where(eq(tasks.org_id, input.orgId));
+    // tasks.cycle_id referencia cycles → cycles deleta DEPOIS de tasks.
+    await tx.delete(cycles).where(eq(cycles.org_id, input.orgId));
     await tx.delete(alerts).where(eq(alerts.org_id, input.orgId));
     await tx.delete(marketSnapshots).where(eq(marketSnapshots.org_id, input.orgId));
     await tx.delete(reports).where(eq(reports.org_id, input.orgId));
@@ -167,6 +178,10 @@ export async function purgeOrg(
         .update(taskActivities)
         .set({ user_id: null })
         .where(inArray(taskActivities.user_id, userIds));
+      // task_watchers.user_id é NOT NULL (não dá p/ nular) — um analista
+      // (usuário desta org) pode observar task de OUTRA org; apaga a
+      // observação antes de apagar o usuário p/ não violar a FK.
+      await tx.delete(taskWatchers).where(inArray(taskWatchers.user_id, userIds));
     }
     if (emails.length > 0) {
       await tx.delete(loginAttempts).where(inArray(loginAttempts.email, emails));

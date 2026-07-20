@@ -15,6 +15,7 @@ import { assertNaoImpersonando } from '@/modules/auth/require-active-org';
 import { requireSession } from '@/modules/auth/require-session';
 import type { UserAccess } from '@/modules/auth/user.types';
 import { CHECKLIST_UNCHECKED } from '@/modules/tasks/checklist-line';
+import { moverTaskParaCiclo } from '@/modules/tasks/cycle.repository';
 import { FONTES_ANALISE } from '@/modules/tasks/report-to-task';
 import { createTasksFromReport } from '@/modules/tasks/report-to-task.repository';
 import { prazoDefault, somarDias } from '@/modules/tasks/sla';
@@ -22,11 +23,14 @@ import { recordTaskActivity } from '@/modules/tasks/task-activity.repository';
 import { addTaskComment } from '@/modules/tasks/task-comment.repository';
 import { getTemplateById } from '@/modules/tasks/task-template.repository';
 import {
+  criarEpico,
+  criarSubtarefa,
   createTask,
   deleteTask,
   getTaskById,
   moveTask,
   reorderTask,
+  setTaskLabels,
   toggleChecklistItemTx,
   updateTask,
 } from '@/modules/tasks/task.repository';
@@ -39,16 +43,21 @@ import {
   notifyTaskEmRevisao,
   notifyTasksDoRelatorio,
   notifyTasksDoRelatorioParaAnalista,
+  notificarMencoes,
+  notificarWatchers,
 } from '@/modules/tasks/task-notifications';
 import { proximoStatusAoConcluir } from '@/modules/tasks/task-transitions';
 import {
+  STATUS_TASK_LABEL,
   TASK_PRIORIDADES,
   TASK_STATUSES,
   TASK_TIPOS,
   type TaskAtor,
   type TaskCriadoPor,
   type TaskPrioridade,
+  type TaskStatus,
 } from '@/modules/tasks/task.types';
+import { addWatcher, removeWatcher } from '@/modules/tasks/watcher.repository';
 
 export type TaskActionState = { error?: string; ok?: boolean; taskId?: string };
 
@@ -121,6 +130,11 @@ function revalidateTaskRoutes(orgId: string): void {
   revalidatePath(`/analista/${orgId}`);
 }
 
+/** Texto do evento de mudança de status para `notificarWatchers` (H5/T5). */
+function eventoStatusLabel(status: TaskStatus): string {
+  return `Status alterado para ${STATUS_TASK_LABEL[status]}`;
+}
+
 // ---------------------------------------------------------------------------
 // createTaskAction (stateful)
 // ---------------------------------------------------------------------------
@@ -133,6 +147,11 @@ const createTaskSchema = z.object({
   descricao: z.string().max(5000).optional().default(''),
   prazo: prazoDate.optional(),
   templateId: z.string().min(1).optional(),
+  // F2 (revisão H5/T11): "Nova task" agora deixa escolher o nível raiz da
+  // hierarquia — 'epico' ou 'task' (default, retrocompat). Sem isso, nada na
+  // UI jamais criava um épico, e todo o consumo de hierarquia (progresso no
+  // card, filtro/swimlane por épico, card Hierarquia do detalhe) ficava morto.
+  nivel: z.enum(['task', 'epico']).optional().default('task'),
 });
 
 export async function createTaskAction(
@@ -150,11 +169,12 @@ export async function createTaskAction(
     descricao: formData.get('descricao') ?? '',
     prazo: formData.get('prazo') || undefined,
     templateId: formData.get('templateId') || undefined,
+    nivel: formData.get('nivel') || undefined,
   });
   if (!parsed.success) return { error: 'Dados inválidos. Confira os campos e tente novamente.' };
 
   let { titulo, tipo, descricao } = parsed.data;
-  const { prioridade, prazo, templateId } = parsed.data;
+  const { prioridade, prazo, templateId, nivel } = parsed.data;
 
   let prioridadeFinal: TaskPrioridade = prioridade;
   let prazoFinal: string | null = prazo ?? null;
@@ -181,16 +201,30 @@ export async function createTaskAction(
 
   const criadoPor: TaskCriadoPor = ator === 'cliente' ? 'cliente' : 'analista';
 
-  const taskId = await createTask({
-    orgId,
-    titulo,
-    descricao,
-    tipo,
-    prioridade: prioridadeFinal,
-    criadoPor,
-    prazo: prazoFinal ?? prazoDefault(prioridadeFinal),
-    actorUserId: access.id,
-  });
+  // F2 (revisão H5/T11): nivel='epico' cria uma raiz da hierarquia (sem
+  // parent) — criarEpico é só createTask com nivel fixado; nenhuma regra nova.
+  const taskId =
+    nivel === 'epico'
+      ? await criarEpico({
+          orgId,
+          titulo,
+          descricao,
+          tipo,
+          prioridade: prioridadeFinal,
+          criadoPor,
+          prazo: prazoFinal ?? prazoDefault(prioridadeFinal),
+          actorUserId: access.id,
+        })
+      : await createTask({
+          orgId,
+          titulo,
+          descricao,
+          tipo,
+          prioridade: prioridadeFinal,
+          criadoPor,
+          prazo: prazoFinal ?? prazoDefault(prioridadeFinal),
+          actorUserId: access.id,
+        });
 
   // Gatilho simétrico (Task 10 — G3): analista/admin criou → avisa o cliente;
   // cliente criou → avisa o analista da org (fallback: e-mail admin).
@@ -201,6 +235,81 @@ export async function createTaskAction(
   }
 
   await recordAudit({ orgId, userId: access.id, acao: 'task.criada', detalhes: { taskId, titulo } });
+
+  revalidateTaskRoutes(orgId);
+  return { ok: true, taskId };
+}
+
+// ---------------------------------------------------------------------------
+// criarSubtarefaFormAction (stateful) — F2 (revisão H5/T11).
+//
+// Único ponto da UI que cria uma task/subtask FILHA de uma task já existente
+// (a página de detalhe mostra "Adicionar task filha" num épico, ou
+// "Adicionar subtarefa" numa task) — até este fix, criarSubtarefa só era
+// exercitada por teste; nenhuma UI a chamava. Reusa criarSubtarefa (repo) tal
+// qual — ela já valida o nível via `nivelFilhoValido` (epico→task,
+// task→subtask; mais nada) e herda org_id/report_id do pai; esta action só
+// resolve contexto (mesmo portão de todas as outras — resolveTaskContext,
+// 1ª linha assertNaoImpersonando) e traduz os erros conhecidos.
+// ---------------------------------------------------------------------------
+const criarSubtarefaSchema = z.object({
+  parentId: z.string().min(1),
+  nivel: z.enum(['task', 'subtask']),
+  titulo: z.string().trim().min(3).max(200),
+  tipo: z.enum(TASK_TIPOS),
+  prioridade: z.enum(TASK_PRIORIDADES).default('media'),
+  descricao: z.string().max(5000).optional().default(''),
+  prazo: prazoDate.optional(),
+});
+
+export async function criarSubtarefaFormAction(
+  _prev: TaskActionState,
+  formData: FormData,
+): Promise<TaskActionState> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return { error: resolved.error };
+  const { access, orgId, ator } = resolved.ctx;
+
+  const parsed = criarSubtarefaSchema.safeParse({
+    parentId: formData.get('parentId'),
+    nivel: formData.get('nivel'),
+    titulo: formData.get('titulo'),
+    tipo: formData.get('tipo'),
+    prioridade: formData.get('prioridade') || undefined,
+    descricao: formData.get('descricao') ?? '',
+    prazo: formData.get('prazo') || undefined,
+  });
+  if (!parsed.success) return { error: 'Dados inválidos. Confira os campos e tente novamente.' };
+  const { parentId, nivel, titulo, tipo, prioridade, descricao, prazo } = parsed.data;
+
+  const criadoPor: TaskCriadoPor = ator === 'cliente' ? 'cliente' : 'analista';
+
+  let taskId: string;
+  try {
+    // criarSubtarefa já é org-scoped (getNivelEReport busca o pai filtrando
+    // por orgId) — um parentId de outra org lança 'task_pai_nao_encontrada',
+    // o mesmo tratamento de qualquer task cross-org neste módulo.
+    taskId = await criarSubtarefa({
+      orgId,
+      parentId,
+      nivel,
+      titulo,
+      descricao,
+      tipo,
+      prioridade,
+      criadoPor,
+      prazo: prazo ?? prazoDefault(prioridade),
+      actorUserId: access.id,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'task_pai_nao_encontrada') return { error: 'Tarefa-pai não encontrada.' };
+    if (e instanceof Error && e.message.startsWith('nivel_filho_invalido')) {
+      return { error: 'Este nível não pode ser filho da tarefa-pai selecionada.' };
+    }
+    throw e;
+  }
+
+  await recordAudit({ orgId, userId: access.id, acao: 'task.criada', detalhes: { taskId, titulo, parentId } });
 
   revalidateTaskRoutes(orgId);
   return { ok: true, taskId };
@@ -222,13 +331,15 @@ export async function moveTaskFormAction(formData: FormData): Promise<void> {
     return;
   }
 
+  let novoStatus: TaskStatus;
   try {
-    await moveTask({ taskId: parsed.data.taskId, orgId, ator, actorUserId: access.id, para: parsed.data.para });
+    novoStatus = await moveTask({ taskId: parsed.data.taskId, orgId, ator, actorUserId: access.id, para: parsed.data.para });
   } catch (e) {
     logger.warn('moveTaskFormAction falhou', { orgId, taskId: parsed.data.taskId }, e);
     return;
   }
 
+  await notificarWatchers(parsed.data.taskId, orgId, access.id, eventoStatusLabel(novoStatus));
   revalidateTaskRoutes(orgId);
 }
 
@@ -246,8 +357,9 @@ export async function moveTaskAction(formData: FormData): Promise<TaskActionStat
   const parsed = moveTaskSchema.safeParse({ taskId: formData.get('taskId'), para: formData.get('para') });
   if (!parsed.success) return { error: 'Dados inválidos. Tente novamente.' };
 
+  let novoStatus: TaskStatus;
   try {
-    await moveTask({ taskId: parsed.data.taskId, orgId, ator, actorUserId: access.id, para: parsed.data.para });
+    novoStatus = await moveTask({ taskId: parsed.data.taskId, orgId, ator, actorUserId: access.id, para: parsed.data.para });
   } catch (e) {
     if (e instanceof Error && e.message === 'transicao_invalida') {
       return { error: 'Essa mudança de coluna não é permitida.' };
@@ -258,7 +370,43 @@ export async function moveTaskAction(formData: FormData): Promise<TaskActionStat
     throw e;
   }
 
+  await notificarWatchers(parsed.data.taskId, orgId, access.id, eventoStatusLabel(novoStatus));
   revalidateTaskRoutes(orgId);
+  return { ok: true, taskId: parsed.data.taskId };
+}
+
+// ---------------------------------------------------------------------------
+// moverTaskParaCicloAction (H5/T9) — move (ou remove, cycleId ausente/vazio)
+// uma task de/para um ciclo. Task-scoped (não org-level como criar/fechar
+// ciclo): roteia por resolveTaskContext, o mesmo portão de todas as mutações
+// de task acima — 1ª linha é assertNaoImpersonando (via resolveTaskContext),
+// então herda o mesmo guard de impersonação. moverTaskParaCiclo (repo) já
+// valida os DOIS lados do escopo (task E ciclo pertencem a orgId) — esta
+// action não abre porta nova, só traduz os erros conhecidos.
+// ---------------------------------------------------------------------------
+const moverTaskParaCicloSchema = z.object({ taskId: z.string().min(1), cycleId: z.string().optional() });
+
+export async function moverTaskParaCicloAction(formData: FormData): Promise<TaskActionState> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return { error: resolved.error };
+  const { orgId } = resolved.ctx;
+
+  const parsed = moverTaskParaCicloSchema.safeParse({
+    taskId: formData.get('taskId'),
+    cycleId: formData.get('cycleId') || undefined,
+  });
+  if (!parsed.success) return { error: 'Dados inválidos. Tente novamente.' };
+
+  try {
+    await moverTaskParaCiclo(parsed.data.taskId, orgId, parsed.data.cycleId ?? null);
+  } catch (e) {
+    if (e instanceof Error && e.message === 'task_nao_encontrada') return { error: 'Tarefa não encontrada.' };
+    if (e instanceof Error && e.message === 'ciclo_nao_encontrado') return { error: 'Ciclo não encontrado.' };
+    throw e;
+  }
+
+  revalidateTaskRoutes(orgId);
+  revalidatePath('/dashboard/plano-de-acao/ciclos');
   return { ok: true, taskId: parsed.data.taskId };
 }
 
@@ -298,6 +446,7 @@ export async function concluirTaskFormAction(formData: FormData): Promise<void> 
   if (para === 'em_revisao' && ator === 'cliente') {
     await notifyTaskEmRevisao(orgId, taskId, task.titulo);
   }
+  await notificarWatchers(taskId, orgId, access.id, eventoStatusLabel(para));
 
   revalidateTaskRoutes(orgId);
 }
@@ -368,6 +517,7 @@ export async function aprovarTaskFormAction(formData: FormData): Promise<void> {
   await recordTaskActivity({ taskId, userId: access.id, evento: 'aprovada' });
   await recordAudit({ orgId, userId: access.id, acao: 'task.aprovada', detalhes: { taskId } });
   await notifyTaskAprovada(orgId, taskId, task.titulo);
+  await notificarWatchers(taskId, orgId, access.id, eventoStatusLabel('concluida'));
 
   revalidateTaskRoutes(orgId);
 }
@@ -417,6 +567,7 @@ export async function devolverTaskFormAction(formData: FormData): Promise<void> 
   await recordTaskActivity({ taskId, userId: access.id, evento: 'devolvida' });
   await recordAudit({ orgId, userId: access.id, acao: 'task.devolvida', detalhes: { taskId, motivo: motivo ?? null } });
   await notifyTaskDevolvida(orgId, taskId, task.titulo);
+  await notificarWatchers(taskId, orgId, access.id, eventoStatusLabel('em_andamento'));
 
   revalidateTaskRoutes(orgId);
 }
@@ -453,6 +604,10 @@ export async function addCommentAction(
 
   const autorEhCliente = ator === 'cliente';
   await notifyTaskComentario(orgId, taskId, task.titulo, autorEhCliente);
+  // H5/T5: @menções no corpo do comentário + watchers da task (best-effort,
+  // nenhuma das duas lança — ver task-notifications.ts).
+  await notificarMencoes(orgId, corpo, access.id, taskId, task.titulo);
+  await notificarWatchers(taskId, orgId, access.id, 'Novo comentário');
 
   revalidateTaskRoutes(orgId);
   return { ok: true, taskId };
@@ -607,6 +762,93 @@ export async function toggleChecklistItemFormAction(formData: FormData): Promise
   // No-op (índice inexistente / linha não-checkbox) não muda nada: não paga o
   // custo de revalidar as rotas de task.
   if (mudou) revalidateTaskRoutes(orgId);
+}
+
+// ---------------------------------------------------------------------------
+// setTaskLabelsFormAction (fire-and-refresh) — H5/T5. `labels` chega como
+// JSON stringificado (form nativo não manda array); `setTaskLabels` normaliza
+// (trim/dedup/cap/max) antes de gravar — nunca confia no array cru do form.
+// ---------------------------------------------------------------------------
+const setTaskLabelsSchema = z.object({ taskId: z.string().min(1), labels: z.string() });
+
+export async function setTaskLabelsFormAction(formData: FormData): Promise<void> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return warnContexto('setTaskLabelsFormAction', resolved.error);
+  const { orgId } = resolved.ctx;
+
+  const parsed = setTaskLabelsSchema.safeParse({
+    taskId: formData.get('taskId'),
+    labels: formData.get('labels') ?? '[]',
+  });
+  if (!parsed.success) {
+    logger.warn('setTaskLabelsFormAction: dados inválidos', { orgId });
+    return;
+  }
+
+  let labelsRaw: unknown;
+  try {
+    labelsRaw = JSON.parse(parsed.data.labels);
+  } catch {
+    logger.warn('setTaskLabelsFormAction: labels não é JSON válido', { orgId });
+    return;
+  }
+
+  try {
+    await setTaskLabels(parsed.data.taskId, orgId, labelsRaw);
+  } catch (e) {
+    logger.warn('setTaskLabelsFormAction falhou', { orgId, taskId: parsed.data.taskId }, e);
+    return;
+  }
+
+  revalidateTaskRoutes(orgId);
+}
+
+// ---------------------------------------------------------------------------
+// followTaskFormAction / unfollowTaskFormAction (fire-and-refresh) — H5/T5.
+// Observam/deixam de observar a PRÓPRIA sessão (access.id) — nunca outro
+// usuário; org-scoped via addWatcher/removeWatcher (rejeitam task_nao_encontrada
+// quando orgId não bate com a org da task).
+// ---------------------------------------------------------------------------
+export async function followTaskFormAction(formData: FormData): Promise<void> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return warnContexto('followTaskFormAction', resolved.error);
+  const { access, orgId } = resolved.ctx;
+
+  const parsed = taskIdSchema.safeParse({ taskId: formData.get('taskId') });
+  if (!parsed.success) {
+    logger.warn('followTaskFormAction: dados inválidos', { orgId });
+    return;
+  }
+
+  try {
+    await addWatcher(parsed.data.taskId, orgId, access.id);
+  } catch (e) {
+    logger.warn('followTaskFormAction falhou', { orgId, taskId: parsed.data.taskId }, e);
+    return;
+  }
+
+  revalidateTaskRoutes(orgId);
+}
+
+export async function unfollowTaskFormAction(formData: FormData): Promise<void> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return warnContexto('unfollowTaskFormAction', resolved.error);
+  const { access, orgId } = resolved.ctx;
+
+  const parsed = taskIdSchema.safeParse({ taskId: formData.get('taskId') });
+  if (!parsed.success) {
+    logger.warn('unfollowTaskFormAction: dados inválidos', { orgId });
+    return;
+  }
+
+  try {
+    await removeWatcher(parsed.data.taskId, orgId, access.id);
+  } catch (e) {
+    logger.warn('unfollowTaskFormAction falhou', { orgId, taskId: parsed.data.taskId }, e);
+    return;
+  }
+
+  revalidateTaskRoutes(orgId);
 }
 
 // ---------------------------------------------------------------------------

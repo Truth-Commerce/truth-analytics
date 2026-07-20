@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildCommands } from '@/components/command-model';
 
 describe('buildCommands', () => {
-  it('client: navegação completa (Estoque, Kits, Calendário e Plano de Ação inclusos) + ações (comparar incluso)', () => {
+  it('client: navegação completa (Estoque, Kits, Calendário, Plano de Ação e Ciclos inclusos) + ações (comparar incluso)', () => {
     const cmds = buildCommands('client');
     expect(cmds.map((c) => c.id)).toEqual([
       'nav-dashboard',
@@ -13,6 +13,7 @@ describe('buildCommands', () => {
       'nav-calendario',
       'nav-configuracoes',
       'nav-plano-de-acao',
+      'nav-ciclos',
       'acao-gerar-relatorio',
       'acao-adicionar-produto',
       'acao-comparar-periodos',
@@ -47,6 +48,11 @@ describe('buildCommands', () => {
       label: 'Comparar períodos',
       href: '/dashboard/relatorios/comparar',
       group: 'Ações',
+    });
+    expect(cmds.find((c) => c.id === 'nav-ciclos')).toMatchObject({
+      label: 'Ir para Ciclos',
+      href: '/dashboard/plano-de-acao/ciclos',
+      group: 'Navegação',
     });
   });
 

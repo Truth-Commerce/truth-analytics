@@ -1,8 +1,10 @@
 import { and, count, desc, eq, inArray, max, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { taskComments, taskActivities, tasks } from '@/db/schema';
+import { taskComments, taskActivities, taskWatchers, tasks } from '@/db/schema';
 import { parseChecklist, toggleChecklistLine } from './checklist-line';
+import { nivelFilhoValido, progressoEpico, type Nivel, type ProgressoEpico } from './hierarquia';
+import { normalizarLabels } from './labels';
 import { normalizarTexto } from './report-to-task';
 import type {
   TaskAtor, TaskCriadoPor, TaskDetail, TaskPrioridade, TaskStatus, TaskSummary, TaskTipo,
@@ -22,7 +24,15 @@ function rowToSummary(r: TaskRow): TaskSummary {
 }
 
 function rowToDetail(r: TaskRow): TaskDetail {
-  return { ...rowToSummary(r), descricao: r.descricao, assigneeUserId: r.assignee_user_id, orgId: r.org_id, updatedAt: r.updated_at };
+  return {
+    ...rowToSummary(r),
+    descricao: r.descricao,
+    assigneeUserId: r.assignee_user_id,
+    orgId: r.org_id,
+    updatedAt: r.updated_at,
+    labels: Array.isArray(r.labels) ? (r.labels as string[]) : [],
+    nivel: r.nivel as Nivel,
+  };
 }
 
 async function proximaOrdem(orgId: string, status: TaskStatus): Promise<number> {
@@ -43,6 +53,13 @@ export type TaskCardInfo = TaskSummary & {
   checklistFeitos: number;
   checklistTotal: number;
   reincidente: boolean;
+  /** Board turbinado (H5/T6) — insumo de filtrarTasks/agruparSwimlanes/board-view. */
+  labels: string[];
+  parentId: string | null;
+  assigneeUserId: string | null;
+  nivel: Nivel;
+  /** Progresso agregado das filhas diretas — só para cards de épico (H5/T10); null pra task/subtask. */
+  progresso: ProgressoEpico | null;
 };
 
 /** Kanban rico: summary + nº de comentários (agregado em SQL) + checklist (parse da descricao). */
@@ -57,14 +74,26 @@ export async function listTasksKanban(orgId: string): Promise<TaskCardInfo[]> {
     .where(eq(tasks.org_id, orgId))
     .groupBy(tasks.id)
     .orderBy(tasks.status, tasks.ordem);
+
+  // Progresso dos épicos do board, em UMA query batched (progressoDeEpicos usa
+  // inArray) — nunca N+1, mesmo com dezenas de épicos na coluna.
+  const epicoIds = rows.filter(({ task }) => task.nivel === 'epico').map(({ task }) => task.id);
+  const progressoPorEpico = await progressoDeEpicos(orgId, epicoIds);
+
   return rows.map(({ task, comentarios }) => {
     const itens = parseChecklist(task.descricao);
+    const nivel = task.nivel as Nivel;
     return {
       ...rowToSummary(task),
       comentarios: Number(comentarios),
       checklistFeitos: itens.filter((i) => i.feito).length,
       checklistTotal: itens.length,
       reincidente: task.descricao.includes('_Reincidente:'),
+      labels: Array.isArray(task.labels) ? (task.labels as string[]) : [],
+      parentId: task.parent_id,
+      assigneeUserId: task.assignee_user_id,
+      nivel,
+      progresso: nivel === 'epico' ? (progressoPorEpico.get(task.id) ?? null) : null,
     };
   });
 }
@@ -81,6 +110,8 @@ export async function createTask(input: {
   orgId: string; titulo: string; descricao?: string; tipo: TaskTipo; prioridade: TaskPrioridade;
   criadoPor: TaskCriadoPor; prazo?: string | null; reportId?: string | null;
   assigneeUserId?: string | null; actorUserId?: string | null;
+  /** Hierarquia (H5): task-pai (null/omitido = raiz) e nível — default 'task' (retrocompat). */
+  parentId?: string | null; nivel?: Nivel;
 }): Promise<string> {
   const ordem = await proximaOrdem(input.orgId, 'backlog');
   const [row] = await db
@@ -90,10 +121,141 @@ export async function createTask(input: {
       tipo: input.tipo, prioridade: input.prioridade, status: 'backlog',
       prazo: input.prazo ?? null, criado_por: input.criadoPor,
       report_id: input.reportId ?? null, assignee_user_id: input.assigneeUserId ?? null, ordem,
+      parent_id: input.parentId ?? null, nivel: input.nivel ?? 'task',
     })
     .returning({ id: tasks.id });
   await recordTaskActivity({ taskId: row!.id, userId: input.actorUserId ?? null, evento: 'criada', para: 'backlog' });
   return row!.id;
+}
+
+/** Busca crua (org-scoped) de nível + report_id de uma possível task-pai — usada só para herança em criarSubtarefa. */
+async function getNivelEReport(taskId: string, orgId: string): Promise<{ nivel: Nivel; reportId: string | null } | null> {
+  const [row] = await db
+    .select({ nivel: tasks.nivel, report_id: tasks.report_id })
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.org_id, orgId)))
+    .limit(1);
+  return row ? { nivel: row.nivel as Nivel, reportId: row.report_id } : null;
+}
+
+/** Cria um épico — raiz da hierarquia (nivel='epico', sem parent). */
+export async function criarEpico(input: {
+  orgId: string; titulo: string; descricao?: string; tipo: TaskTipo; prioridade: TaskPrioridade;
+  criadoPor: TaskCriadoPor; prazo?: string | null; reportId?: string | null;
+  assigneeUserId?: string | null; actorUserId?: string | null;
+}): Promise<string> {
+  return createTask({ ...input, nivel: 'epico' });
+}
+
+/**
+ * Cria uma task-filha (task ou subtask) de uma task-pai já existente, validando o nível via
+ * `nivelFilhoValido` (epico→task, task→subtask; qualquer outra combinação é rejeitada). A filha
+ * herda org_id e report_id do pai — não são recebidos no input.
+ */
+export async function criarSubtarefa(input: {
+  orgId: string; parentId: string; nivel: Nivel; titulo: string; descricao?: string;
+  tipo: TaskTipo; prioridade: TaskPrioridade; criadoPor: TaskCriadoPor; prazo?: string | null;
+  assigneeUserId?: string | null; actorUserId?: string | null;
+}): Promise<string> {
+  const pai = await getNivelEReport(input.parentId, input.orgId);
+  if (!pai) throw new Error('task_pai_nao_encontrada');
+  if (!nivelFilhoValido(pai.nivel, input.nivel)) {
+    throw new Error(`nivel_filho_invalido: '${pai.nivel}' nao aceita filho '${input.nivel}'`);
+  }
+  return createTask({
+    orgId: input.orgId, titulo: input.titulo, descricao: input.descricao, tipo: input.tipo,
+    prioridade: input.prioridade, criadoPor: input.criadoPor, prazo: input.prazo,
+    reportId: pai.reportId, assigneeUserId: input.assigneeUserId, actorUserId: input.actorUserId,
+    parentId: input.parentId, nivel: input.nivel,
+  });
+}
+
+export type ArvoreTask = TaskSummary & { subtasks: TaskSummary[] };
+export type ArvoreEpico = { epico: TaskSummary; tasks: ArvoreTask[] };
+
+/** Épico + filhas diretas (tasks) + netas (subtasks de cada task filha) — tudo org-scoped. */
+export async function listarArvore(orgId: string, epicoId: string): Promise<ArvoreEpico | null> {
+  const [epicoRow] = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.id, epicoId), eq(tasks.org_id, orgId), eq(tasks.nivel, 'epico')))
+    .limit(1);
+  if (!epicoRow) return null;
+
+  const taskRows = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.parent_id, epicoId), eq(tasks.org_id, orgId)))
+    .orderBy(tasks.ordem);
+
+  const taskIds = taskRows.map((r) => r.id);
+  const subtaskRows = taskIds.length
+    ? await db
+        .select()
+        .from(tasks)
+        .where(and(inArray(tasks.parent_id, taskIds), eq(tasks.org_id, orgId)))
+        .orderBy(tasks.ordem)
+    : [];
+
+  const subtasksPorPai = new Map<string, TaskSummary[]>();
+  for (const row of subtaskRows) {
+    const paiId = row.parent_id!;
+    const lista = subtasksPorPai.get(paiId) ?? [];
+    lista.push(rowToSummary(row));
+    subtasksPorPai.set(paiId, lista);
+  }
+
+  return {
+    epico: rowToSummary(epicoRow),
+    tasks: taskRows.map((r) => ({ ...rowToSummary(r), subtasks: subtasksPorPai.get(r.id) ?? [] })),
+  };
+}
+
+/** Progresso (agregado das filhas diretas) de vários épicos de uma vez — evita N+1 no board. */
+export async function progressoDeEpicos(orgId: string, epicoIds: string[]): Promise<Map<string, ProgressoEpico>> {
+  const mapa = new Map<string, ProgressoEpico>();
+  if (epicoIds.length === 0) return mapa;
+
+  const rows = await db
+    .select({ parent_id: tasks.parent_id, status: tasks.status })
+    .from(tasks)
+    .where(and(eq(tasks.org_id, orgId), inArray(tasks.parent_id, epicoIds)));
+
+  const filhasPorEpico = new Map<string, { status: TaskStatus }[]>();
+  for (const id of epicoIds) filhasPorEpico.set(id, []);
+  for (const row of rows) {
+    if (!row.parent_id) continue;
+    filhasPorEpico.get(row.parent_id)?.push({ status: row.status as TaskStatus });
+  }
+
+  for (const [id, filhas] of filhasPorEpico) mapa.set(id, progressoEpico(filhas));
+  return mapa;
+}
+
+/** Pai (summary, null se raiz) + filhas diretas (summary) de uma task — tudo org-scoped. */
+export async function getPaiEFilhas(
+  taskId: string,
+  orgId: string,
+): Promise<{ pai: TaskSummary | null; filhas: TaskSummary[] } | null> {
+  const [row] = await db.select().from(tasks).where(and(eq(tasks.id, taskId), eq(tasks.org_id, orgId))).limit(1);
+  if (!row) return null;
+
+  let pai: TaskSummary | null = null;
+  if (row.parent_id) {
+    const [paiRow] = await db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.id, row.parent_id), eq(tasks.org_id, orgId)))
+      .limit(1);
+    pai = paiRow ? rowToSummary(paiRow) : null;
+  }
+
+  const filhasRows = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.parent_id, taskId), eq(tasks.org_id, orgId)))
+    .orderBy(tasks.ordem);
+  return { pai, filhas: filhasRows.map(rowToSummary) };
 }
 
 export async function updateTask(input: {
@@ -137,6 +299,29 @@ export async function updateTask(input: {
       para: input.patch.assigneeUserId,
     });
   }
+}
+
+/**
+ * Define as labels de uma task (H5/T3), org-scoped. Sempre normaliza via
+ * `normalizarLabels` antes de gravar (dedup/trim/cap/max — nunca confia em
+ * input cru vindo de form/API). Devolve as labels efetivamente gravadas.
+ */
+export async function setTaskLabels(taskId: string, orgId: string, labels: unknown): Promise<string[]> {
+  const task = await getTaskById(taskId, orgId);
+  if (!task) throw new Error('task_nao_encontrada');
+  const normalizadas = normalizarLabels(labels);
+  await db.update(tasks).set({ labels: normalizadas }).where(and(eq(tasks.id, taskId), eq(tasks.org_id, orgId)));
+  return normalizadas;
+}
+
+/**
+ * Labels de TODAS as tasks da org (H5/T5) — insumo bruto para
+ * `sugerirLabels` (que agrega por frequência). Consulta enxuta (só a coluna
+ * `labels`), sem paginação — o volume por org é o mesmo de `listTasksByOrg`.
+ */
+export async function listLabelsUsadas(orgId: string): Promise<string[][]> {
+  const rows = await db.select({ labels: tasks.labels }).from(tasks).where(eq(tasks.org_id, orgId));
+  return rows.map((r) => (Array.isArray(r.labels) ? (r.labels as string[]) : []));
 }
 
 /**
@@ -212,10 +397,27 @@ export async function reorderTask(input: { taskId: string; orgId: string; direca
   });
 }
 
+/**
+ * Exclui uma task (F1, revisão H5/T11): migration 0016 adicionou duas FKs
+ * `ON DELETE no action` apontando pra tasks — `task_watchers.task_id` e
+ * `tasks.parent_id` (auto-FK da hierarquia) — nenhuma das duas era limpa
+ * aqui. Resultado: excluir uma task com um watcher, ou um épico com filhas,
+ * violava a FK no Postgres; `deleteTaskFormAction` engolia o erro (catch →
+ * logger.warn) e a task ficava para sempre indeletável, sem nenhum aviso na UI.
+ *
+ * Fix: dentro da MESMA transação, (a) remove os watchers da task e (b) para
+ * os FILHOS (parent_id = taskId), política escolhida — órfãos, não cascata:
+ * `parent_id` vira null e eles sobrevivem como tasks/subtasks de raiz. Uma
+ * subtask cujo pai (task) é excluído continua existindo, só perde o vínculo
+ * de hierarquia — mais simples e não-destrutivo que apagar a árvore inteira,
+ * e evita que excluir um épico por engano leve dezenas de tasks-filhas junto.
+ */
 export async function deleteTask(taskId: string, orgId: string): Promise<void> {
   const task = await getTaskById(taskId, orgId);
   if (!task) throw new Error('task_nao_encontrada');
   await db.transaction(async (tx) => {
+    await tx.delete(taskWatchers).where(eq(taskWatchers.task_id, taskId));
+    await tx.update(tasks).set({ parent_id: null }).where(and(eq(tasks.parent_id, taskId), eq(tasks.org_id, orgId)));
     await tx.delete(taskComments).where(eq(taskComments.task_id, taskId));
     await tx.delete(taskActivities).where(eq(taskActivities.task_id, taskId));
     await tx.delete(tasks).where(and(eq(tasks.id, taskId), eq(tasks.org_id, orgId)));

@@ -7,8 +7,26 @@ import { addCommentAction, type TaskActionState } from '@/actions/tasks.actions'
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { formatData } from '@/lib/format';
+import { dividirPorMencoes } from '@/modules/tasks/mencoes';
 
 const initial: TaskActionState = {};
+
+/**
+ * Renderiza o corpo do comentário com `@handle` destacado (H5/T5) — segmentos
+ * de texto puro (React text nodes, nunca HTML): sem `dangerouslySetInnerHTML`
+ * aqui, diferente da descrição (que passa por `Markdown`/`renderMarkdownSeguro`).
+ */
+function renderCorpoComMencoes(corpo: string) {
+  return dividirPorMencoes(corpo).map((seg, i) =>
+    seg.tipo === 'mencao' ? (
+      <span key={i} data-testid="crm-mencao" className="font-medium text-brand">
+        {seg.valor}
+      </span>
+    ) : (
+      <span key={i}>{seg.valor}</span>
+    ),
+  );
+}
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -56,7 +74,7 @@ export function TaskComments({
                 <span className="text-xs font-medium text-white/70">{c.userEmail}</span>
                 <span className="text-xs text-dim">{formatData(c.createdAt)}</span>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-white/90">{c.corpo}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-white/90">{renderCorpoComMencoes(c.corpo)}</p>
             </li>
           ))
         )}
