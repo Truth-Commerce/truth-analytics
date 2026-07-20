@@ -114,6 +114,28 @@ describe('custoIaDoMes — soma das 4 fontes de uso IA (puro)', () => {
     expect(total).toEqual({ inputTokens: 1_000_000, outputTokens: 1_000_000, chamadas: 2, custoUsd: 30 });
   });
 
+  it('inclui cache_read_input_tokens e cache_creation_input_tokens no custo (prompt caching)', () => {
+    const rows: ReportUsageRow[] = [
+      {
+        orgId: 'org-1',
+        iaUsage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 1_000_000,
+          cache_creation_input_tokens: 1_000_000,
+          tentativas: 1,
+        },
+        kitsIaUsage: null,
+        calendarIaUsage: null,
+        briefingIaUsage: null,
+      },
+    ];
+    const { porOrg, total } = custoIaDoMes(rows);
+    // 1M tokens de cache-read ($0,50/Mtok) + 1M de cache-write ($6,25/Mtok) = US$ 6,75
+    expect(porOrg[0].custoUsd).toBeCloseTo(6.75, 2);
+    expect(total.custoUsd).toBeCloseTo(6.75, 2);
+  });
+
   it('sem rows → porOrg vazio, total zerado', () => {
     expect(custoIaDoMes([])).toEqual({
       porOrg: [],
