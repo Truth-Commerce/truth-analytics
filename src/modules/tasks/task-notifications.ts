@@ -1,5 +1,6 @@
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { listOrgUsers } from '@/modules/auth/user.repository';
 import { notify } from '@/modules/notifications/notification.repository';
 import {
   getAdminAlertEmail,
@@ -13,6 +14,9 @@ import {
   sendTaskDevolvidaEmail,
   sendTaskRevisaoEmail,
 } from '@/modules/notifications/email';
+import { extrairMencoes, handleFromEmail } from './mencoes';
+import { getTaskById } from './task.repository';
+import { listWatchers } from './watcher.repository';
 
 type Destinatario = { id: string; email: string };
 type EmailSender = (to: string, titulo: string, url: string) => Promise<void>;
@@ -207,4 +211,88 @@ export async function notifyTaskComentario(
     enviarEmail: sendTaskComentarioEmail,
     fallbackEmailAdmin: autorEhCliente,
   });
+}
+
+/** Href de uma task, resolvido pelo role do destinatário (cliente vs. analista/admin). */
+function hrefPorRole(role: string, orgId: string, taskId: string): string {
+  return role === 'client' ? hrefCliente(taskId) : hrefAnalista(orgId, taskId);
+}
+
+/**
+ * Notifica usuários @mencionados no texto de um comentário (H5/T3 — ver
+ * convenção de menção documentada em `mencoes.ts`): resolve cada handle
+ * contra os usuários da org via a parte local do e-mail
+ * (`handleFromEmail`, comparação case-insensitive) e dispara `notify()` para
+ * cada um — NUNCA para o próprio autor, mesmo que ele se automencione.
+ *
+ * Best-effort: nunca lança. Uma falha ao listar usuários da org (ou em algum
+ * notify() individual — que por si só já não lança) não pode quebrar o fluxo
+ * de comentário que chamou esta função.
+ */
+export async function notificarMencoes(
+  orgId: string,
+  texto: string,
+  autorId: string,
+  taskId: string,
+  taskTitulo: string,
+): Promise<void> {
+  try {
+    const handles = extrairMencoes(texto);
+    if (handles.length === 0) return;
+    const handleSet = new Set(handles);
+
+    const usuarios = await listOrgUsers(orgId);
+    const alvos = usuarios.filter((u) => u.id !== autorId && handleSet.has(handleFromEmail(u.email)));
+
+    await Promise.all(
+      alvos.map((u) =>
+        notify(u.id, {
+          tipo: 'task_mencao',
+          titulo: 'Você foi mencionado em uma tarefa',
+          corpo: taskTitulo,
+          href: hrefPorRole(u.role, orgId, taskId),
+        }),
+      ),
+    );
+  } catch (e) {
+    logger.warn('notificarMencoes falhou', { orgId, taskId }, e);
+  }
+}
+
+/**
+ * Notifica todos os watchers de uma task (H5/T3) sobre um evento (ex.: novo
+ * comentário, mudança de status) — exceto o próprio autor do evento (quem
+ * fez a ação não precisa ser avisado da própria ação).
+ *
+ * Best-effort: nunca lança — falha ao listar watchers/task, ou em algum
+ * notify() individual, não pode quebrar o fluxo (comentário/transição de
+ * status) que chamou esta função.
+ */
+export async function notificarWatchers(
+  taskId: string,
+  orgId: string,
+  autorId: string,
+  evento: string,
+): Promise<void> {
+  try {
+    const watchers = await listWatchers(taskId, orgId);
+    const alvos = watchers.filter((w) => w.userId !== autorId);
+    if (alvos.length === 0) return;
+
+    const task = await getTaskById(taskId, orgId);
+    const corpo = task?.titulo ?? '';
+
+    await Promise.all(
+      alvos.map((w) =>
+        notify(w.userId, {
+          tipo: 'task_watcher',
+          titulo: `Atualização em tarefa que você acompanha: ${evento}`,
+          corpo,
+          href: hrefPorRole(w.role, orgId, taskId),
+        }),
+      ),
+    );
+  } catch (e) {
+    logger.warn('notificarWatchers falhou', { taskId, orgId, evento }, e);
+  }
 }

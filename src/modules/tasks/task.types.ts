@@ -54,6 +54,8 @@ export type TaskDetail = TaskSummary & {
   assigneeUserId: string | null;
   orgId: string;
   updatedAt: Date;
+  /** Labels (H5/T3) — já normalizadas (ver `normalizarLabels`/`setTaskLabels`). */
+  labels: string[];
 };
 
 export function atorFromRole(role: UserRole): TaskAtor {

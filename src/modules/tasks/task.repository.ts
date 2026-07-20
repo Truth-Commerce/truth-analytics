@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { taskComments, taskActivities, tasks } from '@/db/schema';
 import { parseChecklist, toggleChecklistLine } from './checklist-line';
 import { nivelFilhoValido, progressoEpico, type Nivel, type ProgressoEpico } from './hierarquia';
+import { normalizarLabels } from './labels';
 import { normalizarTexto } from './report-to-task';
 import type {
   TaskAtor, TaskCriadoPor, TaskDetail, TaskPrioridade, TaskStatus, TaskSummary, TaskTipo,
@@ -23,7 +24,14 @@ function rowToSummary(r: TaskRow): TaskSummary {
 }
 
 function rowToDetail(r: TaskRow): TaskDetail {
-  return { ...rowToSummary(r), descricao: r.descricao, assigneeUserId: r.assignee_user_id, orgId: r.org_id, updatedAt: r.updated_at };
+  return {
+    ...rowToSummary(r),
+    descricao: r.descricao,
+    assigneeUserId: r.assignee_user_id,
+    orgId: r.org_id,
+    updatedAt: r.updated_at,
+    labels: Array.isArray(r.labels) ? (r.labels as string[]) : [],
+  };
 }
 
 async function proximaOrdem(orgId: string, status: TaskStatus): Promise<number> {
@@ -271,6 +279,19 @@ export async function updateTask(input: {
       para: input.patch.assigneeUserId,
     });
   }
+}
+
+/**
+ * Define as labels de uma task (H5/T3), org-scoped. Sempre normaliza via
+ * `normalizarLabels` antes de gravar (dedup/trim/cap/max — nunca confia em
+ * input cru vindo de form/API). Devolve as labels efetivamente gravadas.
+ */
+export async function setTaskLabels(taskId: string, orgId: string, labels: unknown): Promise<string[]> {
+  const task = await getTaskById(taskId, orgId);
+  if (!task) throw new Error('task_nao_encontrada');
+  const normalizadas = normalizarLabels(labels);
+  await db.update(tasks).set({ labels: normalizadas }).where(and(eq(tasks.id, taskId), eq(tasks.org_id, orgId)));
+  return normalizadas;
 }
 
 /**
