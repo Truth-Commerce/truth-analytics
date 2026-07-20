@@ -1,5 +1,6 @@
 import { hojeBrt } from '@/lib/timezone';
 
+import type { ProgressoEpico } from './hierarquia';
 import { statusPrazo } from './sla';
 import type { TaskPrioridade, TaskStatus } from './task.types';
 
@@ -129,4 +130,13 @@ export function slaBadge(task: { status: TaskStatus; prazo: string | null }, hoj
   if (sp === 'atrasada') return 'atrasada';
   if (sp === 'vence_em_breve') return 'vence';
   return 'ok';
+}
+
+// ---------------------------------------------------------------------------
+// progressoEpicoLabel — rótulo compacto do card de épico no board (H5/T10).
+// Puro: só formata o que `progressoEpico`/`progressoDeEpicos` já agregam
+// (batch no repo, sem N+1 — ver task.repository.listTasksKanban).
+// ---------------------------------------------------------------------------
+export function progressoEpicoLabel(progresso: ProgressoEpico): string {
+  return `${progresso.concluidas}/${progresso.total}`;
 }

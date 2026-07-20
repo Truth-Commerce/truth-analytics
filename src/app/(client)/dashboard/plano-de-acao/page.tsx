@@ -22,7 +22,19 @@ export default async function PlanoDeAcaoPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
-      <PageHeader eyebrow="Consultoria Truth" title="Plano de Ação" />
+      <PageHeader
+        eyebrow="Consultoria Truth"
+        title="Plano de Ação"
+        actions={
+          <Link
+            href="/dashboard/plano-de-acao/ciclos"
+            data-testid="link-ciclos"
+            className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+          >
+            Ciclos →
+          </Link>
+        }
+      />
 
       <details className="rounded-2xl border border-line bg-bg-surface p-5">
         <summary className="cursor-pointer font-heading text-sm font-semibold text-white">Nova task</summary>

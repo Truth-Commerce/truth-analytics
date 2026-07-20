@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { concluirTaskFormAction } from '@/actions/tasks.actions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { slaBadge, type SlaBadgeStatus } from '@/modules/tasks/board-view';
+import { progressoEpicoLabel, slaBadge, type SlaBadgeStatus } from '@/modules/tasks/board-view';
 import { labelPrazo, statusPrazo } from '@/modules/tasks/sla';
 import { podeTransicionar } from '@/modules/tasks/task-transitions';
 import type { TaskCardInfo } from '@/modules/tasks/task.repository';
@@ -124,6 +124,20 @@ export function TaskCard({
       >
         {task.titulo}
       </Link>
+
+      {task.nivel === 'epico' && task.progresso ? (
+        <div className="mt-2 flex items-center gap-2" data-testid={`epico-progresso-${task.id}`}>
+          <div className="h-1.5 flex-1 rounded-full bg-white/10">
+            <div
+              className="h-1.5 rounded-full bg-brand transition-[width]"
+              style={{ width: `${task.progresso.pct}%` }}
+            />
+          </div>
+          <span className="whitespace-nowrap font-mono text-[11px] text-dim">
+            {progressoEpicoLabel(task.progresso)}
+          </span>
+        </div>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Badge variant="neutral">{TIPO_TASK_LABEL[task.tipo]}</Badge>

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import {
   burndownDoCiclo,
@@ -45,6 +47,10 @@ export default async function CiclosPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8" data-testid="crm-ciclos-page">
+      <Link href="/dashboard/plano-de-acao" className="text-sm text-muted transition-colors hover:text-white">
+        ← Plano de Ação
+      </Link>
+
       <PageHeader
         eyebrow="Consultoria Truth"
         title="Ciclos"

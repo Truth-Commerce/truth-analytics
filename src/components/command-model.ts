@@ -37,6 +37,9 @@ export function buildCommands(variant: 'client' | 'admin' | 'analista'): Command
     { id: 'nav-calendario', label: 'Ir para o Calendário comercial', group: 'Navegação', href: '/dashboard/calendario', keywords: 'datas sazonal black friday natal' },
     { id: 'nav-configuracoes', label: 'Ir para Configurações', group: 'Navegação', href: '/configuracoes', keywords: 'senha empresa conta plano' },
     { id: 'nav-plano-de-acao', label: 'Ir para o Plano de Ação', group: 'Navegação', href: '/dashboard/plano-de-acao', keywords: 'tasks tarefas kanban consultoria' },
+    // H5/T10: só via ⌘K + link na página de Plano de Ação — não virou item de nav
+    // top-level pra não lotar a barra (nav do cliente já tem 7 itens).
+    { id: 'nav-ciclos', label: 'Ir para Ciclos', group: 'Navegação', href: '/dashboard/plano-de-acao/ciclos', keywords: 'sprints burndown retrospectiva planejamento ciclo' },
     { id: 'acao-gerar-relatorio', label: 'Gerar relatório', group: 'Ações', href: '/dashboard#gerar-relatorio', keywords: 'análise ia relatório novo' },
     { id: 'acao-adicionar-produto', label: 'Adicionar produto monitorado', group: 'Ações', href: '/conexoes#produtos-monitorados', keywords: 'sku keywords monitorar' },
     { id: 'acao-comparar-periodos', label: 'Comparar períodos', group: 'Ações', href: '/dashboard/relatorios/comparar', keywords: 'relatórios comparação evolução' },

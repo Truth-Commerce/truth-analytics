@@ -314,6 +314,36 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
     await expect(ativarCiclo(orgAId, cicloFechado)).rejects.toThrow('transicao_invalida');
   });
 
+  it('duas ativações concorrentes do MESMO ciclo: só uma vence (UPDATE condicional fecha a corrida — H5/T10)', async () => {
+    const { criarCiclo, ativarCiclo } = await import('@/modules/tasks/cycle.repository');
+    const cicloId = await criarCiclo(orgAId, { nome: 'Sprint corrida' });
+
+    // Antes do fix, ativarCiclo fazia SELECT (checa status) seguido de um UPDATE
+    // incondicional — as duas chamadas concorrentes passavam pelo SELECT vendo
+    // 'planejado' e as duas UPDATE'avam sem erro. Com `eq(cycles.status,
+    // 'planejado')` no WHERE do UPDATE, o Postgres serializa via lock de linha:
+    // a segunda chamada só enxerga a linha DEPOIS do commit da primeira, já com
+    // status='ativo' — 0 linhas afetadas -> 'transicao_invalida'. Só uma ativação
+    // é aceita como "quem ativou" (no-op auditável na segunda).
+    // Pré-aquece o pool (max>1 fora de serverless) para as DUAS chamadas concorrentes
+    // usarem conexões físicas JÁ estabelecidas — sem isso, o handshake TLS da 2ª
+    // conexão sozinho pode ultrapassar o round-trip inteiro da 1ª chamada,
+    // mascarando a corrida (falso-negativo por sorte de latência, não pelo fix).
+    const { db } = await import('@/db/client');
+    const { sql: rawSql } = await import('drizzle-orm');
+    await Promise.all([1, 2, 3, 4].map(() => db.execute(rawSql`select 1`)));
+
+    const resultados = await Promise.allSettled([ativarCiclo(orgAId, cicloId), ativarCiclo(orgAId, cicloId)]);
+    const sucesso = resultados.filter((r) => r.status === 'fulfilled');
+    const falha = resultados.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(sucesso).toHaveLength(1);
+    expect(falha).toHaveLength(1);
+    expect((falha[0].reason as Error).message).toBe('transicao_invalida');
+
+    const [row] = await tdb.select().from(cycles).where(eq(cycles.id, cicloId));
+    expect(row?.status).toBe('ativo'); // estado final continua correto (uma ativação venceu)
+  });
+
   // ---------------------------------------------------------------------
   // tasksSemCiclo (H5/T9) — pool de tasks candidatas a entrar num ciclo.
   // ---------------------------------------------------------------------

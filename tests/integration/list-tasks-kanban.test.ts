@@ -125,4 +125,23 @@ describe.skipIf(!url)('listTasksKanban — integração', () => {
     expect(vazia.parentId).toBeNull();
     expect(vazia.assigneeUserId).toBeNull();
   });
+
+  it('listTasksKanban expõe progresso agregado no card de épico, batched (H5/T10)', async () => {
+    const { listTasksKanban } = await import('@/modules/tasks/task.repository');
+    const lista = await listTasksKanban(orgId);
+
+    // taskRicaId é filha direta do épico seedado em beforeAll (parent_id = epicoId);
+    // taskVaziaId é raiz solta (sem parent) — nenhuma das duas é o épico em si.
+    const epicoCard = lista.find((t) => t.nivel === 'epico')!;
+    expect(epicoCard).toBeDefined();
+    // 1 filha direta (taskRicaId, status 'todo') -> total=1, concluidas=0.
+    expect(epicoCard.progresso).toEqual({ total: 1, concluidas: 0, pct: 0 });
+
+    // Cards que NÃO são épico (task/subtask) não carregam progresso.
+    const rica = lista.find((t) => t.id === taskRicaId)!;
+    expect(rica.nivel).toBe('task');
+    expect(rica.progresso).toBeNull();
+    const vazia = lista.find((t) => t.id === taskVaziaId)!;
+    expect(vazia.progresso).toBeNull();
+  });
 });

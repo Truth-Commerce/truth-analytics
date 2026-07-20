@@ -57,6 +57,8 @@ export type TaskCardInfo = TaskSummary & {
   parentId: string | null;
   assigneeUserId: string | null;
   nivel: Nivel;
+  /** Progresso agregado das filhas diretas — só para cards de épico (H5/T10); null pra task/subtask. */
+  progresso: ProgressoEpico | null;
 };
 
 /** Kanban rico: summary + nº de comentários (agregado em SQL) + checklist (parse da descricao). */
@@ -71,8 +73,15 @@ export async function listTasksKanban(orgId: string): Promise<TaskCardInfo[]> {
     .where(eq(tasks.org_id, orgId))
     .groupBy(tasks.id)
     .orderBy(tasks.status, tasks.ordem);
+
+  // Progresso dos épicos do board, em UMA query batched (progressoDeEpicos usa
+  // inArray) — nunca N+1, mesmo com dezenas de épicos na coluna.
+  const epicoIds = rows.filter(({ task }) => task.nivel === 'epico').map(({ task }) => task.id);
+  const progressoPorEpico = await progressoDeEpicos(orgId, epicoIds);
+
   return rows.map(({ task, comentarios }) => {
     const itens = parseChecklist(task.descricao);
+    const nivel = task.nivel as Nivel;
     return {
       ...rowToSummary(task),
       comentarios: Number(comentarios),
@@ -82,7 +91,8 @@ export async function listTasksKanban(orgId: string): Promise<TaskCardInfo[]> {
       labels: Array.isArray(task.labels) ? (task.labels as string[]) : [],
       parentId: task.parent_id,
       assigneeUserId: task.assignee_user_id,
-      nivel: task.nivel as Nivel,
+      nivel,
+      progresso: nivel === 'epico' ? (progressoPorEpico.get(task.id) ?? null) : null,
     };
   });
 }

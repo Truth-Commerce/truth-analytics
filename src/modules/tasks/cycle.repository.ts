@@ -123,17 +123,30 @@ export async function fecharCiclo(orgId: string, cycleId: string): Promise<void>
  * restrita à origem 'planejado' (`transicao_invalida` se já 'ativo' —
  * evita reativar sem necessidade — ou 'fechado' — um ciclo fechado não
  * reabre).
+ *
+ * H5/T10 (fix de corrida, achado na revisão do T9): o SELECT abaixo só serve
+ * pra distinguir `ciclo_nao_encontrado` (org errada/id inexistente) —
+ * ele NÃO decide mais o resultado sozinho. Quem decide `transicao_invalida`
+ * é o UPDATE, cujo WHERE inclui `status = 'planejado'`: com isso, duas
+ * chamadas concorrentes na MESMA cycleId não passam as duas pelo mesmo
+ * "cheque então escreve" — o Postgres serializa via lock de linha, a
+ * segunda só reavalia o WHERE depois do commit da primeira e, já vendo
+ * status='ativo', atualiza 0 linhas. `RETURNING` decide o resultado real.
  */
 export async function ativarCiclo(orgId: string, cycleId: string): Promise<void> {
-  const [row] = await db
-    .select({ status: cycles.status })
+  const [existente] = await db
+    .select({ id: cycles.id })
     .from(cycles)
     .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
     .limit(1);
-  if (!row) throw new Error('ciclo_nao_encontrado');
-  if (row.status !== 'planejado') throw new Error('transicao_invalida');
+  if (!existente) throw new Error('ciclo_nao_encontrado');
 
-  await db.update(cycles).set({ status: 'ativo' }).where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)));
+  const [ativado] = await db
+    .update(cycles)
+    .set({ status: 'ativo' })
+    .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId), eq(cycles.status, 'planejado')))
+    .returning({ id: cycles.id });
+  if (!ativado) throw new Error('transicao_invalida');
 }
 
 /** Tasks de um ciclo, org-scoped (filtra por `org_id` E `cycle_id`). */

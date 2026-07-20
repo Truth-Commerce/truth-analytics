@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agruparSwimlanes,
   filtrarTasks,
+  progressoEpicoLabel,
   slaBadge,
   SEM_EPICO,
   SEM_RESPONSAVEL,
@@ -201,5 +202,19 @@ describe('slaBadge', () => {
   it('usa hojeBrt() como default quando "hoje" não é passado', () => {
     // Só garante que a assinatura aceita chamada sem o 2º argumento (sem lançar).
     expect(['ok', 'vence', 'atrasada']).toContain(slaBadge({ status: 'todo', prazo: null }));
+  });
+});
+
+describe('progressoEpicoLabel', () => {
+  it('formata concluidas/total', () => {
+    expect(progressoEpicoLabel({ total: 7, concluidas: 3, pct: 43 })).toBe('3/7');
+  });
+
+  it('épico sem filhas ainda → 0/0', () => {
+    expect(progressoEpicoLabel({ total: 0, concluidas: 0, pct: 0 })).toBe('0/0');
+  });
+
+  it('todas concluídas → concluidas === total', () => {
+    expect(progressoEpicoLabel({ total: 4, concluidas: 4, pct: 100 })).toBe('4/4');
   });
 });
