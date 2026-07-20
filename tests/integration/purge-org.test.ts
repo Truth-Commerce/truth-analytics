@@ -37,6 +37,8 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
   let orgId = '';
   let userId = '';
   let internaId = '';
+  let otherOrgId = '';
+  let otherTaskId = '';
 
   beforeAll(async () => {
     const [org] = await tdb
@@ -123,6 +125,23 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
     await tdb.insert(loginAttempts).values({ email: `purge-${RUN}@ta-test.com`, success: true });
     await tdb.insert(auditLog).values({ org_id: orgId, user_id: userId, acao: 'org.criada' });
 
+    // Org SEPARADA (não purgada) com uma task observada pelo usuário da org
+    // purgada — cenário de analista de uma org "watcher" de task de outra.
+    // task_watchers.user_id é NOT NULL: sem o delete defensivo por user_id em
+    // purgeOrg, apagar `userId` violaria essa FK (o delete por task_id não
+    // alcança esta linha, pois otherTaskId não pertence à org purgada).
+    const [otherOrg] = await tdb
+      .insert(organizations)
+      .values({ name: `ta-test-purge-outra-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    otherOrgId = otherOrg.id;
+    const [otherTask] = await tdb
+      .insert(tasks)
+      .values({ org_id: otherOrgId, titulo: `${NOME}-outra-task`, criado_por: 'ia' })
+      .returning({ id: tasks.id });
+    otherTaskId = otherTask.id;
+    await tdb.insert(taskWatchers).values({ task_id: otherTaskId, user_id: userId });
+
     // Org interna (guard org_interna)
     const [interna] = await tdb
       .insert(organizations)
@@ -144,6 +163,10 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
       await tdb.delete(organizations).where(eq(organizations.id, internaId));
       await tdb.delete(auditLog).where(eq(auditLog.org_id, orgId));
       await tdb.delete(loginAttempts).where(eq(loginAttempts.email, `purge-${RUN}@ta-test.com`));
+      // Org separada (não tocada pelo purge) + sua task + watcher residual (se algo falhar antes do purge rodar).
+      await tdb.delete(taskWatchers).where(eq(taskWatchers.task_id, otherTaskId));
+      await tdb.delete(tasks).where(eq(tasks.id, otherTaskId));
+      await tdb.delete(organizations).where(eq(organizations.id, otherOrgId));
     } finally {
       await sql.end();
     }
@@ -217,6 +240,27 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
       .from(taskWatchers)
       .where(eq(taskWatchers.user_id, userId));
     expect(restoWatchers.length).toBe(0);
+
+    // Usuário da org purgada deletado sem violar a FK task_watchers.user_id
+    // (NOT NULL): só é possível porque purgeOrg apaga defensivamente a
+    // observação cross-org por user_id ANTES de apagar o usuário.
+    const restoUserPurgado = await tdb.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    expect(restoUserPurgado.length).toBe(0);
+
+    // A observação cross-org (watcher da org purgada numa task de OUTRA org)
+    // foi removida — sem o delete defensivo por user_id, isto teria sobrado
+    // (o delete por task_id não alcança task de outra org) e o delete de
+    // `users` acima teria falhado por violação de FK.
+    const restoCrossOrgWatcher = await tdb
+      .select({ id: taskWatchers.id })
+      .from(taskWatchers)
+      .where(eq(taskWatchers.task_id, otherTaskId));
+    expect(restoCrossOrgWatcher.length).toBe(0);
+
+    // A task da OUTRA org (não purgada) continua intacta — só a relação de
+    // observação foi removida, não os dados da org que não foi purgada.
+    const otherTaskAinda = await tdb.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, otherTaskId));
+    expect(otherTaskAinda.length).toBe(1);
 
     const trilha = await tdb
       .select({ acao: auditLog.acao })
