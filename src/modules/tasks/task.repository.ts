@@ -31,6 +31,7 @@ function rowToDetail(r: TaskRow): TaskDetail {
     orgId: r.org_id,
     updatedAt: r.updated_at,
     labels: Array.isArray(r.labels) ? (r.labels as string[]) : [],
+    nivel: r.nivel as Nivel,
   };
 }
 

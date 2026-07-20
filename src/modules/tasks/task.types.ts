@@ -1,5 +1,6 @@
 import { hojeBrt } from '@/lib/timezone';
 import type { UserRole } from '@/modules/auth/user.types';
+import type { Nivel } from './hierarquia';
 
 export const TASK_STATUSES = ['backlog', 'todo', 'em_andamento', 'em_revisao', 'concluida'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -56,6 +57,9 @@ export type TaskDetail = TaskSummary & {
   updatedAt: Date;
   /** Labels (H5/T3) — já normalizadas (ver `normalizarLabels`/`setTaskLabels`). */
   labels: string[];
+  /** Nível na hierarquia épico > task > subtask (F2, revisão H5/T11) — decide
+   * se a página de detalhe oferece "Adicionar task filha"/"Adicionar subtarefa". */
+  nivel: Nivel;
 };
 
 export function atorFromRole(role: UserRole): TaskAtor {

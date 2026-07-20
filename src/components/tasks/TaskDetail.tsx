@@ -23,6 +23,7 @@ import {
 } from '@/modules/tasks/task.types';
 import type { Watcher } from '@/modules/tasks/watcher.repository';
 
+import { AddChildTaskForm } from './AddChildTaskForm';
 import { DevolverTaskButton } from './DevolverTaskButton';
 import { TaskChecklist } from './TaskChecklist';
 import { TaskComments } from './TaskComments';
@@ -130,6 +131,9 @@ export function TaskDetail({
   const atrasada = isTaskAtrasada(task);
   const itensChecklist = parseChecklist(task.descricao);
   const textoLivre = descricaoLivre(task.descricao);
+  // F2 (revisão H5/T11): subtask é o nível-folha (FILHOS_VALIDOS['subtask']
+  // é vazio) — só épico e task podem ganhar um filho novo por aqui.
+  const podeTerFilhos = task.nivel !== 'subtask';
 
   // Concluir é a única ação de movimentação disponível aqui para o cliente
   // (aprovar/devolver são exclusivos do analista/admin — Task 11).
@@ -227,7 +231,7 @@ export function TaskDetail({
         />
       ) : null}
 
-      {pai || filhas.length > 0 ? (
+      {pai || filhas.length > 0 || podeTerFilhos ? (
         <Card>
           <CardHeader>
             <CardTitle as="h2" className="text-sm">Hierarquia</CardTitle>
@@ -263,6 +267,17 @@ export function TaskDetail({
                   ))}
                 </ul>
               </div>
+            ) : null}
+            {/* F2 (revisão H5/T11): único ponto da UI que cria um FILHO desta
+                task — épico ganha "task filha" (nivel='task'), task ganha
+                "subtarefa" (nivel='subtask'); subtask não tem essa opção
+                (FILHOS_VALIDOS['subtask'] é vazio — nivelFilhoValido recusaria). */}
+            {podeTerFilhos ? (
+              <AddChildTaskForm
+                parentId={task.id}
+                filhoNivel={task.nivel === 'epico' ? 'task' : 'subtask'}
+                orgId={orgId}
+              />
             ) : null}
           </CardContent>
         </Card>

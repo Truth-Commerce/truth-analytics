@@ -158,6 +158,33 @@ describe.skipIf(!url)('edição/exclusão de task via actions (integração)', (
     expect(rUpdate.error).toBe('Dados inválidos. Confira os campos e tente novamente.');
   });
 
+  // F2 (revisão H5/T11): "Nova task" agora deixa escolher nivel='epico' —
+  // antes disso, nada na UI criava um épico (criarEpico só era exercitada por
+  // teste), então progresso de épico/filtro-por-épico/swimlane-por-épico
+  // ficavam permanentemente mortos.
+  it('createTaskAction com nivel="epico" cria uma task nivel=epico, sem parent (raiz da hierarquia)', async () => {
+    sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+    const r = await createTaskAction(
+      {},
+      form({ orgId, titulo: 'Épico via Nova task', tipo: 'outro', prioridade: 'media', nivel: 'epico' }),
+    );
+    expect(r.ok).toBe(true);
+    const [row] = await db.select().from(tasks).where(eq(tasks.id, r.taskId!));
+    expect(row?.nivel).toBe('epico');
+    expect(row?.parent_id).toBeNull();
+  });
+
+  it('createTaskAction sem nivel informado continua criando nivel="task" (retrocompat)', async () => {
+    sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
+    const r = await createTaskAction(
+      {},
+      form({ orgId, titulo: 'Task normal via Nova task', tipo: 'outro', prioridade: 'media' }),
+    );
+    expect(r.ok).toBe(true);
+    const [row] = await db.select().from(tasks).where(eq(tasks.id, r.taskId!));
+    expect(row?.nivel).toBe('task');
+  });
+
   it('deleteTaskFormAction com redirectTo exclui e redireciona', async () => {
     sessaoMock.access = { id: adminId, orgId, role: 'admin_truth', orgStatus: 'active', plano: null };
     let redirecionou = false;

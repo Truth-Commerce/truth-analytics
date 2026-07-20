@@ -65,6 +65,16 @@ export function NewTaskForm({ orgId }: { orgId?: string } = {}) {
         </Select>
       </Field>
 
+      {/* F2 (revisão H5/T11): único ponto da UI que cria a raiz da hierarquia
+          (nivel='epico') — sem isso, todo o consumo de hierarquia (progresso
+          no card, filtro/swimlane por épico, card Hierarquia) ficava morto. */}
+      <Field label="Nível" htmlFor="nova-task-nivel">
+        <Select id="nova-task-nivel" name="nivel" defaultValue="task">
+          <option value="task">Task</option>
+          <option value="epico">Épico</option>
+        </Select>
+      </Field>
+
       <Field label="Prioridade" htmlFor="nova-task-prioridade">
         <Select id="nova-task-prioridade" name="prioridade" defaultValue="media">
           {TASK_PRIORIDADES.map((prioridade) => (

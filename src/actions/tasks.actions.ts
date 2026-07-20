@@ -23,6 +23,8 @@ import { recordTaskActivity } from '@/modules/tasks/task-activity.repository';
 import { addTaskComment } from '@/modules/tasks/task-comment.repository';
 import { getTemplateById } from '@/modules/tasks/task-template.repository';
 import {
+  criarEpico,
+  criarSubtarefa,
   createTask,
   deleteTask,
   getTaskById,
@@ -145,6 +147,11 @@ const createTaskSchema = z.object({
   descricao: z.string().max(5000).optional().default(''),
   prazo: prazoDate.optional(),
   templateId: z.string().min(1).optional(),
+  // F2 (revisão H5/T11): "Nova task" agora deixa escolher o nível raiz da
+  // hierarquia — 'epico' ou 'task' (default, retrocompat). Sem isso, nada na
+  // UI jamais criava um épico, e todo o consumo de hierarquia (progresso no
+  // card, filtro/swimlane por épico, card Hierarquia do detalhe) ficava morto.
+  nivel: z.enum(['task', 'epico']).optional().default('task'),
 });
 
 export async function createTaskAction(
@@ -162,11 +169,12 @@ export async function createTaskAction(
     descricao: formData.get('descricao') ?? '',
     prazo: formData.get('prazo') || undefined,
     templateId: formData.get('templateId') || undefined,
+    nivel: formData.get('nivel') || undefined,
   });
   if (!parsed.success) return { error: 'Dados inválidos. Confira os campos e tente novamente.' };
 
   let { titulo, tipo, descricao } = parsed.data;
-  const { prioridade, prazo, templateId } = parsed.data;
+  const { prioridade, prazo, templateId, nivel } = parsed.data;
 
   let prioridadeFinal: TaskPrioridade = prioridade;
   let prazoFinal: string | null = prazo ?? null;
@@ -193,16 +201,30 @@ export async function createTaskAction(
 
   const criadoPor: TaskCriadoPor = ator === 'cliente' ? 'cliente' : 'analista';
 
-  const taskId = await createTask({
-    orgId,
-    titulo,
-    descricao,
-    tipo,
-    prioridade: prioridadeFinal,
-    criadoPor,
-    prazo: prazoFinal ?? prazoDefault(prioridadeFinal),
-    actorUserId: access.id,
-  });
+  // F2 (revisão H5/T11): nivel='epico' cria uma raiz da hierarquia (sem
+  // parent) — criarEpico é só createTask com nivel fixado; nenhuma regra nova.
+  const taskId =
+    nivel === 'epico'
+      ? await criarEpico({
+          orgId,
+          titulo,
+          descricao,
+          tipo,
+          prioridade: prioridadeFinal,
+          criadoPor,
+          prazo: prazoFinal ?? prazoDefault(prioridadeFinal),
+          actorUserId: access.id,
+        })
+      : await createTask({
+          orgId,
+          titulo,
+          descricao,
+          tipo,
+          prioridade: prioridadeFinal,
+          criadoPor,
+          prazo: prazoFinal ?? prazoDefault(prioridadeFinal),
+          actorUserId: access.id,
+        });
 
   // Gatilho simétrico (Task 10 — G3): analista/admin criou → avisa o cliente;
   // cliente criou → avisa o analista da org (fallback: e-mail admin).
@@ -213,6 +235,81 @@ export async function createTaskAction(
   }
 
   await recordAudit({ orgId, userId: access.id, acao: 'task.criada', detalhes: { taskId, titulo } });
+
+  revalidateTaskRoutes(orgId);
+  return { ok: true, taskId };
+}
+
+// ---------------------------------------------------------------------------
+// criarSubtarefaFormAction (stateful) — F2 (revisão H5/T11).
+//
+// Único ponto da UI que cria uma task/subtask FILHA de uma task já existente
+// (a página de detalhe mostra "Adicionar task filha" num épico, ou
+// "Adicionar subtarefa" numa task) — até este fix, criarSubtarefa só era
+// exercitada por teste; nenhuma UI a chamava. Reusa criarSubtarefa (repo) tal
+// qual — ela já valida o nível via `nivelFilhoValido` (epico→task,
+// task→subtask; mais nada) e herda org_id/report_id do pai; esta action só
+// resolve contexto (mesmo portão de todas as outras — resolveTaskContext,
+// 1ª linha assertNaoImpersonando) e traduz os erros conhecidos.
+// ---------------------------------------------------------------------------
+const criarSubtarefaSchema = z.object({
+  parentId: z.string().min(1),
+  nivel: z.enum(['task', 'subtask']),
+  titulo: z.string().trim().min(3).max(200),
+  tipo: z.enum(TASK_TIPOS),
+  prioridade: z.enum(TASK_PRIORIDADES).default('media'),
+  descricao: z.string().max(5000).optional().default(''),
+  prazo: prazoDate.optional(),
+});
+
+export async function criarSubtarefaFormAction(
+  _prev: TaskActionState,
+  formData: FormData,
+): Promise<TaskActionState> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return { error: resolved.error };
+  const { access, orgId, ator } = resolved.ctx;
+
+  const parsed = criarSubtarefaSchema.safeParse({
+    parentId: formData.get('parentId'),
+    nivel: formData.get('nivel'),
+    titulo: formData.get('titulo'),
+    tipo: formData.get('tipo'),
+    prioridade: formData.get('prioridade') || undefined,
+    descricao: formData.get('descricao') ?? '',
+    prazo: formData.get('prazo') || undefined,
+  });
+  if (!parsed.success) return { error: 'Dados inválidos. Confira os campos e tente novamente.' };
+  const { parentId, nivel, titulo, tipo, prioridade, descricao, prazo } = parsed.data;
+
+  const criadoPor: TaskCriadoPor = ator === 'cliente' ? 'cliente' : 'analista';
+
+  let taskId: string;
+  try {
+    // criarSubtarefa já é org-scoped (getNivelEReport busca o pai filtrando
+    // por orgId) — um parentId de outra org lança 'task_pai_nao_encontrada',
+    // o mesmo tratamento de qualquer task cross-org neste módulo.
+    taskId = await criarSubtarefa({
+      orgId,
+      parentId,
+      nivel,
+      titulo,
+      descricao,
+      tipo,
+      prioridade,
+      criadoPor,
+      prazo: prazo ?? prazoDefault(prioridade),
+      actorUserId: access.id,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'task_pai_nao_encontrada') return { error: 'Tarefa-pai não encontrada.' };
+    if (e instanceof Error && e.message.startsWith('nivel_filho_invalido')) {
+      return { error: 'Este nível não pode ser filho da tarefa-pai selecionada.' };
+    }
+    throw e;
+  }
+
+  await recordAudit({ orgId, userId: access.id, acao: 'task.criada', detalhes: { taskId, titulo, parentId } });
 
   revalidateTaskRoutes(orgId);
   return { ok: true, taskId };
