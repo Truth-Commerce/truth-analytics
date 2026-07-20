@@ -9,6 +9,7 @@ import {
   auditLog,
   calendarSuggestions,
   connections,
+  cycles,
   kitSuggestions,
   loginAttempts,
   marketSnapshots,
@@ -19,6 +20,7 @@ import {
   reports,
   taskActivities,
   taskComments,
+  taskWatchers,
   tasks,
   trackedProducts,
   users,
@@ -59,11 +61,23 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
       })
       .returning({ id: reports.id });
 
+    const [cycle] = await tdb
+      .insert(cycles)
+      .values({ org_id: orgId, nome: `${NOME}-ciclo` })
+      .returning({ id: cycles.id });
+
     const [task] = await tdb
       .insert(tasks)
-      .values({ org_id: orgId, titulo: `${NOME}-task`, criado_por: 'ia', report_id: report.id })
+      .values({
+        org_id: orgId,
+        titulo: `${NOME}-task`,
+        criado_por: 'ia',
+        report_id: report.id,
+        cycle_id: cycle.id,
+      })
       .returning({ id: tasks.id });
 
+    await tdb.insert(taskWatchers).values({ task_id: task.id, user_id: userId });
     await tdb.insert(taskComments).values({ task_id: task.id, user_id: userId, corpo: 'c' });
     await tdb.insert(taskActivities).values({ task_id: task.id, user_id: userId, evento: 'criada' });
     await tdb.insert(notifications).values({ user_id: userId, tipo: 'alerta', titulo: 't' });
@@ -156,9 +170,11 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
     expect(res.executado).toBe(false);
     expect(res.contagens).toMatchObject({
       notifications: 1,
+      task_watchers: 1,
       task_comments: 1,
       task_activities: 1,
       tasks: 1,
+      cycles: 1,
       kit_suggestions: 1,
       calendar_suggestions: 1,
       analyst_briefings: 1,
@@ -194,6 +210,13 @@ describe.skipIf(!url)('purgeOrg — integração (org sintética completa)', () 
     expect(restoUsers.length).toBe(0);
     const restoOrders = await tdb.select({ id: orders.id }).from(orders).where(eq(orders.org_id, orgId));
     expect(restoOrders.length).toBe(0);
+    const restoCycles = await tdb.select({ id: cycles.id }).from(cycles).where(eq(cycles.org_id, orgId));
+    expect(restoCycles.length).toBe(0);
+    const restoWatchers = await tdb
+      .select({ id: taskWatchers.id })
+      .from(taskWatchers)
+      .where(eq(taskWatchers.user_id, userId));
+    expect(restoWatchers.length).toBe(0);
 
     const trilha = await tdb
       .select({ acao: auditLog.acao })
