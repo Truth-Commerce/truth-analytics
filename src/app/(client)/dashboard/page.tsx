@@ -26,16 +26,16 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { GenerateReport } from './generate-report';
-import { StatCards } from './stat-cards';
 import { InsightChips } from './insight-chips';
-import { DashboardCharts } from './dashboard-charts';
 import { BentoCards } from './bento-cards';
 import { OnboardingChecklist } from './onboarding-checklist';
 import { TruthScoreCard } from './truth-score-card';
 import { AlertasSection } from './alertas-section';
 import { EstoqueResumo } from './estoque-resumo';
-import { MetaProgress } from './meta-progress';
-import { AcaoPrincipalCard } from './acao-principal';
+import { StatCards } from '@/components/dashboard/stat-cards';
+import { DashboardCharts } from '@/components/dashboard/dashboard-charts';
+import { MetaProgress } from '@/components/dashboard/meta-progress';
+import { AcaoPrincipalCard } from '@/components/dashboard/acao-principal';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 

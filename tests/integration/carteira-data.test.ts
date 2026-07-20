@@ -251,6 +251,29 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
     expect(saudavel.faturamentoMesAnterior).toBe(0);
   });
 
+  it('orgResumoUnico: mesmos números de carteiraResumo para a org, mas sem varrer a carteira inteira', async () => {
+    const { carteiraResumo, orgResumoUnico } = await import('@/modules/analista/carteira-data.repository');
+
+    const resumoDaCarteira = await carteiraResumo(asAccess(analistaId, 'analista'), agora);
+    const riscoDaCarteira = resumoDaCarteira.find((r) => r.orgId === orgRiscoId)!;
+
+    const unico = await orgResumoUnico(asAccess(analistaId, 'analista'), orgRiscoId, agora);
+    expect(unico).toEqual(riscoDaCarteira);
+  });
+
+  it('orgResumoUnico: org fora da carteira do analista → null (mesmo escopo de getCarteira)', async () => {
+    const { orgResumoUnico } = await import('@/modules/analista/carteira-data.repository');
+    const unico = await orgResumoUnico(asAccess(analistaId, 'analista'), orgForaId, agora);
+    expect(unico).toBeNull();
+  });
+
+  it('orgResumoUnico: admin vê qualquer org cliente (mesmo escopo de getCarteira)', async () => {
+    const { orgResumoUnico } = await import('@/modules/analista/carteira-data.repository');
+    const unico = await orgResumoUnico(asAccess('qualquer-admin', 'admin_truth'), orgForaId, agora);
+    expect(unico).not.toBeNull();
+    expect(unico!.orgId).toBe(orgForaId);
+  });
+
   it('kpisDaCarteira soma os resumos e calcula variação % do faturamento', async () => {
     const { carteiraResumo, kpisDaCarteira } = await import('@/modules/analista/carteira-data.repository');
     const resumo = await carteiraResumo(asAccess(analistaId, 'analista'), agora);

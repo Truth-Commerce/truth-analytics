@@ -5,7 +5,7 @@ import { connections, organizations, orders, reports } from '@/db/schema';
 import { fimDeDiaUtc, hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
 import type { ConexaoSaude } from '@/modules/admin/admin.repository';
 import { detectarQuedaVendas } from '@/modules/alerts/alert-detectors';
-import { getCarteira } from '@/modules/analista/analista.repository';
+import { getCarteira, type CarteiraOrg } from '@/modules/analista/analista.repository';
 import { calcularRisco, type InsumosRisco, type RiscoOrg } from '@/modules/analista/score-risco';
 import type { Plano, UserAccess } from '@/modules/auth/user.types';
 import { montarCobertura } from '@/modules/estoque/stock-coverage';
@@ -232,6 +232,56 @@ async function contarSkusCriticos(orgId: string, agora: Date): Promise<number> {
  * só o estoque é por-org (decisão do plano). `calcularRisco` (T2) fecha o
  * score/nível/motivos de cada org.
  */
+type InsumosPorOrg = {
+  detalhes: Map<string, OrgDetalhes>;
+  mensais: Map<string, TotaisMensais>;
+  semanais: Map<string, TotaisSemanais>;
+  conexoes: Map<string, ConexaoInfo>;
+  reportsInfo: Map<string, ReportsInfo>;
+  skusCriticos: Map<string, number>;
+};
+
+/**
+ * Monta o `OrgResumo` de UMA org a partir dos insumos já coletados (batched
+ * ou de uma única org — mesma forma) + do `hoje` BRT. Único ponto que fecha
+ * `InsumosRisco` e chama `calcularRisco` (T2) — usado por `carteiraResumo`
+ * (loop da carteira) e por `orgResumoUnico` (H4 T6), para nunca divergir.
+ */
+function montarResumoOrg(c: CarteiraOrg, insumos: InsumosPorOrg, hoje: string): OrgResumo {
+  const det = insumos.detalhes.get(c.orgId) ?? { nicho: null, plano: null, metaMensal: null };
+  const mensal = insumos.mensais.get(c.orgId) ?? { atual: 0, anterior: 0 };
+  const semanal = insumos.semanais.get(c.orgId) ?? { total7dias: 0, totaisSemanasAnteriores: [0, 0, 0, 0] };
+  const conexao = insumos.conexoes.get(c.orgId) ?? { saude: 'nenhuma' as ConexaoSaude, horasParaExpirar: null };
+  const repInfo = insumos.reportsInfo.get(c.orgId) ?? { ultimoReportFailed: false, diasSemReportDone: null };
+  const tasksAbertas = c.counts.backlog + c.counts.todo + c.counts.em_andamento + c.counts.em_revisao;
+
+  const insumosRisco: InsumosRisco = {
+    conexao: conexao.saude,
+    tokenExpiraEmHoras: conexao.horasParaExpirar,
+    ultimoReportFailed: repInfo.ultimoReportFailed,
+    diasSemReportDone: repInfo.diasSemReportDone,
+    // org sem plano definido: usa a janela mais tolerante (monthly=30) —
+    // não penaliza risco por uma configuração ainda pendente do admin.
+    diasDoPlano: diasDoPlano(det.plano ?? 'monthly'),
+    quedaVendas: detectarQuedaVendas(semanal) !== null,
+    tasksAtrasadas: c.atrasadas,
+    skusEstoqueCritico: insumos.skusCriticos.get(c.orgId) ?? 0,
+    metaEmRisco: calcularMetaEmRisco(mensal.atual, det.metaMensal, hoje),
+  };
+
+  return {
+    orgId: c.orgId,
+    orgName: c.orgName,
+    nicho: det.nicho,
+    faturamentoMes: mensal.atual,
+    faturamentoMesAnterior: mensal.anterior,
+    tasksAbertas,
+    tasksAtrasadas: c.atrasadas,
+    pendentesRevisao: c.emRevisao,
+    risco: calcularRisco(insumosRisco),
+  };
+}
+
 export async function carteiraResumo(access: UserAccess, agora: Date): Promise<OrgResumo[]> {
   const carteira = await getCarteira(access);
   if (carteira.length === 0) return [];
@@ -247,41 +297,50 @@ export async function carteiraResumo(access: UserAccess, agora: Date): Promise<O
     Promise.all(orgIds.map((id) => contarSkusCriticos(id, agora))),
   ]);
   const skusCriticosMap = new Map(orgIds.map((id, i) => [id, skusCriticos[i]!]));
+  const insumos: InsumosPorOrg = { detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos: skusCriticosMap };
 
-  return carteira.map((c) => {
-    const det = detalhes.get(c.orgId) ?? { nicho: null, plano: null, metaMensal: null };
-    const mensal = mensais.get(c.orgId) ?? { atual: 0, anterior: 0 };
-    const semanal = semanais.get(c.orgId) ?? { total7dias: 0, totaisSemanasAnteriores: [0, 0, 0, 0] };
-    const conexao = conexoes.get(c.orgId) ?? { saude: 'nenhuma' as ConexaoSaude, horasParaExpirar: null };
-    const repInfo = reportsInfo.get(c.orgId) ?? { ultimoReportFailed: false, diasSemReportDone: null };
-    const tasksAbertas = c.counts.backlog + c.counts.todo + c.counts.em_andamento + c.counts.em_revisao;
+  return carteira.map((c) => montarResumoOrg(c, insumos, hoje));
+}
 
-    const insumos: InsumosRisco = {
-      conexao: conexao.saude,
-      tokenExpiraEmHoras: conexao.horasParaExpirar,
-      ultimoReportFailed: repInfo.ultimoReportFailed,
-      diasSemReportDone: repInfo.diasSemReportDone,
-      // org sem plano definido: usa a janela mais tolerante (monthly=30) —
-      // não penaliza risco por uma configuração ainda pendente do admin.
-      diasDoPlano: diasDoPlano(det.plano ?? 'monthly'),
-      quedaVendas: detectarQuedaVendas(semanal) !== null,
-      tasksAtrasadas: c.atrasadas,
-      skusEstoqueCritico: skusCriticosMap.get(c.orgId) ?? 0,
-      metaEmRisco: calcularMetaEmRisco(mensal.atual, det.metaMensal, hoje),
-    };
+/**
+ * `OrgResumo` de UMA ÚNICA org (hero da visão 360 do analista — H4 T6).
+ * Reusa a MESMA lógica de insumos/risco de `carteiraResumo` (via
+ * `montarResumoOrg`), só que as queries batched rodam com `orgIds = [orgId]`
+ * em vez da carteira inteira — evita reprocessar todas as orgs do papel só
+ * para exibir uma. O escopo (a org pertence à carteira do `access`) já foi
+ * validado por `assertOrgAccess` na página chamadora; aqui só reconfirmamos
+ * via `getCarteira` para nunca divergir do critério de acesso — `null` se a
+ * org não aparecer no escopo (não deveria acontecer com o guard já passado).
+ */
+export async function orgResumoUnico(
+  access: UserAccess,
+  orgId: string,
+  agora: Date,
+): Promise<OrgResumo | null> {
+  const carteira = await getCarteira(access);
+  const c = carteira.find((o) => o.orgId === orgId);
+  if (!c) return null;
+  const hoje = hojeBrt(agora);
+  const orgIds = [orgId];
 
-    return {
-      orgId: c.orgId,
-      orgName: c.orgName,
-      nicho: det.nicho,
-      faturamentoMes: mensal.atual,
-      faturamentoMesAnterior: mensal.anterior,
-      tasksAbertas,
-      tasksAtrasadas: c.atrasadas,
-      pendentesRevisao: c.emRevisao,
-      risco: calcularRisco(insumos),
-    };
-  });
+  const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos] = await Promise.all([
+    getOrgDetalhesBatch(orgIds),
+    getTotaisMensaisBatch(orgIds, agora),
+    getTotaisSemanaisBatch(orgIds, agora),
+    getConexoesBatch(orgIds, agora),
+    getReportsInfoBatch(orgIds, agora),
+    contarSkusCriticos(orgId, agora),
+  ]);
+  const insumos: InsumosPorOrg = {
+    detalhes,
+    mensais,
+    semanais,
+    conexoes,
+    reportsInfo,
+    skusCriticos: new Map([[orgId, skusCriticos]]),
+  };
+
+  return montarResumoOrg(c, insumos, hoje);
 }
 
 export type KpisCarteira = {
