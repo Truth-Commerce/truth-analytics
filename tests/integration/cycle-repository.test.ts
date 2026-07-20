@@ -173,6 +173,58 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
     await expect(fecharCiclo(orgBId, cicloId)).rejects.toThrow();
   });
 
+  // ---------------------------------------------------------------------
+  // F4 (revisão H5/T11) — ciclo fechado é IRREVERSÍVEL; sem este fix, tasks
+  // não concluídas de um ciclo fechado ficavam presas nele pra sempre (nunca
+  // reapareciam no pool nem podiam entrar num ciclo novo).
+  // ---------------------------------------------------------------------
+  it('fecharCiclo libera tasks NÃO concluídas de volta pro pool (cycle_id -> null), mas preserva o cycle_id das concluídas — retrospectiva continua correta', async () => {
+    const { criarCiclo, fecharCiclo, moverTaskParaCiclo, tasksSemCiclo, retrospectivaDoCiclo } = await import(
+      '@/modules/tasks/cycle.repository'
+    );
+    const [org] = await tdb
+      .insert(organizations)
+      .values({ name: `${PREFIX}fechar-libera-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    const orgIsoladaId = org!.id;
+    orgIds.push(orgIsoladaId);
+
+    const cicloId = await criarCiclo(orgIsoladaId, { nome: 'Sprint pra fechar com tasks' });
+
+    const [taskAberta] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgIsoladaId, titulo: 'Aberta no ciclo fechado', tipo: 'outro', prioridade: 'media',
+        status: 'todo', criado_por: 'analista', ordem: 1,
+      })
+      .returning({ id: tasks.id });
+    await moverTaskParaCiclo(taskAberta!.id, orgIsoladaId, cicloId);
+
+    const [taskConcluida] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgIsoladaId, titulo: 'Concluída no ciclo fechado', tipo: 'outro', prioridade: 'media',
+        status: 'concluida', criado_por: 'analista', ordem: 2,
+      })
+      .returning({ id: tasks.id });
+    await moverTaskParaCiclo(taskConcluida!.id, orgIsoladaId, cicloId);
+
+    await fecharCiclo(orgIsoladaId, cicloId);
+
+    const [rowAberta] = await tdb.select().from(tasks).where(eq(tasks.id, taskAberta!.id));
+    expect(rowAberta?.cycle_id).toBeNull(); // voltou pro pool
+
+    const [rowConcluida] = await tdb.select().from(tasks).where(eq(tasks.id, taskConcluida!.id));
+    expect(rowConcluida?.cycle_id).toBe(cicloId); // preservada
+
+    const pool = await tasksSemCiclo(orgIsoladaId);
+    expect(pool.map((t) => t.id)).toContain(taskAberta!.id);
+
+    const retro = await retrospectivaDoCiclo(orgIsoladaId, cicloId);
+    expect(retro.planejadas).toBe(1); // só a concluída continua vinculada ao ciclo
+    expect(retro.concluidas).toBe(1);
+  });
+
   it('tasksDoCiclo devolve só as tasks do ciclo E da org (isolamento duplo)', async () => {
     const { criarCiclo, moverTaskParaCiclo, tasksDoCiclo } = await import('@/modules/tasks/cycle.repository');
     const cicloAlvo = await criarCiclo(orgAId, { nome: 'Sprint alvo' });

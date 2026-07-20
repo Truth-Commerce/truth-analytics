@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { cycles, tasks } from '@/db/schema';
@@ -105,14 +105,35 @@ export async function moverTaskParaCiclo(taskId: string, orgId: string, cycleId:
   await db.update(tasks).set({ cycle_id: cycleId }).where(and(eq(tasks.id, taskId), eq(tasks.org_id, orgId)));
 }
 
-/** Fecha um ciclo (status -> 'fechado'), org-scoped. Lança se o ciclo não for da org. */
+/**
+ * Fecha um ciclo (status -> 'fechado'), org-scoped. Lança se o ciclo não for
+ * da org.
+ *
+ * F4 (revisão H5/T11): fechar um ciclo é IRREVERSÍVEL e `tasksSemCiclo` só
+ * devolve `cycle_id IS NULL` — sem este fix, tasks não concluídas de um
+ * ciclo fechado ficavam presas nele pra sempre: somem da UI de ciclos (não
+ * aparecem mais no ciclo ativo nem no pool) e nunca podem entrar num ciclo
+ * novo. Fix: na MESMA transação que fecha o ciclo, solta de volta pro pool
+ * (`cycle_id = null`) as tasks NÃO concluídas do ciclo — as CONCLUÍDAS
+ * mantêm o `cycle_id` intacto, então `retrospectivaDoCiclo` (que soma
+ * planejadas/concluídas/impacto via `tasksDoCiclo`, filtrando por
+ * `cycle_id`) continua contando exatamente o que foi entregue neste ciclo,
+ * mesmo depois de fechado.
+ */
 export async function fecharCiclo(orgId: string, cycleId: string): Promise<void> {
-  const [row] = await db
-    .update(cycles)
-    .set({ status: 'fechado' })
-    .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
-    .returning({ id: cycles.id });
-  if (!row) throw new Error('ciclo_nao_encontrado');
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(cycles)
+      .set({ status: 'fechado' })
+      .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
+      .returning({ id: cycles.id });
+    if (!row) throw new Error('ciclo_nao_encontrado');
+
+    await tx
+      .update(tasks)
+      .set({ cycle_id: null })
+      .where(and(eq(tasks.org_id, orgId), eq(tasks.cycle_id, cycleId), ne(tasks.status, 'concluida')));
+  });
 }
 
 /**
