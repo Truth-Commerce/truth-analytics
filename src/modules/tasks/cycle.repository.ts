@@ -1,7 +1,8 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { cycles, tasks } from '@/db/schema';
+import { burndown, type PontoBurndown } from './burndown';
 import { getTaskImpact } from './task-impact';
 import { retrospectiva, type Retrospectiva } from './retrospectiva';
 import type { TaskCriadoPor, TaskPrioridade, TaskStatus, TaskSummary, TaskTipo } from './task.types';
@@ -114,6 +115,27 @@ export async function fecharCiclo(orgId: string, cycleId: string): Promise<void>
   if (!row) throw new Error('ciclo_nao_encontrado');
 }
 
+/**
+ * Ativa um ciclo (status 'planejado' -> 'ativo') — a única transição que
+ * falta pro fluxo "criar (planejado) -> ativar -> fechar" (T8 entregou
+ * criarCiclo/fecharCiclo, mas nenhuma função levava um ciclo a 'ativo').
+ * Org-scoped como fecharCiclo (`ciclo_nao_encontrado` se não for da org) E
+ * restrita à origem 'planejado' (`transicao_invalida` se já 'ativo' —
+ * evita reativar sem necessidade — ou 'fechado' — um ciclo fechado não
+ * reabre).
+ */
+export async function ativarCiclo(orgId: string, cycleId: string): Promise<void> {
+  const [row] = await db
+    .select({ status: cycles.status })
+    .from(cycles)
+    .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
+    .limit(1);
+  if (!row) throw new Error('ciclo_nao_encontrado');
+  if (row.status !== 'planejado') throw new Error('transicao_invalida');
+
+  await db.update(cycles).set({ status: 'ativo' }).where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)));
+}
+
 /** Tasks de um ciclo, org-scoped (filtra por `org_id` E `cycle_id`). */
 export async function tasksDoCiclo(orgId: string, cycleId: string): Promise<TaskSummary[]> {
   const rows = await db
@@ -122,6 +144,49 @@ export async function tasksDoCiclo(orgId: string, cycleId: string): Promise<Task
     .where(and(eq(tasks.org_id, orgId), eq(tasks.cycle_id, cycleId)))
     .orderBy(tasks.ordem);
   return rows.map(rowToSummary);
+}
+
+/**
+ * Tasks da org que ainda não estão em NENHUM ciclo (`cycle_id IS NULL`) —
+ * o "pool" candidato a entrar num ciclo (H5/T9). Não inclui tasks que já
+ * pertencem a OUTRO ciclo — mover diretamente de um ciclo pra outro não é um
+ * caso de uso desta UI (o fluxo é sempre pool -> ciclo ativo, ou ciclo -> pool
+ * via `moverTaskParaCiclo(..., null)`).
+ */
+export async function tasksSemCiclo(orgId: string): Promise<TaskSummary[]> {
+  const rows = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.org_id, orgId), isNull(tasks.cycle_id)))
+    .orderBy(tasks.status, tasks.ordem);
+  return rows.map(rowToSummary);
+}
+
+/**
+ * Pontos de burndown do ciclo (H5/T9): busca `status`+`updated_at` de todas
+ * as tasks do ciclo e delega a série pra `burndown()` (pura, testada
+ * isoladamente em tests/unit/burndown.test.ts). Ciclo sem `inicio`/`fim`
+ * definidos (ainda 'planejado' sem datas) ou de outra org devolve `[]` — não
+ * lança: a UI trata isso como "sem burndown pra mostrar ainda", não como erro.
+ */
+export async function burndownDoCiclo(orgId: string, cycleId: string): Promise<PontoBurndown[]> {
+  const [cycle] = await db
+    .select({ inicio: cycles.inicio, fim: cycles.fim })
+    .from(cycles)
+    .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
+    .limit(1);
+  if (!cycle || !cycle.inicio || !cycle.fim) return [];
+
+  const rows = await db
+    .select({ status: tasks.status, updated_at: tasks.updated_at })
+    .from(tasks)
+    .where(and(eq(tasks.org_id, orgId), eq(tasks.cycle_id, cycleId)));
+
+  return burndown(
+    rows.map((r) => ({ status: r.status as TaskStatus, updated_at: r.updated_at })),
+    cycle.inicio,
+    cycle.fim,
+  );
 }
 
 /**

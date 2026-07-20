@@ -277,4 +277,144 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
     expect(retro.taxaConclusao).toBe(67); // round(2/3*100)
     expect(retro.impactoBRL).toBe(500); // só a task com impacto calculável: 1500-1000
   });
+
+  // ---------------------------------------------------------------------
+  // ativarCiclo (H5/T9) — única transição planejado -> ativo; guarda org E
+  // status de origem (só a partir de 'planejado').
+  // ---------------------------------------------------------------------
+  it('ativarCiclo muda planejado -> ativo, org-scoped', async () => {
+    const { criarCiclo, ativarCiclo } = await import('@/modules/tasks/cycle.repository');
+    const cicloId = await criarCiclo(orgAId, { nome: 'Sprint ativar' });
+
+    await ativarCiclo(orgAId, cicloId);
+
+    const [row] = await tdb.select().from(cycles).where(eq(cycles.id, cicloId));
+    expect(row?.status).toBe('ativo');
+  });
+
+  it('ativarCiclo rejeita ciclo de outra org (não ativa o de outrem)', async () => {
+    const { criarCiclo, ativarCiclo } = await import('@/modules/tasks/cycle.repository');
+    const cicloDeB = await criarCiclo(orgBId, { nome: 'Sprint ativar B' });
+
+    await expect(ativarCiclo(orgAId, cicloDeB)).rejects.toThrow('ciclo_nao_encontrado');
+
+    const [row] = await tdb.select().from(cycles).where(eq(cycles.id, cicloDeB));
+    expect(row?.status).toBe('planejado'); // intacto
+  });
+
+  it('ativarCiclo rejeita a partir de status != planejado (não reabre fechado, não re-ativa ativo)', async () => {
+    const { criarCiclo, ativarCiclo, fecharCiclo } = await import('@/modules/tasks/cycle.repository');
+
+    const cicloJaAtivo = await criarCiclo(orgAId, { nome: 'Sprint já ativa' });
+    await ativarCiclo(orgAId, cicloJaAtivo);
+    await expect(ativarCiclo(orgAId, cicloJaAtivo)).rejects.toThrow('transicao_invalida');
+
+    const cicloFechado = await criarCiclo(orgAId, { nome: 'Sprint fechada' });
+    await fecharCiclo(orgAId, cicloFechado);
+    await expect(ativarCiclo(orgAId, cicloFechado)).rejects.toThrow('transicao_invalida');
+  });
+
+  // ---------------------------------------------------------------------
+  // tasksSemCiclo (H5/T9) — pool de tasks candidatas a entrar num ciclo.
+  // ---------------------------------------------------------------------
+  it('tasksSemCiclo devolve só tasks da org SEM cycle_id (exclui as já num ciclo)', async () => {
+    const { criarCiclo, moverTaskParaCiclo, tasksSemCiclo } = await import('@/modules/tasks/cycle.repository');
+
+    const [orgIsolada] = await tdb
+      .insert(organizations)
+      .values({ name: `${PREFIX}sem-ciclo-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    const orgIsoladaId = orgIsolada!.id;
+    orgIds.push(orgIsoladaId);
+
+    const cicloId = await criarCiclo(orgIsoladaId, { nome: 'Sprint pool' });
+
+    const [taskForaDoCiclo] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgIsoladaId, titulo: 'Fora do ciclo', tipo: 'outro', prioridade: 'media',
+        status: 'todo', criado_por: 'analista', ordem: 1,
+      })
+      .returning({ id: tasks.id });
+
+    const [taskNoCiclo] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgIsoladaId, titulo: 'No ciclo', tipo: 'outro', prioridade: 'media',
+        status: 'todo', criado_por: 'analista', ordem: 2,
+      })
+      .returning({ id: tasks.id });
+    await moverTaskParaCiclo(taskNoCiclo!.id, orgIsoladaId, cicloId);
+
+    const pool = await tasksSemCiclo(orgIsoladaId);
+    expect(pool.map((t) => t.id)).toEqual([taskForaDoCiclo!.id]);
+  });
+
+  // ---------------------------------------------------------------------
+  // burndownDoCiclo (H5/T9) — delega para burndown() puro com status +
+  // updated_at das tasks do ciclo.
+  // ---------------------------------------------------------------------
+  it('burndownDoCiclo devolve [] quando o ciclo não tem inicio/fim definidos', async () => {
+    const { criarCiclo, burndownDoCiclo } = await import('@/modules/tasks/cycle.repository');
+    const cicloId = await criarCiclo(orgAId, { nome: 'Sprint sem datas' });
+
+    expect(await burndownDoCiclo(orgAId, cicloId)).toEqual([]);
+  });
+
+  it('burndownDoCiclo devolve [] quando o ciclo é de outra org', async () => {
+    const { criarCiclo, burndownDoCiclo } = await import('@/modules/tasks/cycle.repository');
+    const cicloDeB = await criarCiclo(orgBId, { nome: 'Sprint burndown B', inicio: '2026-07-01', fim: '2026-07-02' });
+
+    expect(await burndownDoCiclo(orgAId, cicloDeB)).toEqual([]);
+  });
+
+  it('burndownDoCiclo soma as tasks do ciclo e delega a série pro burndown() puro', async () => {
+    const { criarCiclo, moverTaskParaCiclo, burndownDoCiclo } = await import('@/modules/tasks/cycle.repository');
+    const cicloId = await criarCiclo(orgAId, {
+      nome: 'Sprint burndown A', inicio: '2026-07-01', fim: '2026-07-02',
+    });
+
+    const [taskAberta] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgAId, titulo: 'Aberta bd', tipo: 'outro', prioridade: 'media',
+        status: 'todo', criado_por: 'analista', ordem: 20,
+      })
+      .returning({ id: tasks.id });
+    await moverTaskParaCiclo(taskAberta!.id, orgAId, cicloId);
+
+    // fechou bem ANTES do ciclo começar -> não conta em nenhum dia do intervalo.
+    const [taskFechadaAntes] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgAId, titulo: 'Fechada antes bd', tipo: 'outro', prioridade: 'media',
+        status: 'concluida', criado_por: 'analista', ordem: 21,
+      })
+      .returning({ id: tasks.id });
+    await moverTaskParaCiclo(taskFechadaAntes!.id, orgAId, cicloId);
+    await tdb
+      .update(tasks)
+      .set({ updated_at: new Date('2026-06-01T12:00:00.000Z') })
+      .where(eq(tasks.id, taskFechadaAntes!.id));
+
+    // fechou bem DEPOIS do ciclo acabar -> conta como aberta nos DOIS dias.
+    const [taskFechadaDepois] = await tdb
+      .insert(tasks)
+      .values({
+        org_id: orgAId, titulo: 'Fechada depois bd', tipo: 'outro', prioridade: 'media',
+        status: 'concluida', criado_por: 'analista', ordem: 22,
+      })
+      .returning({ id: tasks.id });
+    await moverTaskParaCiclo(taskFechadaDepois!.id, orgAId, cicloId);
+    await tdb
+      .update(tasks)
+      .set({ updated_at: new Date('2026-07-10T12:00:00.000Z') })
+      .where(eq(tasks.id, taskFechadaDepois!.id));
+
+    const pontos = await burndownDoCiclo(orgAId, cicloId);
+    expect(pontos).toEqual([
+      { dia: '2026-07-01', abertas: 2 }, // aberta + fechada-depois (fechada-antes já não conta)
+      { dia: '2026-07-02', abertas: 2 },
+    ]);
+  });
 });

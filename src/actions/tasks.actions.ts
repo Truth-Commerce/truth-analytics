@@ -15,6 +15,7 @@ import { assertNaoImpersonando } from '@/modules/auth/require-active-org';
 import { requireSession } from '@/modules/auth/require-session';
 import type { UserAccess } from '@/modules/auth/user.types';
 import { CHECKLIST_UNCHECKED } from '@/modules/tasks/checklist-line';
+import { moverTaskParaCiclo } from '@/modules/tasks/cycle.repository';
 import { FONTES_ANALISE } from '@/modules/tasks/report-to-task';
 import { createTasksFromReport } from '@/modules/tasks/report-to-task.repository';
 import { prazoDefault, somarDias } from '@/modules/tasks/sla';
@@ -274,6 +275,41 @@ export async function moveTaskAction(formData: FormData): Promise<TaskActionStat
 
   await notificarWatchers(parsed.data.taskId, orgId, access.id, eventoStatusLabel(novoStatus));
   revalidateTaskRoutes(orgId);
+  return { ok: true, taskId: parsed.data.taskId };
+}
+
+// ---------------------------------------------------------------------------
+// moverTaskParaCicloAction (H5/T9) — move (ou remove, cycleId ausente/vazio)
+// uma task de/para um ciclo. Task-scoped (não org-level como criar/fechar
+// ciclo): roteia por resolveTaskContext, o mesmo portão de todas as mutações
+// de task acima — 1ª linha é assertNaoImpersonando (via resolveTaskContext),
+// então herda o mesmo guard de impersonação. moverTaskParaCiclo (repo) já
+// valida os DOIS lados do escopo (task E ciclo pertencem a orgId) — esta
+// action não abre porta nova, só traduz os erros conhecidos.
+// ---------------------------------------------------------------------------
+const moverTaskParaCicloSchema = z.object({ taskId: z.string().min(1), cycleId: z.string().optional() });
+
+export async function moverTaskParaCicloAction(formData: FormData): Promise<TaskActionState> {
+  const resolved = await resolveTaskContextOrError(formData);
+  if (!resolved.ok) return { error: resolved.error };
+  const { orgId } = resolved.ctx;
+
+  const parsed = moverTaskParaCicloSchema.safeParse({
+    taskId: formData.get('taskId'),
+    cycleId: formData.get('cycleId') || undefined,
+  });
+  if (!parsed.success) return { error: 'Dados inválidos. Tente novamente.' };
+
+  try {
+    await moverTaskParaCiclo(parsed.data.taskId, orgId, parsed.data.cycleId ?? null);
+  } catch (e) {
+    if (e instanceof Error && e.message === 'task_nao_encontrada') return { error: 'Tarefa não encontrada.' };
+    if (e instanceof Error && e.message === 'ciclo_nao_encontrado') return { error: 'Ciclo não encontrado.' };
+    throw e;
+  }
+
+  revalidateTaskRoutes(orgId);
+  revalidatePath('/dashboard/plano-de-acao/ciclos');
   return { ok: true, taskId: parsed.data.taskId };
 }
 
