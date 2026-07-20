@@ -152,36 +152,43 @@ export async function fecharCiclo(orgId: string, cycleId: string): Promise<void>
  * "cheque então escreve" — o Postgres serializa via lock de linha, a
  * segunda só reavalia o WHERE depois do commit da primeira e, já vendo
  * status='ativo', atualiza 0 linhas. `RETURNING` decide o resultado real.
+ *
+ * F5 (revisão H5/T11) demovia o ciclo ATIVO anterior chamando `fecharCiclo`
+ * — mas fechar é IRREVERSÍVEL por contrato do produto (a UI só fecha atrás
+ * de confirmação explícita, "não pode ser reaberto"). Clicar "Ativar" no
+ * ciclo B fechava o ciclo A silenciosamente, sem aviso nenhum — achado no
+ * re-review (F2).
+ *
+ * Fix (F2, re-review): demove o ciclo anterior de volta a 'planejado' (NÃO
+ * 'fechado') — reversível, coerente com o fato de `ativarCiclo` só aceitar
+ * origem 'planejado', e sem o efeito colateral de fechar algo que ninguém
+ * confirmou fechar. A ativação (UPDATE condicional) e a demoção (UPDATE do(s)
+ * outro(s) 'ativo') agora rodam na MESMA transação: antes, a demoção corria
+ * DEPOIS do UPDATE condicional mas fora de qualquer transação — um crash
+ * entre as duas chamadas deixava a org com dois ciclos 'ativo' de novo, o
+ * exato estado que o F5 original tentava impedir.
  */
 export async function ativarCiclo(orgId: string, cycleId: string): Promise<void> {
-  const [existente] = await db
-    .select({ id: cycles.id })
-    .from(cycles)
-    .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
-    .limit(1);
-  if (!existente) throw new Error('ciclo_nao_encontrado');
+  await db.transaction(async (tx) => {
+    const [existente] = await tx
+      .select({ id: cycles.id })
+      .from(cycles)
+      .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
+      .limit(1);
+    if (!existente) throw new Error('ciclo_nao_encontrado');
 
-  const [ativado] = await db
-    .update(cycles)
-    .set({ status: 'ativo' })
-    .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId), eq(cycles.status, 'planejado')))
-    .returning({ id: cycles.id });
-  if (!ativado) throw new Error('transicao_invalida');
+    const [ativado] = await tx
+      .update(cycles)
+      .set({ status: 'ativo' })
+      .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId), eq(cycles.status, 'planejado')))
+      .returning({ id: cycles.id });
+    if (!ativado) throw new Error('transicao_invalida');
 
-  // F5 (revisão H5/T11): nada aqui demovia o ciclo ATIVO anterior — ativar um
-  // segundo ciclo deixava dois 'ativo' na mesma org simultaneamente, o que
-  // confunde `getCicloAtivo` (devolve só o mais recente, escondendo o outro)
-  // e a UI (qual é "o" ciclo corrente?). Fix: fecha (via `fecharCiclo` — reusa
-  // o MESMO efeito colateral do F4: tasks não concluídas do ciclo demovido
-  // voltam pro pool) qualquer OUTRO ciclo 'ativo' da org — normalmente no
-  // máximo um, mas o loop cobre defensivamente um estado pré-fix com vários.
-  const outrosAtivos = await db
-    .select({ id: cycles.id })
-    .from(cycles)
-    .where(and(eq(cycles.org_id, orgId), eq(cycles.status, 'ativo'), ne(cycles.id, cycleId)));
-  for (const outro of outrosAtivos) {
-    await fecharCiclo(orgId, outro.id);
-  }
+    await tx
+      .update(cycles)
+      .set({ status: 'planejado' })
+      .where(and(eq(cycles.org_id, orgId), eq(cycles.status, 'ativo'), ne(cycles.id, cycleId)));
+  });
 }
 
 /** Tasks de um ciclo, org-scoped (filtra por `org_id` E `cycle_id`). */

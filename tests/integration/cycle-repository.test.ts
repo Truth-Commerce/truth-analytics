@@ -380,9 +380,14 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
 
   // ---------------------------------------------------------------------
   // F5 (revisão H5/T11) — ativarCiclo não demovia o ciclo 'ativo' anterior;
-  // duas orgs podiam acabar com dois ciclos 'ativo' simultâneos.
+  // duas orgs podiam acabar com dois ciclos 'ativo' simultâneos. F5
+  // demovia via `fecharCiclo`, mas fechar é IRREVERSÍVEL por contrato do
+  // produto (a UI só fecha atrás de confirmação explícita) — clicar
+  // "Ativar" fechava o ciclo anterior SEM aviso nenhum. F2 (re-review)
+  // trocou a demoção pra 'planejado' (reversível) e envolveu ativar+demover
+  // na MESMA transação.
   // ---------------------------------------------------------------------
-  it('ativarCiclo demove qualquer OUTRO ciclo ativo da org (fecha via fecharCiclo — só um ativo por vez)', async () => {
+  it('ativarCiclo demove qualquer OUTRO ciclo ativo da org pra "planejado" (reversível — NÃO fecha), só um ativo por vez', async () => {
     const { criarCiclo, ativarCiclo, getCicloAtivo } = await import('@/modules/tasks/cycle.repository');
     const [org] = await tdb
       .insert(organizations)
@@ -399,11 +404,19 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
 
     const [rowA] = await tdb.select().from(cycles).where(eq(cycles.id, cicloA));
     const [rowB] = await tdb.select().from(cycles).where(eq(cycles.id, cicloB));
-    expect(rowA?.status).toBe('fechado'); // demovido (via fecharCiclo) ao ativar o B
+    expect(rowA?.status).toBe('planejado'); // demovido (reversível), NÃO fechado
     expect(rowB?.status).toBe('ativo');
 
     const ativo = await getCicloAtivo(orgUnicoAtivoId);
     expect(ativo?.id).toBe(cicloB); // só um ativo — o mais recente
+
+    // Reversível de verdade: A (demovido a 'planejado') pode ser reativado —
+    // o que, por sua vez, demove B de volta a 'planejado'.
+    await ativarCiclo(orgUnicoAtivoId, cicloA);
+    const [rowA2] = await tdb.select().from(cycles).where(eq(cycles.id, cicloA));
+    const [rowB2] = await tdb.select().from(cycles).where(eq(cycles.id, cicloB));
+    expect(rowA2?.status).toBe('ativo');
+    expect(rowB2?.status).toBe('planejado');
   });
 
   it('duas ativações concorrentes do MESMO ciclo: só uma vence (UPDATE condicional fecha a corrida — H5/T10)', async () => {
