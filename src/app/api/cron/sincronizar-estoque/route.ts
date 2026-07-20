@@ -1,6 +1,7 @@
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
+import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 import { listOrgsComBlingOk } from '@/modules/connections/connection.repository';
 import { sincronizarEstoqueDaOrg } from '@/modules/estoque/sync-estoque';
 import { LOTE_MAXIMO_SYNC } from '@/modules/pipeline/sync-pedidos';
@@ -40,5 +41,7 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  return Response.json({ orgs: orgIds.length, sincronizadas, falhas });
+  const resposta = { orgs: orgIds.length, sincronizadas, falhas };
+  await registrarHeartbeat('sincronizar-estoque', true, resposta);
+  return Response.json(resposta);
 }

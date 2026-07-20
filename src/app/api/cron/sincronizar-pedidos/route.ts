@@ -9,6 +9,7 @@ import {
   MARGEM_RENOVACAO_MS,
   renovarConexaoDaOrg,
 } from '@/modules/connections/token-renewal';
+import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 import {
   LOTE_MAXIMO_SYNC,
   sincronizarPedidosDaOrg,
@@ -84,12 +85,14 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  return Response.json({
+  const resposta = {
     orgs: orgIds.length,
     sincronizadas,
     falhas,
     renovadas,
     expiradas,
     transientes,
-  });
+  };
+  await registrarHeartbeat('sincronizar-pedidos', true, resposta);
+  return Response.json(resposta);
 }

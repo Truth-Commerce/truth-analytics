@@ -6,6 +6,7 @@ import { reports } from '@/db/schema';
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
+import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,5 +38,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       reportIds: presos.map((p) => p.id),
     });
   }
-  return NextResponse.json({ marcados: presos.length });
+  const resposta = { marcados: presos.length };
+  await registrarHeartbeat('watchdog', true, resposta);
+  return NextResponse.json(resposta);
 }
