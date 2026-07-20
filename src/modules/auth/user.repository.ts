@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, or } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { organizations, users } from '@/db/schema';
@@ -145,4 +145,122 @@ export async function createOrgClientUser(input: {
     }
     throw e;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Gestão de contas cross-org do admin (H4 T11) — /admin/usuarios.
+// ---------------------------------------------------------------------------
+
+const ROLES_CRIAVEIS_VIA_UI = new Set<UserRole>(['client', 'analista']);
+
+/**
+ * Cria um usuário em QUALQUER org (client ou analista) — fluxo do
+ * /admin/usuarios. `role` é `string` (não `'client' | 'analista'`) de
+ * propósito: o valor chega de FormData sem garantia de tipo, e a validação
+ * abaixo é a barreira server-side que barra 'admin_truth' (ou qualquer outro
+ * valor) mesmo que a UI/zod da action falhem — 'admin_truth' NUNCA pode ser
+ * criado por este caminho. Role 'client' reaproveita `createOrgClientUser`
+ * (mesma checagem de limite por org); 'analista' não tem limite de contagem.
+ */
+export async function createUserInOrg(input: {
+  orgId: string;
+  email: string;
+  role: string;
+  senha: string;
+}): Promise<{ userId: string }> {
+  if (!ROLES_CRIAVEIS_VIA_UI.has(input.role as UserRole)) {
+    throw new Error('role_invalida');
+  }
+  if (input.role === 'client') {
+    return createOrgClientUser({ orgId: input.orgId, email: input.email, senha: input.senha });
+  }
+
+  const email = normalizeEmail(input.email);
+  const existing = await getUserByEmail(email);
+  if (existing) throw new Error('email_em_uso');
+
+  const senha_hash = await hashPassword(input.senha);
+  try {
+    const [user] = await db
+      .insert(users)
+      .values({ org_id: input.orgId, email, senha_hash, role: 'analista' })
+      .returning({ id: users.id });
+    return { userId: user.id };
+  } catch (e: unknown) {
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+      throw new Error('email_em_uso');
+    }
+    throw e;
+  }
+}
+
+export type UserListRow = {
+  id: string;
+  email: string;
+  role: UserRole;
+  orgId: string;
+  orgName: string;
+  createdAt: Date;
+};
+
+export const USERS_PAGE_SIZE = 20;
+
+/**
+ * Lista cross-org de usuários (client + analista + admin_truth) com busca por
+ * substring de e-mail OU nome da org, paginada. Sem escopo por org — a tela é
+ * exclusiva de admin_truth (requireAdmin no caller), que já enxerga tudo.
+ */
+export async function listUsersPage(params: {
+  q?: string;
+  page: number;
+}): Promise<{ items: UserListRow[]; total: number; pageCount: number }> {
+  const termo = params.q?.trim();
+  const where = termo
+    ? or(ilike(users.email, `%${termo}%`), ilike(organizations.name, `%${termo}%`))
+    : undefined;
+
+  const [{ n }] = await db
+    .select({ n: count() })
+    .from(users)
+    .innerJoin(organizations, eq(users.org_id, organizations.id))
+    .where(where);
+
+  const total = Number(n);
+  const pageCount = Math.max(1, Math.ceil(total / USERS_PAGE_SIZE));
+  const page = Math.min(Math.max(1, params.page), pageCount);
+
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      orgId: organizations.id,
+      orgName: organizations.name,
+      createdAt: users.created_at,
+    })
+    .from(users)
+    .innerJoin(organizations, eq(users.org_id, organizations.id))
+    .where(where)
+    .orderBy(desc(users.created_at), asc(users.id))
+    .limit(USERS_PAGE_SIZE)
+    .offset((page - 1) * USERS_PAGE_SIZE);
+
+  return {
+    items: rows.map((r) => ({ ...r, role: r.role as UserRole })),
+    total,
+    pageCount,
+  };
+}
+
+/** Usuário + org (para montar o link de reset e para o audit da tela de contas). */
+export async function getUserWithOrgById(
+  userId: string,
+): Promise<{ id: string; email: string; orgId: string; role: UserRole } | null> {
+  const [row] = await db
+    .select({ id: users.id, email: users.email, orgId: users.org_id, role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!row) return null;
+  return { ...row, role: row.role as UserRole };
 }
