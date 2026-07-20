@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, ne } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, or } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { cycles, tasks } from '@/db/schema';
@@ -109,31 +109,30 @@ export async function moverTaskParaCiclo(taskId: string, orgId: string, cycleId:
  * Fecha um ciclo (status -> 'fechado'), org-scoped. Lança se o ciclo não for
  * da org.
  *
- * F4 (revisão H5/T11): fechar um ciclo é IRREVERSÍVEL e `tasksSemCiclo` só
- * devolve `cycle_id IS NULL` — sem este fix, tasks não concluídas de um
- * ciclo fechado ficavam presas nele pra sempre: somem da UI de ciclos (não
- * aparecem mais no ciclo ativo nem no pool) e nunca podem entrar num ciclo
- * novo. Fix: na MESMA transação que fecha o ciclo, solta de volta pro pool
- * (`cycle_id = null`) as tasks NÃO concluídas do ciclo — as CONCLUÍDAS
- * mantêm o `cycle_id` intacto, então `retrospectivaDoCiclo` (que soma
- * planejadas/concluídas/impacto via `tasksDoCiclo`, filtrando por
- * `cycle_id`) continua contando exatamente o que foi entregue neste ciclo,
- * mesmo depois de fechado.
+ * F4 (revisão H5/T11) tentou resolver "tasks de ciclo fechado ficam presas
+ * pra sempre" limpando `cycle_id` das tasks não concluídas AQUI. Isso
+ * quebrou a retrospectiva (achado no re-review, F1): `retrospectivaDoCiclo`
+ * deriva `planejadas` E `concluidas` de `tasksDoCiclo` (filtra por
+ * `cycle_id`) — depois de fechar, só as CONCLUÍDAS continuavam com o
+ * `cycle_id`, então `planejadas === concluidas` sempre, e todo ciclo fechado
+ * reportava "100%" independentemente do que foi de fato entregue.
+ *
+ * Fix (F1, re-review): `fecharCiclo` volta a ser só a transição de status —
+ * NENHUMA task é tocada, o histórico do ciclo (tasksDoCiclo) fica intacto
+ * pra sempre, e a retrospectiva volta a ser truthful. O problema original
+ * (tasks presas) é resolvido do outro lado: `tasksSemCiclo` (abaixo) agora
+ * também devolve tasks de ciclos FECHADOS, não só `cycle_id IS NULL` — elas
+ * reaparecem no pool e podem entrar num ciclo novo, sem que isso mexa no
+ * `cycle_id` original (o vínculo histórico com o ciclo fechado continua
+ * existindo até o dia em que a task for de fato movida para outro ciclo).
  */
 export async function fecharCiclo(orgId: string, cycleId: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    const [row] = await tx
-      .update(cycles)
-      .set({ status: 'fechado' })
-      .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
-      .returning({ id: cycles.id });
-    if (!row) throw new Error('ciclo_nao_encontrado');
-
-    await tx
-      .update(tasks)
-      .set({ cycle_id: null })
-      .where(and(eq(tasks.org_id, orgId), eq(tasks.cycle_id, cycleId), ne(tasks.status, 'concluida')));
-  });
+  const [row] = await db
+    .update(cycles)
+    .set({ status: 'fechado' })
+    .where(and(eq(cycles.id, cycleId), eq(cycles.org_id, orgId)))
+    .returning({ id: cycles.id });
+  if (!row) throw new Error('ciclo_nao_encontrado');
 }
 
 /**
@@ -196,19 +195,29 @@ export async function tasksDoCiclo(orgId: string, cycleId: string): Promise<Task
 }
 
 /**
- * Tasks da org que ainda não estão em NENHUM ciclo (`cycle_id IS NULL`) —
- * o "pool" candidato a entrar num ciclo (H5/T9). Não inclui tasks que já
- * pertencem a OUTRO ciclo — mover diretamente de um ciclo pra outro não é um
- * caso de uso desta UI (o fluxo é sempre pool -> ciclo ativo, ou ciclo -> pool
- * via `moverTaskParaCiclo(..., null)`).
+ * Tasks da org disponíveis pra entrar num ciclo (H5/T9) — o "pool":
+ * `cycle_id IS NULL` OU o ciclo a que a task pertence já está FECHADO.
+ *
+ * F4 (revisão H5/T11) resolvia "tasks de ciclo fechado ficam presas pra
+ * sempre" limpando `cycle_id` em `fecharCiclo`. F1 (re-review) reverteu isso
+ * — quebrava `retrospectivaDoCiclo` (ver `fecharCiclo`). O problema original
+ * do F4 continua resolvido AQUI: em vez de depender de `cycle_id IS NULL`,
+ * um LEFT JOIN com `cycles` também aceita tasks cujo ciclo (ainda vinculado
+ * via `cycle_id`) tem `status = 'fechado'` — elas reaparecem no pool e podem
+ * ser movidas pra um ciclo novo (via `moverTaskParaCiclo`) sem que o fechar
+ * do ciclo precise tocar em nenhuma task. Não inclui tasks de um ciclo ainda
+ * 'planejado'/'ativo' — mover diretamente de um ciclo aberto pra outro não é
+ * um caso de uso desta UI (o fluxo é sempre pool -> ciclo ativo, ciclo -> pool
+ * via `moverTaskParaCiclo(..., null)`, ou ciclo FECHADO -> pool via este fix).
  */
 export async function tasksSemCiclo(orgId: string): Promise<TaskSummary[]> {
   const rows = await db
-    .select()
+    .select({ task: tasks })
     .from(tasks)
-    .where(and(eq(tasks.org_id, orgId), isNull(tasks.cycle_id)))
+    .leftJoin(cycles, eq(tasks.cycle_id, cycles.id))
+    .where(and(eq(tasks.org_id, orgId), or(isNull(tasks.cycle_id), eq(cycles.status, 'fechado'))))
     .orderBy(tasks.status, tasks.ordem);
-  return rows.map(rowToSummary);
+  return rows.map(({ task }) => rowToSummary(task));
 }
 
 /**

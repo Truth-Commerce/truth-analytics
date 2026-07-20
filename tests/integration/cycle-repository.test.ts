@@ -174,11 +174,17 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
   });
 
   // ---------------------------------------------------------------------
-  // F4 (revisão H5/T11) — ciclo fechado é IRREVERSÍVEL; sem este fix, tasks
-  // não concluídas de um ciclo fechado ficavam presas nele pra sempre (nunca
-  // reapareciam no pool nem podiam entrar num ciclo novo).
+  // F4 (revisão H5/T11) tentou resolver "tasks de ciclo fechado ficam
+  // presas pra sempre" limpando `cycle_id` das não-concluídas em
+  // `fecharCiclo` — mas isso quebrava a retrospectiva: `planejadas` E
+  // `concluidas` vêm de `tasksDoCiclo` (filtra por `cycle_id`), então depois
+  // de fechar só as CONCLUÍDAS continuavam vinculadas e todo ciclo fechado
+  // reportava 100% de taxa de conclusão, sempre — mesmo um sprint que
+  // entregou 3 de 10. F1 (re-review) reverteu a limpeza de `cycle_id` em
+  // `fecharCiclo` e moveu a solução do problema original pra `tasksSemCiclo`
+  // (que agora também devolve tasks de ciclos FECHADOS).
   // ---------------------------------------------------------------------
-  it('fecharCiclo libera tasks NÃO concluídas de volta pro pool (cycle_id -> null), mas preserva o cycle_id das concluídas — retrospectiva continua correta', async () => {
+  it('fecharCiclo NÃO mexe em cycle_id (histórico intacto) — retrospectiva de um ciclo parcialmente entregue reporta a taxa verdadeira, não 100%', async () => {
     const { criarCiclo, fecharCiclo, moverTaskParaCiclo, tasksSemCiclo, retrospectivaDoCiclo } = await import(
       '@/modules/tasks/cycle.repository'
     );
@@ -211,18 +217,24 @@ describe.skipIf(!url)('cycle.repository — integração', () => {
 
     await fecharCiclo(orgIsoladaId, cicloId);
 
+    // cycle_id de NENHUMA das duas tasks é tocado — histórico do ciclo intacto.
     const [rowAberta] = await tdb.select().from(tasks).where(eq(tasks.id, taskAberta!.id));
-    expect(rowAberta?.cycle_id).toBeNull(); // voltou pro pool
+    expect(rowAberta?.cycle_id).toBe(cicloId);
 
     const [rowConcluida] = await tdb.select().from(tasks).where(eq(tasks.id, taskConcluida!.id));
-    expect(rowConcluida?.cycle_id).toBe(cicloId); // preservada
+    expect(rowConcluida?.cycle_id).toBe(cicloId);
 
+    // Mesmo sem cycle_id=null, a aberta reaparece no pool — via LEFT JOIN
+    // cycles + `status='fechado'` em tasksSemCiclo, não via cycle_id IS NULL.
     const pool = await tasksSemCiclo(orgIsoladaId);
     expect(pool.map((t) => t.id)).toContain(taskAberta!.id);
 
+    // A retrospectiva conta as DUAS tasks do ciclo (planejadas=2), só 1
+    // concluída — taxa real de 50%, não 100%.
     const retro = await retrospectivaDoCiclo(orgIsoladaId, cicloId);
-    expect(retro.planejadas).toBe(1); // só a concluída continua vinculada ao ciclo
+    expect(retro.planejadas).toBe(2);
     expect(retro.concluidas).toBe(1);
+    expect(retro.taxaConclusao).toBe(50);
   });
 
   it('tasksDoCiclo devolve só as tasks do ciclo E da org (isolamento duplo)', async () => {
