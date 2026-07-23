@@ -6,25 +6,32 @@ import { logger } from '@/lib/logger';
 import { getAnthropic } from '@/modules/ai/claude';
 import type { IaUsage } from '@/modules/pipeline/steps/analyze-ia';
 
+// `maxItems` sai do schema (a API de structured output o rejeita com 400); o teto de 8
+// vai no prompt e é garantido por `normalizarSugestoes` após o parse.
+export const MAX_SUGESTOES_CALENDARIO = 8;
+
 export const CalendarioIaSchema = z
   .object({
-    sugestoes: z
-      .array(
-        z
-          .object({
-            dataISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            nomeData: z.string(),
-            titulo: z.string().min(1).max(200),
-            sugestao: z.string(),
-            skus: z.array(z.string()),
-          })
-          .strict(),
-      )
-      .max(8),
+    sugestoes: z.array(
+      z
+        .object({
+          dataISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          nomeData: z.string(),
+          titulo: z.string().min(1).max(200),
+          sugestao: z.string(),
+          skus: z.array(z.string()),
+        })
+        .strict(),
+    ),
   })
   .strict();
 
 export type SugestaoCalendario = z.infer<typeof CalendarioIaSchema>['sugestoes'][number];
+
+/** Aplica o teto que saiu do schema: corta em 8 sugestões. */
+export function normalizarSugestoes(sugestoes: SugestaoCalendario[]): SugestaoCalendario[] {
+  return sugestoes.slice(0, MAX_SUGESTOES_CALENDARIO);
+}
 
 // Build the JSON schema once at module load — pure, no I/O.
 const _rawSchema = zodToJsonSchema(CalendarioIaSchema, { $refStrategy: 'none' });
@@ -169,7 +176,7 @@ export async function gerarCalendarioComIA(
   if (text1 !== null) {
     try {
       const parsed = CalendarioIaSchema.parse(JSON.parse(text1));
-      return { sugestoes: parsed.sugestoes, usage };
+      return { sugestoes: normalizarSugestoes(parsed.sugestoes), usage };
     } catch {
       // cai para a retentativa abaixo
     }
@@ -204,7 +211,7 @@ export async function gerarCalendarioComIA(
   if (text2 !== null) {
     try {
       const parsed2 = CalendarioIaSchema.parse(JSON.parse(text2));
-      return { sugestoes: parsed2.sugestoes, usage };
+      return { sugestoes: normalizarSugestoes(parsed2.sugestoes), usage };
     } catch (err) {
       logger.warn('calendario_ia.falha', {
         motivo: 'parse_invalido',

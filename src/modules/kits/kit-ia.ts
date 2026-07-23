@@ -8,27 +8,35 @@ import { getAnthropic } from '@/modules/ai/claude';
 import type { KitCandidato } from '@/modules/kits/market-basket';
 import type { IaUsage } from '@/modules/pipeline/steps/analyze-ia';
 
+// Limites de cardinalidade NÃO vão no schema: a API de structured output rejeita
+// `maxItems`/`minItems` em arrays (400 "property 'maxItems' is not supported"). O teto
+// fica no prompt ("máximo 6 kits", "mínimo 2 itens") e é garantido por `normalizarKits`
+// após o parse. String/number keepam .max (viram maxLength/maximum, suportados).
+export const MAX_KITS = 6;
+export const MIN_ITENS_KIT = 2;
+
 export const KitsIaSchema = z
   .object({
-    kits: z
-      .array(
-        z
-          .object({
-            nome: z.string().min(1).max(200),
-            itens: z
-              .array(z.object({ sku: z.string(), nome: z.string() }).strict())
-              .min(2),
-            precoSugerido: z.number(),
-            argumento: z.string(),
-            canalRecomendado: z.string(),
-          })
-          .strict(),
-      )
-      .max(6),
+    kits: z.array(
+      z
+        .object({
+          nome: z.string().min(1).max(200),
+          itens: z.array(z.object({ sku: z.string(), nome: z.string() }).strict()),
+          precoSugerido: z.number(),
+          argumento: z.string(),
+          canalRecomendado: z.string(),
+        })
+        .strict(),
+    ),
   })
   .strict();
 
 export type KitIa = z.infer<typeof KitsIaSchema>['kits'][number];
+
+/** Aplica os limites que saíram do schema: descarta kit com <2 itens, corta em 6. */
+export function normalizarKits(kits: KitIa[]): KitIa[] {
+  return kits.filter((k) => k.itens.length >= MIN_ITENS_KIT).slice(0, MAX_KITS);
+}
 
 // Build the JSON schema once at module load — pure, no I/O.
 const _rawSchema = zodToJsonSchema(KitsIaSchema, { $refStrategy: 'none' });
@@ -164,7 +172,7 @@ export async function gerarKitsComIA(
   if (text1 !== null) {
     try {
       const parsed = KitsIaSchema.parse(JSON.parse(text1));
-      return { kits: parsed.kits, usage };
+      return { kits: normalizarKits(parsed.kits), usage };
     } catch {
       // cai para a retentativa abaixo
     }
@@ -193,7 +201,7 @@ export async function gerarKitsComIA(
   if (text2 !== null) {
     try {
       const parsed2 = KitsIaSchema.parse(JSON.parse(text2));
-      return { kits: parsed2.kits, usage };
+      return { kits: normalizarKits(parsed2.kits), usage };
     } catch (err) {
       logger.warn('kits_ia.falha', {
         motivo: 'parse_invalido',

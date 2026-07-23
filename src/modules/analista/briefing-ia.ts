@@ -6,15 +6,30 @@ import { logger } from '@/lib/logger';
 import { getAnthropic } from '@/modules/ai/claude';
 import type { IaUsage } from '@/modules/pipeline/steps/analyze-ia';
 
+// `maxItems` sai do schema (a API de structured output o rejeita com 400); os tetos
+// vão no prompt e são garantidos por `normalizarBriefing` após o parse.
+export const MAX_PRIORIDADES = 5;
+export const MAX_ARGUMENTOS = 5;
+export const MAX_RISCOS = 4;
+
 export const BriefingIaSchema = z
   .object({
-    prioridades: z.array(z.string()).max(5),
-    argumentosReuniao: z.array(z.string()).max(5),
-    riscos: z.array(z.string()).max(4),
+    prioridades: z.array(z.string()),
+    argumentosReuniao: z.array(z.string()),
+    riscos: z.array(z.string()),
   })
   .strict();
 
 export type BriefingIa = z.infer<typeof BriefingIaSchema>;
+
+/** Aplica os tetos que saíram do schema. */
+export function normalizarBriefing(b: BriefingIa): BriefingIa {
+  return {
+    prioridades: b.prioridades.slice(0, MAX_PRIORIDADES),
+    argumentosReuniao: b.argumentosReuniao.slice(0, MAX_ARGUMENTOS),
+    riscos: b.riscos.slice(0, MAX_RISCOS),
+  };
+}
 
 // Build the JSON schema once at module load — pure, no I/O.
 const _rawSchema = zodToJsonSchema(BriefingIaSchema, { $refStrategy: 'none' });
@@ -160,7 +175,7 @@ export async function gerarBriefingComIA(
   if (text1 !== null) {
     try {
       const parsed = BriefingIaSchema.parse(JSON.parse(text1));
-      return { briefing: parsed, usage };
+      return { briefing: normalizarBriefing(parsed), usage };
     } catch {
       // cai para a retentativa abaixo
     }
@@ -195,7 +210,7 @@ export async function gerarBriefingComIA(
   if (text2 !== null) {
     try {
       const parsed2 = BriefingIaSchema.parse(JSON.parse(text2));
-      return { briefing: parsed2, usage };
+      return { briefing: normalizarBriefing(parsed2), usage };
     } catch (err) {
       logger.warn('briefing_ia.falha', {
         motivo: 'parse_invalido',
