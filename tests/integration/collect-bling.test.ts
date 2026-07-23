@@ -134,12 +134,17 @@ describe.skipIf(!url)('collect-bling — integração', () => {
     expect(order2!.frete).toBe('0.00');
   });
 
-  it('upsert atualiza valores na colisão', async () => {
+  it('upsert na colisão atualiza canal/valor, mas PRESERVA frete e itens (domínio do enriquecimento)', async () => {
+    // Contrato novo: a listagem /pedidos/vendas NÃO entrega frete nem itens — só o
+    // detalhe entrega, via enrichOrders. Por isso a recoleta (que roda a cada sync,
+    // recobrindo 2 dias) só toca no que a listagem realmente sabe: canal, data,
+    // valor_total. Sobrescrever frete/itens aqui apagaria o enriquecimento a cada
+    // ciclo. Este teste trava exatamente essa garantia.
     const UPDATED_ORDERS = [
       {
         ...MOCK_ORDERS[0],
         valorTotal: 299.9,
-        frete: 20.0,
+        frete: 20.0, // veio no mock, mas a listagem real nunca traz isto: deve ser ignorado
         canal: 'Loja Virtual Atualizada',
       },
     ];
@@ -160,9 +165,30 @@ describe.skipIf(!url)('collect-bling — integração', () => {
 
     const updated = rows.find((r) => r.bling_order_id === `bling-order-${RUN}-1`);
     expect(updated).toBeDefined();
+    // Atualizados pela listagem:
     expect(updated!.valor_total).toBe('299.90');
-    expect(updated!.frete).toBe('20.00');
     expect(updated!.canal).toBe('Loja Virtual Atualizada');
+    // PRESERVADO do valor original (15.00 dos MOCK_ORDERS): a recoleta não clobbera
+    // o frete que o enriquecimento seria dono de gravar.
+    expect(updated!.frete).toBe('15.00');
+  });
+
+  it('upsert na colisão com canal fallback ("Bling") NÃO rebaixa o canal já resolvido', async () => {
+    // Se o mapa de /canais-venda estiver indisponível numa recoleta, o canal cai
+    // para "Bling". Isso não pode apagar o nome real ("Loja Virtual Atualizada")
+    // que uma coleta anterior já gravou.
+    const FALLBACK_ORDERS = [{ ...MOCK_ORDERS[0], valorTotal: 305.0, canal: 'Bling' }];
+
+    const provider = await import('@/modules/providers/bling/provider');
+    mockFetchOrdersOnce(provider, FALLBACK_ORDERS);
+
+    const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
+    await collectBlingOrders(orgId, PERIODO);
+
+    const rows = await tdb.select().from(orders).where(eq(orders.org_id, orgId));
+    const row = rows.find((r) => r.bling_order_id === `bling-order-${RUN}-1`);
+    expect(row!.valor_total).toBe('305.00'); // valor ainda atualiza
+    expect(row!.canal).toBe('Loja Virtual Atualizada'); // canal preservado, não vira "Bling"
   });
 
   it('guard: pedido com blingOrderId vazio é ignorado, válido é persistido', async () => {

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { orders } from '@/db/schema';
 import { touchLastSyncAt } from '@/modules/connections/connection.repository';
+import { CANAL_DESCONHECIDO } from '@/modules/providers/bling/canais';
 import { blingProvider } from '@/modules/providers/bling/provider';
 import type { Periodo, RawOrder } from '@/modules/providers/types';
 
@@ -32,11 +33,15 @@ async function upsertOrdersPage(orgId: string, rawOrders: RawOrder[]): Promise<n
     .onConflictDoUpdate({
       target: [orders.org_id, orders.bling_order_id],
       set: {
-        canal: sql`EXCLUDED.canal`,
+        // A listagem NÃO entrega itens, frete nem comissão — só o detalhe entrega.
+        // Por isso o update aqui toca apenas o que a listagem realmente sabe.
+        // Copiar EXCLUDED.itens/frete apagaria o que o enriquecimento gravou a
+        // cada recoleta do mesmo período (o sync diário recobre 2 dias).
+        canal: sql`CASE WHEN EXCLUDED.canal = ${CANAL_DESCONHECIDO}
+                        THEN ${orders.canal}
+                        ELSE EXCLUDED.canal END`,
         data: sql`EXCLUDED.data`,
         valor_total: sql`EXCLUDED.valor_total`,
-        frete: sql`EXCLUDED.frete`,
-        itens: sql`EXCLUDED.itens`,
       },
     })
     .returning({ id: orders.id });
