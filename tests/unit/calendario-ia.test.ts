@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { buildCalendarioMessages, CalendarioIaSchema } from '@/modules/calendario/calendario-ia';
+import {
+  buildCalendarioMessages,
+  CalendarioIaSchema,
+  normalizarSugestoes,
+} from '@/modules/calendario/calendario-ia';
+
+function achaKeyword(obj: unknown, alvo: string): boolean {
+  if (obj === null || typeof obj !== 'object') return false;
+  if (Array.isArray(obj)) return obj.some((v) => achaKeyword(v, alvo));
+  return Object.entries(obj as Record<string, unknown>).some(
+    ([k, v]) => k === alvo || achaKeyword(v, alvo),
+  );
+}
 
 const DATAS = [
   {
@@ -64,7 +77,15 @@ describe('CalendarioIaSchema', () => {
     expect(CalendarioIaSchema.safeParse(invalido).success).toBe(false);
   });
 
-  it('rejeita mais de 8 sugestões', () => {
+  it('o JSON schema enviado à API não tem maxItems nem minItems (regressão do 400)', () => {
+    const jsonSchema = zodToJsonSchema(CalendarioIaSchema, { $refStrategy: 'none' });
+    expect(achaKeyword(jsonSchema, 'maxItems')).toBe(false);
+    expect(achaKeyword(jsonSchema, 'minItems')).toBe(false);
+  });
+});
+
+describe('normalizarSugestoes', () => {
+  it('corta em 8 sugestões', () => {
     const sugestao = {
       dataISO: '2026-11-27',
       nomeData: 'Black Friday',
@@ -72,8 +93,6 @@ describe('CalendarioIaSchema', () => {
       sugestao: 'Destaque produtos com desconto.',
       skus: ['CANECA'],
     };
-    expect(
-      CalendarioIaSchema.safeParse({ sugestoes: Array(9).fill(sugestao) }).success,
-    ).toBe(false);
+    expect(normalizarSugestoes(Array(12).fill(sugestao))).toHaveLength(8);
   });
 });

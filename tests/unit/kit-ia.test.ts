@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { buildKitMessages, KitsIaSchema } from '@/modules/kits/kit-ia';
+import { buildKitMessages, KitsIaSchema, normalizarKits } from '@/modules/kits/kit-ia';
+
+/** Varre um JSON schema atrás de qualquer keyword que a API de structured output rejeita. */
+function achaKeyword(obj: unknown, alvo: string): boolean {
+  if (obj === null || typeof obj !== 'object') return false;
+  if (Array.isArray(obj)) return obj.some((v) => achaKeyword(v, alvo));
+  return Object.entries(obj as Record<string, unknown>).some(
+    ([k, v]) => k === alvo || achaKeyword(v, alvo),
+  );
+}
 
 const CANDIDATOS = [
   {
@@ -38,40 +48,39 @@ describe('buildKitMessages', () => {
   });
 });
 
-describe('KitsIaSchema', () => {
-  it('aceita kit válido e rejeita kit com 1 item só', () => {
-    const valido = {
-      kits: [
-        {
-          nome: 'Kit Café da Manhã',
-          itens: [
-            { sku: 'CANECA', nome: 'Caneca Inox' },
-            { sku: 'FILTRO', nome: 'Filtro de Café' },
-          ],
-          precoSugerido: 79.9,
-          argumento: 'Comprados juntos por 7 clientes.',
-          canalRecomendado: 'Shopee',
-        },
-      ],
-    };
-    expect(KitsIaSchema.safeParse(valido).success).toBe(true);
+function kitCom(itens: number) {
+  return {
+    nome: 'K',
+    itens: Array.from({ length: itens }, (_, i) => ({ sku: `S${i}`, nome: `N${i}` })),
+    precoSugerido: 10,
+    argumento: 'x',
+    canalRecomendado: 'Shopee',
+  };
+}
 
-    const invalido = structuredClone(valido);
-    invalido.kits[0]!.itens = [invalido.kits[0]!.itens[0]!];
-    expect(KitsIaSchema.safeParse(invalido).success).toBe(false);
+describe('KitsIaSchema', () => {
+  it('aceita kit válido', () => {
+    expect(KitsIaSchema.safeParse({ kits: [kitCom(2)] }).success).toBe(true);
   });
 
-  it('rejeita mais de 6 kits', () => {
-    const kit = {
-      nome: 'K',
-      itens: [
-        { sku: 'A', nome: 'A' },
-        { sku: 'B', nome: 'B' },
-      ],
-      precoSugerido: 10,
-      argumento: 'x',
-      canalRecomendado: 'Shopee',
-    };
-    expect(KitsIaSchema.safeParse({ kits: Array(7).fill(kit) }).success).toBe(false);
+  // O schema NÃO carrega mais maxItems/minItems (a API de structured output os rejeita
+  // com 400). Cardinalidade agora é responsabilidade de normalizarKits.
+  it('o JSON schema enviado à API não tem maxItems nem minItems (regressão do 400)', () => {
+    const jsonSchema = zodToJsonSchema(KitsIaSchema, { $refStrategy: 'none' });
+    expect(achaKeyword(jsonSchema, 'maxItems')).toBe(false);
+    expect(achaKeyword(jsonSchema, 'minItems')).toBe(false);
+  });
+});
+
+describe('normalizarKits', () => {
+  it('descarta kit com menos de 2 itens', () => {
+    const r = normalizarKits([kitCom(1), kitCom(2)] as never);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.itens).toHaveLength(2);
+  });
+
+  it('corta em 6 kits', () => {
+    const r = normalizarKits(Array.from({ length: 9 }, () => kitCom(2)) as never);
+    expect(r).toHaveLength(6);
   });
 });

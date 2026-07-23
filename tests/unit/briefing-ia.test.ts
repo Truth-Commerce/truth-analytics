@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { buildBriefingMessages, BriefingIaSchema } from '@/modules/analista/briefing-ia';
+import {
+  buildBriefingMessages,
+  BriefingIaSchema,
+  normalizarBriefing,
+} from '@/modules/analista/briefing-ia';
+
+function achaKeyword(obj: unknown, alvo: string): boolean {
+  if (obj === null || typeof obj !== 'object') return false;
+  if (Array.isArray(obj)) return obj.some((v) => achaKeyword(v, alvo));
+  return Object.entries(obj as Record<string, unknown>).some(
+    ([k, v]) => k === alvo || achaKeyword(v, alvo),
+  );
+}
 
 const BASE_INPUT = {
   orgName: 'Loja Teste',
@@ -50,23 +63,27 @@ describe('BriefingIaSchema', () => {
     expect(BriefingIaSchema.safeParse(VALIDO).success).toBe(true);
   });
 
-  it('rejeita mais de 5 prioridades', () => {
-    const invalido = { ...VALIDO, prioridades: Array(6).fill('x') };
-    expect(BriefingIaSchema.safeParse(invalido).success).toBe(false);
-  });
-
-  it('rejeita mais de 5 argumentosReuniao', () => {
-    const invalido = { ...VALIDO, argumentosReuniao: Array(6).fill('x') };
-    expect(BriefingIaSchema.safeParse(invalido).success).toBe(false);
-  });
-
-  it('rejeita mais de 4 riscos', () => {
-    const invalido = { ...VALIDO, riscos: Array(5).fill('x') };
-    expect(BriefingIaSchema.safeParse(invalido).success).toBe(false);
+  it('o JSON schema enviado à API não tem maxItems (regressão do 400)', () => {
+    const jsonSchema = zodToJsonSchema(BriefingIaSchema, { $refStrategy: 'none' });
+    expect(achaKeyword(jsonSchema, 'maxItems')).toBe(false);
+    expect(achaKeyword(jsonSchema, 'minItems')).toBe(false);
   });
 
   it('rejeita campo extra (strict)', () => {
     const invalido = { ...VALIDO, extra: 'nao deveria existir' };
     expect(BriefingIaSchema.safeParse(invalido).success).toBe(false);
+  });
+});
+
+describe('normalizarBriefing', () => {
+  it('corta prioridades/argumentos/riscos nos tetos (5/5/4)', () => {
+    const r = normalizarBriefing({
+      prioridades: Array(8).fill('p'),
+      argumentosReuniao: Array(8).fill('a'),
+      riscos: Array(8).fill('r'),
+    });
+    expect(r.prioridades).toHaveLength(5);
+    expect(r.argumentosReuniao).toHaveLength(5);
+    expect(r.riscos).toHaveLength(4);
   });
 });
