@@ -9,11 +9,19 @@ import { getAdminAlertEmail, getOrgPrimaryEmail } from '@/modules/notifications/
 import { collectBlingOrders } from '@/modules/pipeline/steps/collect-bling';
 import { collectMarket } from '@/modules/pipeline/steps/collect-market';
 import { computeMetrics } from '@/modules/pipeline/steps/compute-metrics';
+import { enrichOrders } from '@/modules/pipeline/steps/enrich-orders';
 import { analyzeWithIA } from '@/modules/pipeline/steps/analyze-ia';
 import { buildAnalysisContext } from '@/modules/pipeline/steps/analysis-context';
 import { finalize } from '@/modules/pipeline/steps/finalize';
 import { executarExtrasPosFinalize } from '@/modules/pipeline/steps/pos-finalize-extras';
 import type { ReportEtapa } from '@/modules/reports/report.types';
+
+/**
+ * Orçamento do enriquecimento DENTRO do pipeline. A 2,94 req/s, 350 pedidos ≈ 120s —
+ * cabe no maxDuration=300 junto com coleta, métricas e IA. O resto da fila fica
+ * para o cron diário, que tem a execução inteira só para isso.
+ */
+const ENRIQUECIMENTO_PIPELINE = { maxPedidos: 350, prazoMs: 120_000 } as const;
 
 /** Limita o erro persistido a 2000 chars para legibilidade no painel. */
 function truncateErro(msg: string, maxLen = 2000): string {
@@ -87,6 +95,19 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     }
     const benchmarkParcial =
       marketOutcome.status === 'fulfilled' ? marketOutcome.value.benchmarkParcial : true;
+
+    // A listagem do Bling não traz itens/frete/comissão — só o detalhe traz, a 1
+    // requisição por pedido. Enriquece o período do relatório dentro de um
+    // orçamento que cabe no maxDuration; o que sobrar fica para o cron diário.
+    // Best-effort: enrichOrders nunca lança (relatório com item parcial > nenhum).
+    const enriquecimento = await enrichOrders(orgId, {
+      maxPedidos: ENRIQUECIMENTO_PIPELINE.maxPedidos,
+      prazoMs: ENRIQUECIMENTO_PIPELINE.prazoMs,
+      periodo,
+    });
+    if (enriquecimento.incompleto) {
+      log.warn('enriquecimento parcial no pipeline', enriquecimento);
+    }
 
     await setEtapa(reportId, 'analisando_mercado');
     const metricas = await computeMetrics(orgId, reportId, periodo, benchmarkParcial);

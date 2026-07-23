@@ -1,5 +1,6 @@
 import { serverEnv } from '@/lib/env';
 import { getValidAccessToken } from '@/modules/connections/connection.repository';
+import { CANAL_DESCONHECIDO, fetchCanaisVenda } from '@/modules/providers/bling/canais';
 import { fetchBling } from '@/modules/providers/bling/http';
 import type { Periodo, RawOrder, RawOrderItem } from '@/modules/providers/types';
 
@@ -14,11 +15,15 @@ type BlingItemPayload = {
 
 type BlingOrderPayload = {
   id?: number | string | null;
+  numero?: number | string | null;
   numeroPedido?: number | string | null;
-  canal?: { descricao?: string | null } | null;
   data?: string | null;
   totalProdutos?: number | string | null;
   total?: number | string | null;
+  /** O canal real vem daqui: loja.id resolvido contra /canais-venda. */
+  loja?: { id?: number | string | null } | null;
+  // ATENÇÃO: a listagem NÃO traz `itens` nem `transporte` — só o detalhe traz
+  // (ver order-detail.ts). Manter os campos aqui apenas por tolerância a payload.
   itens?: BlingItemPayload[] | null;
   transporte?: { frete?: number | string | null } | null;
 };
@@ -43,9 +48,22 @@ function mapItem(item: BlingItemPayload): RawOrderItem {
   };
 }
 
-function mapOrder(raw: BlingOrderPayload): RawOrder {
-  const id = String(raw.id ?? raw.numeroPedido ?? '');
-  const canal = (raw.canal?.descricao ?? 'Bling').slice(0, 32);
+/**
+ * Mapeia UMA linha da listagem. O campo `canal.descricao` que o código lia antes
+ * não existe nesse payload — por isso 100% dos pedidos ficavam com o literal
+ * "Bling". O canal real sai de `loja.id` resolvido pelo mapa de /canais-venda.
+ *
+ * `itens` e `frete` continuam vindo vazios aqui de propósito: a listagem não os
+ * entrega. Quem preenche é o enriquecimento (enrich-orders.ts).
+ */
+export function mapOrder(raw: BlingOrderPayload, canais: Map<string, string>): RawOrder {
+  const id = String(raw.id ?? raw.numero ?? raw.numeroPedido ?? '');
+  const lojaId = raw.loja?.id;
+  const canal =
+    (lojaId === null || lojaId === undefined
+      ? CANAL_DESCONHECIDO
+      : (canais.get(String(lojaId)) ?? CANAL_DESCONHECIDO)
+    ).slice(0, 32);
   const data = raw.data ? new Date(raw.data) : new Date(0);
   const valorTotal = Number(raw.total ?? raw.totalProdutos ?? 0);
   const frete = Number(raw.transporte?.frete ?? 0);
@@ -60,6 +78,9 @@ export async function fetchOrders(
 ): Promise<RawOrder[]> {
   const token = await getValidAccessToken(orgId);
   const base = serverEnv.BLING_API_BASE;
+
+  // Uma requisição por coleta; best-effort (mapa vazio não derruba nada).
+  const canais = await fetchCanaisVenda(orgId, token);
 
   const allOrders: RawOrder[] = [];
   let page = 1;
@@ -83,7 +104,7 @@ export async function fetchOrders(
     const pageData = body.data ?? [];
     if (pageData.length === 0) break;
 
-    const mapeados = pageData.map(mapOrder);
+    const mapeados = pageData.map((raw) => mapOrder(raw, canais));
     if (onPage) {
       // Persistência em lotes: entrega a página e NÃO acumula em RAM.
       await onPage(mapeados);

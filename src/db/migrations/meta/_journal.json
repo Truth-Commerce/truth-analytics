@@ -127,6 +127,13 @@
       "when": 1784552132027,
       "tag": "0017_backfill_ordem_kanban",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784800000000,
+      "tag": "0018_coleta_bling_detalhe",
+      "breakpoints": true
     }
   ]
 }

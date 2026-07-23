@@ -66,15 +66,22 @@ export async function GET(req: Request): Promise<Response> {
   const orgIds = (await listOrgsComBlingOk()).slice(0, LOTE_MAXIMO_SYNC);
   let sincronizadas = 0;
   let falhas = 0;
+  let enriquecidos = 0;
+  let pendentesRestantes = 0;
 
   for (const orgId of orgIds) {
     try {
       const r = await sincronizarPedidosDaOrg(orgId, agora);
       sincronizadas++;
+      enriquecidos += r.enriquecimento.enriquecidos;
+      if (r.enriquecimento.restantes > 0) pendentesRestantes += r.enriquecimento.restantes;
       logger.info('cron.sincronizar_pedidos.org', {
         orgId,
         processados: r.processados,
         total: r.total,
+        enriquecidos: r.enriquecimento.enriquecidos,
+        enriqFalhas: r.enriquecimento.falhas,
+        enriqRestantes: r.enriquecimento.restantes,
       });
     } catch (err) {
       falhas++;
@@ -92,6 +99,8 @@ export async function GET(req: Request): Promise<Response> {
     renovadas,
     expiradas,
     transientes,
+    enriquecidos,
+    pendentesRestantes,
   };
   await registrarHeartbeat('sincronizar-pedidos', true, resposta);
   return Response.json(resposta);
