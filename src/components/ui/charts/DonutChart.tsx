@@ -29,7 +29,7 @@ export function DonutChart({ data, height = 240, formatValue, colors }: DonutCha
               innerRadius="62%"
               outerRadius="88%"
               paddingAngle={3}
-              stroke="#0a0c10"
+              stroke="#ffffff"
               strokeWidth={2}
             >
               {data.map((_, i) => (

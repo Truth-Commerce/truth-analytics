@@ -30,14 +30,14 @@ export function ScoreGauge({ score, size = 180 }: { score: number; size?: number
             dataKey="value"
             angleAxisId={0}
             fill={cor}
-            background={{ fill: '#ffffff0f' }}
+            background={{ fill: '#e3ded4' }}
             cornerRadius={8}
             isAnimationActive={false}
           />
         </RadialBarChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
-        <span className="font-mono text-4xl font-bold text-ink" style={{ textShadow: `0 0 24px ${cor}66` }}>
+        <span className="font-heading text-5xl text-ink">
           {valor}
         </span>
         <span className="text-xs text-muted">/ 100</span>

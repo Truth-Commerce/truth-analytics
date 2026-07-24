@@ -40,7 +40,7 @@ export function BarChart({ data, height = 260, formatValue }: BarChartProps) {
             tickFormatter={(v: number) => (formatValue ? formatValue(v) : String(v))}
           />
           <Tooltip
-            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+            cursor={{ fill: 'rgba(20,18,15,0.04)' }}
             content={<GlassTooltip formatValue={formatValue} />}
           />
           <Bar dataKey="value" fill={chartTheme.brand} radius={[6, 6, 0, 0]} maxBarSize={40} />

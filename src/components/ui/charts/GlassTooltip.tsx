@@ -20,7 +20,7 @@ interface GlassTooltipProps {
 export function GlassTooltip({ active, label, payload, formatValue }: GlassTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   return (
-    <div className="rounded-xl border border-line bg-bg-surface/90 px-3 py-2 backdrop-blur-md">
+    <div className="rounded-xl border border-line bg-paper-1/95 px-3 py-2 shadow-paper backdrop-blur-md">
       {label !== undefined && label !== '' ? (
         <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-muted">{label}</p>
       ) : null}

@@ -26,7 +26,7 @@ export function ParetoChart({ data, height = 280, formatReceita, srSummary }: Pa
             <YAxis yAxisId="receita" width={56} stroke={chartTheme.grid} tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }} tickLine={false} tickFormatter={(v: number) => (formatReceita ? formatReceita(v) : String(v))} />
             <YAxis yAxisId="pct" orientation="right" width={40} domain={[0, 100]} stroke={chartTheme.grid} tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }} tickLine={false} tickFormatter={(v: number) => `${v}%`} />
             <Tooltip
-              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+              cursor={{ fill: 'rgba(20,18,15,0.04)' }}
               content={
                 <GlassTooltip
                   formatValue={(v, name) =>
@@ -36,7 +36,7 @@ export function ParetoChart({ data, height = 280, formatReceita, srSummary }: Pa
               }
             />
             <Bar yAxisId="receita" dataKey="receita" name="Receita" fill={chartTheme.brand} radius={[6, 6, 0, 0]} maxBarSize={32} />
-            <Line yAxisId="pct" dataKey="acumulado" name="% acumulado" type="monotone" stroke="#fbbf24" strokeWidth={2} dot={{ r: 2.5, fill: '#fbbf24' }} />
+            <Line yAxisId="pct" dataKey="acumulado" name="% acumulado" type="monotone" stroke="#b66a00" strokeWidth={2} dot={{ r: 2.5, fill: '#b66a00' }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

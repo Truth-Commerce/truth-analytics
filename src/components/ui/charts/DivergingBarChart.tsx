@@ -23,11 +23,11 @@ export function DivergingBarChart({ data, height = 240, srSummary }: DivergingBa
             <CartesianGrid stroke={chartTheme.grid} horizontal={false} />
             <XAxis type="number" stroke={chartTheme.grid} tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }} tickLine={false} tickFormatter={(v: number) => `${v}%`} />
             <YAxis type="category" dataKey="label" width={110} stroke={chartTheme.grid} tick={{ fill: chartTheme.axis, fontSize: 11, fontFamily: 'var(--font-mono)' }} tickLine={false} />
-            <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} content={<GlassTooltip formatValue={(v) => `${v}%`} />} />
+            <Tooltip cursor={{ fill: 'rgba(20,18,15,0.04)' }} content={<GlassTooltip formatValue={(v) => `${v}%`} />} />
             <ReferenceLine x={0} stroke={chartTheme.axis} />
             <Bar dataKey="deltaPct" name="Δ vs mercado" radius={[0, 6, 6, 0]} maxBarSize={18}>
               {data.map((d) => (
-                <Cell key={d.label} fill={d.deltaPct > 0 ? '#f87171' : chartTheme.brand} />
+                <Cell key={d.label} fill={d.deltaPct > 0 ? '#c93c37' : chartTheme.brand} />
               ))}
             </Bar>
           </RBarChart>

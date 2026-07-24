@@ -23,13 +23,13 @@ const BRL = (n: number) =>
 const BRL0 = (n: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(n);
 
-// Paleta: capa dark, miolo claro imprimível (verde escurecido p/ contraste em branco).
-const VERDE_CAPA = '#07dd2b';
-const VERDE = '#0aa626';
-const VERMELHO = '#dc2626';
-const TEXTO = '#111318';
-const MUTED = '#5b5b66';
-const BORDA = '#e4e4e9';
+// Paleta editorial clara, alinhada ao produto e otimizada para impressão.
+const VERDE_CAPA = '#137a3e';
+const VERDE = '#0d6331';
+const VERMELHO = '#c93c37';
+const TEXTO = '#14120f';
+const MUTED = '#6f685f';
+const BORDA = '#ded8cd';
 
 const FATOR_ORDEM = ['crescimento', 'posicaoPreco', 'diversificacao', 'regularidade', 'cobertura'] as const;
 const FATOR_LABEL: Record<(typeof FATOR_ORDEM)[number], string> = {
@@ -58,10 +58,10 @@ function deltaTexto(pct: number): { texto: string; positivo: boolean } {
 
 function buildStyles(fonts: ReturnType<typeof registerPdfFonts>) {
   return StyleSheet.create({
-    // ---- Capa (dark) ----
+    // ---- Capa editorial clara ----
     capa: {
-      backgroundColor: '#0a0c10',
-      color: '#ffffff',
+      backgroundColor: '#faf8f4',
+      color: TEXTO,
       padding: 48,
       fontFamily: fonts.body,
       fontSize: 10,
@@ -75,10 +75,10 @@ function buildStyles(fonts: ReturnType<typeof registerPdfFonts>) {
       marginBottom: 8,
     },
     wordmarkTruth: { fontFamily: fonts.heading, fontWeight: 700, fontSize: 24, color: VERDE_CAPA },
-    wordmarkRest: { fontFamily: fonts.heading, fontWeight: 700, fontSize: 24, color: '#ffffff' },
+    wordmarkRest: { fontFamily: fonts.heading, fontWeight: 700, fontSize: 24, color: TEXTO },
     capaOrg: { fontFamily: fonts.heading, fontWeight: 700, fontSize: 28, marginTop: 40 },
-    capaMono: { fontFamily: fonts.mono, color: '#a1a1aa', marginTop: 8 },
-    capaMuted: { color: '#a1a1aa', fontSize: 8, marginTop: 3 },
+    capaMono: { fontFamily: fonts.mono, color: MUTED, marginTop: 8 },
+    capaMuted: { color: MUTED, fontSize: 8, marginTop: 3 },
     divider: { height: 2, backgroundColor: VERDE_CAPA, marginTop: 16, width: 72 },
     capaFooter: {
       position: 'absolute',
@@ -88,7 +88,7 @@ function buildStyles(fonts: ReturnType<typeof registerPdfFonts>) {
       flexDirection: 'row',
       justifyContent: 'space-between',
       fontSize: 7,
-      color: '#71717a',
+      color: MUTED,
     },
 
     // ---- Miolo (claro, imprimível) ----
@@ -131,7 +131,7 @@ function buildStyles(fonts: ReturnType<typeof registerPdfFonts>) {
     // Breakdown score
     fatorRow: { marginBottom: 7 },
     fatorHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
-    track: { height: 6, backgroundColor: '#eef0f2', borderRadius: 3 },
+    track: { height: 6, backgroundColor: '#ebe6dc', borderRadius: 3 },
     // Cards / tabelas
     card: {
       borderWidth: 1,
@@ -165,13 +165,13 @@ function buildStyles(fonts: ReturnType<typeof registerPdfFonts>) {
 
 /** ScoreGauge nativo em SVG (@react-pdf) — 270° como o gauge da UI. */
 function GaugePdf({ score }: { score: number }) {
-  const cor = score >= 70 ? '#07dd2b' : score >= 40 ? '#f59e0b' : '#ef4444'; // warning.DEFAULT/danger.DEFAULT
+  const cor = score >= 70 ? '#137a3e' : score >= 40 ? '#b66a00' : '#c93c37';
   return (
     <View style={{ width: 140, height: 140, position: 'relative', marginTop: 32 }}>
       <Svg width={140} height={140} viewBox="0 0 140 140">
         <Path
           d={arcoPath(70, 70, 58, GAUGE_INICIO, 135)}
-          stroke="#ffffff18"
+          stroke="#ded8cd"
           strokeWidth={10}
           fill="none"
           strokeLinecap="round"
@@ -195,8 +195,8 @@ function GaugePdf({ score }: { score: number }) {
           justifyContent: 'center',
         }}
       >
-        <Text style={{ fontSize: 30, color: '#ffffff' }}>{score}</Text>
-        <Text style={{ fontSize: 8, color: '#a1a1aa' }}>/ 100 · Truth Score</Text>
+        <Text style={{ fontSize: 30, color: TEXTO }}>{score}</Text>
+        <Text style={{ fontSize: 8, color: MUTED }}>/ 100 · Truth Score</Text>
       </View>
     </View>
   );
@@ -235,7 +235,7 @@ export function ReportPdf({ orgName, periodo, geradoEm, metricas, analise, anali
 
   return (
     <Document title={`Truth Analytics — ${orgName}`} author="Truth Commerce">
-      {/* Página 1 — capa (dark) */}
+      {/* Página 1 — capa editorial clara */}
       <Page size="A4" style={s.capa}>
         <Text style={s.kicker}>Análise por IA · Truth Commerce</Text>
         <Text>
