@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function TermosPage() {
   return (
     <article>
-      <h1 className="font-heading text-2xl font-bold text-white">Termos de Uso</h1>
+      <h1 className="text-balance font-heading text-4xl text-ink sm:text-5xl">Termos de Uso</h1>
       <p className="mt-2 text-xs text-dim">Última atualização: 14 de julho de 2026.</p>
 
       <H2>1. Quem somos e aceitação</H2>

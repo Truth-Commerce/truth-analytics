@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function PrivacidadePage() {
   return (
     <article>
-      <h1 className="font-heading text-2xl font-bold text-white">Política de Privacidade</h1>
+      <h1 className="text-balance font-heading text-4xl text-ink sm:text-5xl">Política de Privacidade</h1>
       <p className="mt-2 text-xs text-dim">Última atualização: 14 de julho de 2026.</p>
 
       <H2>1. Quem é o controlador</H2>
@@ -26,21 +26,21 @@ export default function PrivacidadePage() {
       <H2>2. Quais dados tratamos</H2>
       <UL>
         <li>
-          <strong className="text-white/90">Dados de conta:</strong> nome da empresa, e-mail dos
+          <strong className="text-ink">Dados de conta:</strong> nome da empresa, e-mail dos
           usuários e senha (armazenada apenas como hash criptográfico — nunca em claro).
         </li>
         <li>
-          <strong className="text-white/90">Dados operacionais de vendas (via ERP Bling, com a
+          <strong className="text-ink">Dados operacionais de vendas (via ERP Bling, com a
           sua autorização):</strong> identificador do pedido, canal de venda, data, valor total,
           frete e itens vendidos. Não importamos nome, CPF, endereço ou contato dos consumidores
           finais dos seus pedidos.
         </li>
         <li>
-          <strong className="text-white/90">Dados públicos de mercado:</strong> preços e anúncios
+          <strong className="text-ink">Dados públicos de mercado:</strong> preços e anúncios
           publicamente disponíveis em marketplaces, coletados para benchmark dos seus produtos.
         </li>
         <li>
-          <strong className="text-white/90">Registros de segurança:</strong> endereço IP e
+          <strong className="text-ink">Registros de segurança:</strong> endereço IP e
           horário de tentativas de login, cadastro e redefinição de senha (antifraude e prevenção
           de abuso), além de trilha de auditoria das ações sensíveis na plataforma.
         </li>

@@ -25,7 +25,7 @@ export function SignInForm() {
 
       <Card>
         <CardContent>
-          <h1 className="mb-6 font-heading text-lg font-semibold text-white">Entrar</h1>
+          <h1 className="mb-6 font-heading text-3xl text-ink">Entrar</h1>
           <form action={action} className="flex flex-col gap-4">
             <Field label="E-mail" htmlFor="email">
               <Input id="email" name="email" type="email" placeholder="voce@empresa.com" autoComplete="email" />

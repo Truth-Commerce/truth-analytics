@@ -28,7 +28,7 @@ export function EsqueciSenhaForm() {
 
       <Card>
         <CardContent>
-          <h1 className="mb-6 font-heading text-lg font-semibold text-white">Esqueci minha senha</h1>
+          <h1 className="mb-6 font-heading text-3xl text-ink">Esqueci minha senha</h1>
           {state.ok ? (
             <Alert variant="success" data-testid="reset-solicitado">
               Se existir uma conta com este e-mail, enviamos as instruções de redefinição.

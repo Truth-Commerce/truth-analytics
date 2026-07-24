@@ -6,7 +6,7 @@ export default function NotFound() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-bg-base p-8 text-center">
       <Logo withMark size="md" />
       <div className="max-w-sm space-y-2">
-        <h1 className="font-heading text-xl font-semibold text-white">
+        <h1 className="font-heading text-3xl text-ink">
           Página não encontrada (404)
         </h1>
         <p className="text-sm text-muted">

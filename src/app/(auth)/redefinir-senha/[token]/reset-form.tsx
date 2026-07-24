@@ -24,7 +24,7 @@ export function ResetForm({ token }: { token: string }) {
 
       <Card>
         <CardContent>
-          <h1 className="mb-6 font-heading text-lg font-semibold text-white">Redefinir senha</h1>
+          <h1 className="mb-6 font-heading text-3xl text-ink">Redefinir senha</h1>
           <form action={action} className="flex flex-col gap-4">
             <input type="hidden" name="token" value={token} />
             <Field label="Nova senha" htmlFor="senha">

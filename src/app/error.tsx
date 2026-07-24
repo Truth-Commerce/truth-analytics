@@ -20,7 +20,7 @@ export default function GlobalError({ error, reset }: ErrorProps) {
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-bg-base p-8 text-center">
       <Logo withMark size="md" />
       <div className="max-w-sm space-y-2">
-        <h1 className="font-heading text-xl font-semibold text-white">Algo deu errado.</h1>
+        <h1 className="font-heading text-3xl text-ink">Algo deu errado.</h1>
         <p className="text-sm text-muted">
           Ocorreu um erro inesperado. Por favor, tente novamente.
         </p>

@@ -9,7 +9,7 @@ function Faixa({ ariaHidden = false }: { ariaHidden?: boolean }) {
       {LANDING_CANAIS.map((c) => (
         <li
           key={c}
-          className="whitespace-nowrap font-mono text-sm uppercase tracking-widest text-dim"
+          className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.18em] text-ink-muted"
         >
           {c}
         </li>

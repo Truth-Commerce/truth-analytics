@@ -25,7 +25,7 @@ export function SignUpForm() {
 
       <Card>
         <CardContent>
-          <h1 className="mb-6 font-heading text-lg font-semibold text-white">Criar conta</h1>
+          <h1 className="mb-6 font-heading text-3xl text-ink">Criar conta</h1>
           <form action={action} className="flex flex-col gap-4">
             <Field label="Nome da empresa" htmlFor="orgName">
               <Input id="orgName" name="orgName" placeholder="Minha Empresa Ltda" autoComplete="organization" />

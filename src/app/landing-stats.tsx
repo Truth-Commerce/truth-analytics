@@ -7,7 +7,7 @@ function StatCountUp({ alvo, label }: { alvo: number; label: string }) {
   const valor = Math.round(useCountUp(alvo, 1.2));
   return (
     <div className="flex flex-col items-center gap-1 text-center">
-      <span className="font-mono text-4xl font-bold text-brand">{valor}</span>
+      <span className="font-heading text-5xl text-brand-strong">{valor}</span>
       <span className="max-w-[16rem] text-sm text-muted">{label}</span>
     </div>
   );

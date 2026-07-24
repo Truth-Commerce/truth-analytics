@@ -30,17 +30,17 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           alignItems: 'center',
           justifyContent: 'center',
           gap: '1.25rem',
-          background: '#040507',
-          color: '#fff',
+          background: '#faf8f4',
+          color: '#14120f',
           fontFamily: 'system-ui, sans-serif',
           textAlign: 'center',
           padding: '2rem',
         }}
       >
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-          <span style={{ color: '#07dd2b' }}>Truth</span>Analytics
+          <span style={{ color: '#137a3e' }}>Truth</span>Analytics
         </h1>
-        <p style={{ color: '#a1a1aa', maxWidth: '24rem' }}>
+        <p style={{ color: '#4a443c', maxWidth: '24rem' }}>
           Ocorreu um erro inesperado. Por favor, tente novamente.
         </p>
         {error.digest && (
@@ -52,10 +52,10 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           type="button"
           onClick={reset}
           style={{
-            background: '#07dd2b',
-            color: '#04150a',
+            background: '#137a3e',
+            color: '#fff',
             border: 'none',
-            borderRadius: '9999px',
+            borderRadius: '0.75rem',
             padding: '0.5rem 1.25rem',
             fontWeight: 600,
             cursor: 'pointer',

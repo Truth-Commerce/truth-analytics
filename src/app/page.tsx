@@ -38,19 +38,19 @@ const steps = [
 
 export default function LandingPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-bg-base text-white">
+    <main className="relative min-h-screen overflow-hidden bg-bg-base text-ink">
       {/* Radial gradient background — CSS only, no images */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0"
         style={{
           background:
-            'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(7,221,43,0.07) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 80% 80%, rgba(7,221,43,0.04) 0%, transparent 60%)',
+            'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(19,122,62,0.12) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 90% 60%, rgba(88,185,115,0.09) 0%, transparent 62%)',
         }}
       />
 
       {/* ── Top Bar ── */}
-      <header className="relative z-10 border-b border-line bg-bg-surface/60 backdrop-blur-sm">
+      <header className="relative z-10 border-b border-line bg-bg-base/80 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Link
             href="/"
@@ -72,22 +72,24 @@ export default function LandingPage() {
       </header>
 
       {/* ── Hero ── */}
-      <section className="relative z-10 mx-auto flex max-w-4xl flex-col items-center gap-6 px-4 py-20 text-center sm:px-6 sm:py-28">
+      <section className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-7 px-4 py-20 text-center sm:px-6 sm:py-28 lg:py-32">
         <Badge variant="mono">Análise por IA</Badge>
 
-        <h1 className="font-heading text-4xl font-bold leading-tight tracking-tight text-white sm:text-5xl md:text-6xl">
+        <h1 className="max-w-4xl text-balance font-heading text-5xl leading-[0.96] tracking-[-0.025em] text-ink sm:text-6xl md:text-7xl">
           Inteligência de marketplace
           <br />
-          <span className="text-brand">para o seu e-commerce.</span>
+          <span className="bg-gradient-to-r from-brand-strong to-[#58b973] bg-clip-text text-transparent">
+            para o seu e-commerce.
+          </span>
         </h1>
 
-        <p className="max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
+        <p className="max-w-2xl text-balance text-base leading-relaxed text-ink-soft sm:text-lg">
           Relatórios periódicos gerados por IA a partir do seu Bling — métricas de vendas,
           benchmark de mercado e recomendações de preço para você vender mais com margem.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Button as="a" href="/sign-up" variant="primary" className="shadow-glow-3">
+          <Button as="a" href="/sign-up" variant="primary" className="px-6 shadow-glow">
             Começar gratuitamente
           </Button>
           <Button as="a" href="/sign-in" variant="secondary">
@@ -97,12 +99,12 @@ export default function LandingPage() {
       </section>
 
       {/* ── Números do produto ── */}
-      <section className="relative z-10 mx-auto max-w-4xl px-4 pb-16 sm:px-6">
+      <section className="relative z-10 mx-auto max-w-5xl border-y border-line px-4 py-12 sm:px-6">
         <LandingStats />
       </section>
 
       {/* ── Mock do dashboard ── */}
-      <section className="relative z-10 mx-auto max-w-5xl px-4 pb-16 sm:px-6">
+      <section className="relative z-10 mx-auto max-w-6xl px-4 py-20 sm:px-6">
         <LandingMock />
       </section>
 
@@ -114,7 +116,7 @@ export default function LandingPage() {
       {/* ── Como funciona ── */}
       <section className="relative z-10 mx-auto max-w-5xl px-4 pb-24 sm:px-6">
         <div className="mb-10 text-center">
-          <h2 className="font-heading text-2xl font-semibold text-white sm:text-3xl">
+          <h2 className="font-heading text-4xl text-ink sm:text-5xl">
             Como funciona
           </h2>
           <p className="mt-2 text-sm text-muted">Três passos. Nenhuma planilha.</p>
@@ -124,7 +126,7 @@ export default function LandingPage() {
           {steps.map((step) => (
             <Card key={step.number} className="flex flex-col gap-3">
               <span className="font-mono text-xs tracking-widest text-brand">{step.number}</span>
-              <h3 className="font-heading text-base font-semibold text-white">{step.title}</h3>
+              <h3 className="font-heading text-2xl text-ink">{step.title}</h3>
               <p className="text-sm leading-relaxed text-muted">{step.description}</p>
             </Card>
           ))}
@@ -132,7 +134,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ── */}
-      <footer className="relative z-10 border-t border-line py-6 text-center">
+      <footer className="relative z-10 border-t border-line bg-paper-2/60 py-8 text-center">
         <p className="text-xs text-dim">
           &copy; {new Date().getFullYear()} Truth Commerce. Todos os direitos reservados.
         </p>
