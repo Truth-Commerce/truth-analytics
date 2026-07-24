@@ -95,7 +95,7 @@ export default async function AdminUsuariosPage({ searchParams }: { searchParams
 
       {/* 3. Lista cross-org */}
       <Reveal className="space-y-3" data-testid="usuarios-lista">
-        <h2 className="font-heading text-lg font-semibold text-white">
+        <h2 className="font-heading text-lg font-semibold text-ink">
           Usuários <span className="text-muted">({usuarios.total})</span>
         </h2>
 

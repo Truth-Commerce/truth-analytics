@@ -23,7 +23,7 @@ export function SystemStatusCard() {
               <Badge variant={item.ok ? 'success' : 'warn'}>
                 {item.ok ? 'Configurado' : item.opcional ? 'Opcional' : 'Ausente'}
               </Badge>
-              <span className="text-white/90">{item.nome}</span>
+              <span className="text-ink/90">{item.nome}</span>
               <span className="text-muted">— {item.detalhe}</span>
             </li>
           ))}

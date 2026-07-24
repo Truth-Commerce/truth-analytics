@@ -22,7 +22,7 @@ export function MetaMensalForm({ orgId, metaAtual }: Props) {
       <input type="hidden" name="orgId" value={orgId} />
       <span className="text-sm text-muted">
         Meta atual:{' '}
-        <span className="font-mono text-white/90">
+        <span className="font-mono text-ink/90">
           {metaAtual !== null ? formatBRL(metaAtual) : 'não definida'}
         </span>
       </span>

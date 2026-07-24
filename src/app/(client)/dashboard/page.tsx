@@ -222,7 +222,7 @@ export default async function DashboardPage() {
       {/* 8. Histórico */}
       <section id="historico" data-testid="reports-list">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="font-heading text-base font-semibold text-white">Histórico</h2>
+          <h2 className="font-heading text-base font-semibold text-ink">Histórico</h2>
           <Link
             data-testid="comparar-periodos-link"
             href="/dashboard/relatorios/comparar"

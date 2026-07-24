@@ -30,12 +30,12 @@ function DeltaPct({ valor, bomSeNegativo = false }: { valor: number | null; bomS
 /** Barra da faixa de mercado min→p75 com marcadores de mediana e do nosso preço. */
 function FaixaBar({ faixa }: { faixa: NonNullable<ReturnType<typeof posicaoPrecoView>[number]['faixa']> }) {
   return (
-    <div className="relative h-2 w-36 rounded bg-white/5" aria-hidden="true">
+    <div className="relative h-2 w-36 rounded bg-ink/5" aria-hidden="true">
       <div
-        className="absolute h-2 rounded bg-white/15"
+        className="absolute h-2 rounded bg-ink/15"
         style={{ left: `${faixa.pctP25}%`, width: `${Math.max(2, faixa.pctP75 - faixa.pctP25)}%` }}
       />
-      <div className="absolute top-[-2px] h-3 w-0.5 bg-white/60" style={{ left: `${faixa.pctMediana}%` }} />
+      <div className="absolute top-[-2px] h-3 w-0.5 bg-ink/60" style={{ left: `${faixa.pctMediana}%` }} />
       {faixa.pctNosso !== null ? (
         <div className="absolute top-[-3px] h-3.5 w-1 rounded bg-brand" style={{ left: `${faixa.pctNosso}%` }} />
       ) : null}
@@ -54,7 +54,7 @@ export function MetricasSection({ metricas, anterior }: { metricas: Metricas; an
 
   return (
     <>
-      <h2 className="font-heading text-xl font-semibold text-white">Métricas</h2>
+      <h2 className="font-heading text-xl font-semibold text-ink">Métricas</h2>
 
       <div className="flex flex-wrap gap-6">
         <Card className="inline-flex">
@@ -178,7 +178,7 @@ export function MetricasSection({ metricas, anterior }: { metricas: Metricas; an
             <CardTitle as="h3" className="text-sm">Concentração de receita (curva ABC)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-white/90">
+            <p className="text-sm text-ink/90">
               <span className="font-mono font-bold text-brand">
                 {Math.min(3, metricas.curvaAbc.a.length + metricas.curvaAbc.b.length + metricas.curvaAbc.c.length)} produtos
               </span>{' '}

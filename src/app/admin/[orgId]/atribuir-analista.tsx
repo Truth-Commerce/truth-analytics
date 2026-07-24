@@ -22,7 +22,7 @@ export function AtribuirAnalista({ orgId, analistas, analistaAtual }: Props) {
       <input type="hidden" name="orgId" value={orgId} />
       <span className="text-sm text-muted">
         Analista atual:{' '}
-        <span className="text-white/90">{analistaAtual?.email ?? 'nenhum'}</span>
+        <span className="text-ink/90">{analistaAtual?.email ?? 'nenhum'}</span>
       </span>
       <Select
         name="analistaUserId"

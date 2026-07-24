@@ -55,7 +55,7 @@ export function TaskEditForm({
 
   return (
     <details className="rounded-2xl border border-line bg-bg-surface p-5">
-      <summary className="cursor-pointer font-heading text-sm font-semibold text-white">Editar tarefa</summary>
+      <summary className="cursor-pointer font-heading text-sm font-semibold text-ink">Editar tarefa</summary>
 
       <form action={action} data-testid="task-edit-form" className="mt-4 grid gap-3 sm:grid-cols-2">
         <input type="hidden" name="taskId" value={task.id} />
@@ -96,7 +96,7 @@ export function TaskEditForm({
             rows={5}
             maxLength={5000}
             defaultValue={task.descricao}
-            className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-white outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-ink outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
           />
         </Field>
 

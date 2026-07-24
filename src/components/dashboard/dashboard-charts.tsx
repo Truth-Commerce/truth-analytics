@@ -39,7 +39,7 @@ export function DashboardCharts({ evolucao, canais, srSummary }: DashboardCharts
         animate="visible"
         className="rounded-2xl border border-line bg-bg-surface p-5 lg:col-span-2"
       >
-        <h2 className="mb-3 font-heading text-base font-semibold text-white">Evolução de vendas</h2>
+        <h2 className="mb-3 font-heading text-base font-semibold text-ink">Evolução de vendas</h2>
         {/* Eixo Y compacto ("R$ 2k") conserta o corte do "R$" visto no QA;
             tooltip continua com o valor completo. */}
         <LineChart
@@ -55,7 +55,7 @@ export function DashboardCharts({ evolucao, canais, srSummary }: DashboardCharts
         animate="visible"
         className="rounded-2xl border border-line bg-bg-surface p-5"
       >
-        <h2 className="mb-3 font-heading text-base font-semibold text-white">Vendas por canal</h2>
+        <h2 className="mb-3 font-heading text-base font-semibold text-ink">Vendas por canal</h2>
         <DonutChart data={canais} formatValue={formatBRL} colors={coresDosCanais(canais.map((c) => c.label))} />
       </m.div>
     </div>

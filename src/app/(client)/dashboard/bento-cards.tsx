@@ -29,7 +29,7 @@ export function BentoCards({ latestDone }: { latestDone: ReportDetail | null }) 
                   key={p.sku || `${p.nome}-${i}`}
                   className="flex items-baseline justify-between gap-3 text-sm"
                 >
-                  <span className="min-w-0 truncate text-white/90">
+                  <span className="min-w-0 truncate text-ink/90">
                     <span className="font-mono text-xs text-dim">{i + 1}.</span> {p.nome}
                   </span>
                   <span className="shrink-0 font-mono text-muted">{formatBRL(p.receita)}</span>
@@ -46,7 +46,7 @@ export function BentoCards({ latestDone }: { latestDone: ReportDetail | null }) 
             <CardTitle as="h2" className="text-base">Posição de preço</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="font-mono text-lg font-bold text-white">{posicao.leitura}</p>
+            <p className="font-mono text-lg font-bold text-ink">{posicao.leitura}</p>
             <p className="text-xs text-dim">{posicao.total} produto(s) comparados com o mercado.</p>
             <Link href={`${base}#metricas`} className="text-sm text-brand hover:underline">
               Ver comparação →

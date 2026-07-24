@@ -120,14 +120,14 @@ export function TaskCard({
     >
       <Link
         href={`${taskHrefBase}/${task.id}`}
-        className="text-sm font-medium text-white outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
+        className="text-sm font-medium text-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
       >
         {task.titulo}
       </Link>
 
       {task.nivel === 'epico' && task.progresso ? (
         <div className="mt-2 flex items-center gap-2" data-testid={`epico-progresso-${task.id}`}>
-          <div className="h-1.5 flex-1 rounded-full bg-white/10">
+          <div className="h-1.5 flex-1 rounded-full bg-ink/10">
             <div
               className="h-1.5 rounded-full bg-brand transition-[width]"
               style={{ width: `${task.progresso.pct}%` }}
@@ -172,7 +172,7 @@ export function TaskCard({
             value={task.prioridade}
             disabled={salvandoEdicao}
             onChange={(e) => onQuickEdit!(task.id, 'prioridade', e.target.value)}
-            className="rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             {TASK_PRIORIDADES.map((p) => (
               <option key={p} value={p}>
@@ -200,7 +200,7 @@ export function TaskCard({
               value={task.assigneeUserId ?? ''}
               disabled={salvandoEdicao}
               onChange={(e) => onQuickEdit!(task.id, 'assigneeUserId', e.target.value)}
-              className="rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+              className="rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
             >
               <option value="" disabled={task.assigneeUserId !== null}>
                 Sem responsável
@@ -228,7 +228,7 @@ export function TaskCard({
                   aria-label="Mover para cima na coluna"
                   disabled={pendente}
                   onClick={() => onReorder(task.id, 'up')}
-                  className="leading-none text-dim outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
+                  className="leading-none text-dim outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
                 >
                   ▲
                 </button>
@@ -237,7 +237,7 @@ export function TaskCard({
                   aria-label="Mover para baixo na coluna"
                   disabled={pendente}
                   onClick={() => onReorder(task.id, 'down')}
-                  className="leading-none text-dim outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
+                  className="leading-none text-dim outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
                 >
                   ▼
                 </button>

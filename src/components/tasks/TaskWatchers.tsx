@@ -31,7 +31,7 @@ export function TaskWatchers({
           watchers.map((w) => (
             <li
               key={w.userId}
-              className="rounded-full border border-line bg-bg-elevated px-2.5 py-1 text-xs text-white/80"
+              className="rounded-full border border-line bg-bg-elevated px-2.5 py-1 text-xs text-ink/80"
             >
               {w.email}
             </li>

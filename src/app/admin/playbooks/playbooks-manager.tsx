@@ -59,7 +59,7 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="mb-4 font-heading text-lg font-semibold text-white">
+        <h2 className="mb-4 font-heading text-lg font-semibold text-ink">
           {isEditing ? `Editar playbook — ${editing.titulo}` : 'Novo playbook'}
         </h2>
         <form
@@ -119,7 +119,7 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
               name="descricao"
               rows={3}
               defaultValue={editing?.descricao ?? ''}
-              className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-white outline-none transition-colors focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+              className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-ink outline-none transition-colors focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
             />
           </Field>
 
@@ -129,7 +129,7 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
               name="checklist"
               rows={4}
               defaultValue={editing?.checklist.join('\n') ?? ''}
-              className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-white outline-none transition-colors focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+              className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-ink outline-none transition-colors focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
             />
           </Field>
 

@@ -62,7 +62,7 @@ export function AcaoPrincipalCard({
           <Badge variant="success">até {formatBRL(acao.impactoBRL)}/mês</Badge>
         ) : null}
       </div>
-      <p className="text-sm font-medium leading-relaxed text-white">{acao.titulo}</p>
+      <p className="text-sm font-medium leading-relaxed text-ink">{acao.titulo}</p>
       {acao.descricao ? <p className="text-sm text-muted">{acao.descricao}</p> : null}
       {state.error ? (
         <p role="alert" className="text-sm text-danger-fg">

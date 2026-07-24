@@ -29,7 +29,7 @@ export function GenerationProgress({ reportId }: { reportId: string }) {
           Relatório pronto.{' '}
           <Link
             href={`/dashboard/relatorios/${reportId}`}
-            className="underline underline-offset-2 hover:text-white"
+            className="underline underline-offset-2 hover:text-ink"
           >
             Ver relatório →
           </Link>

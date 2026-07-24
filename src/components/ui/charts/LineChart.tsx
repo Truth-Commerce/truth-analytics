@@ -65,7 +65,7 @@ export function LineChart({ data, height = 260, formatY, formatTooltip, srSummar
               strokeWidth={2}
               fill={`url(#${gradId})`}
               dot={false}
-              activeDot={{ r: 4, fill: chartTheme.brand, stroke: '#04150a' }}
+              activeDot={{ r: 4, fill: chartTheme.brand, stroke: '#ffffff' }}
             />
           </AreaChart>
         </ResponsiveContainer>

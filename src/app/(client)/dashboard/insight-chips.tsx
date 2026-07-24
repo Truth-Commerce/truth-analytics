@@ -16,7 +16,7 @@ export function InsightChips({ chips }: { chips: ChipRelatorio[] }) {
         <Link
           key={c.href}
           href={c.href}
-          className="rounded-full border border-line bg-glass px-4 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="rounded-full border border-line bg-glass px-4 py-1.5 text-xs text-muted transition-colors hover:border-brand/40 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
         >
           {c.label} →
         </Link>

@@ -95,7 +95,7 @@ export function NewTaskForm({ orgId }: { orgId?: string } = {}) {
           name="descricao"
           rows={3}
           maxLength={5000}
-          className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-white outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-ink outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
         />
       </Field>
 

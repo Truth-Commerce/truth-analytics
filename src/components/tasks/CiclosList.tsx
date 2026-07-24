@@ -80,7 +80,7 @@ export function CiclosList({
 
   return (
     <div data-testid="crm-ciclos-lista" className="space-y-3">
-      <h2 className="font-heading text-lg font-semibold text-white">Ciclos</h2>
+      <h2 className="font-heading text-lg font-semibold text-ink">Ciclos</h2>
       {ciclos.map((ciclo) => {
         const retro = retrospectivas[ciclo.id];
         return (

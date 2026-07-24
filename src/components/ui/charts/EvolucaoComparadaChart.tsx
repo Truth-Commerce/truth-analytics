@@ -36,7 +36,7 @@ export function EvolucaoComparadaChart({ data, height = 280, formatY, temAnterio
             {temAnterior ? (
               <Line dataKey="anterior" name="Período anterior" type="monotone" stroke="#94a3b8" strokeWidth={1.5} strokeOpacity={0.6} dot={false} connectNulls />
             ) : null}
-            <Area dataKey="atual" name="Vendas" type="monotone" stroke={chartTheme.brand} strokeWidth={2} fill={`url(#${gradId})`} dot={false} activeDot={{ r: 4, fill: chartTheme.brand, stroke: '#04150a' }} />
+            <Area dataKey="atual" name="Vendas" type="monotone" stroke={chartTheme.brand} strokeWidth={2} fill={`url(#${gradId})`} dot={false} activeDot={{ r: 4, fill: chartTheme.brand, stroke: '#ffffff' }} />
             <Line dataKey="media" name="Média móvel 7d" type="monotone" stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
           </ComposedChart>
         </ResponsiveContainer>

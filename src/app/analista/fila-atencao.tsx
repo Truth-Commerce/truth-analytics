@@ -59,7 +59,7 @@ export function FilaAtencaoHoje({ resumos }: { resumos: OrgResumo[] }) {
           >
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-white">{row.orgName}</span>
+                <span className="text-sm font-medium text-ink">{row.orgName}</span>
                 <Badge variant={badge.variant}>{badge.label}</Badge>
               </div>
               {row.motivosTop3.length > 0 ? (

@@ -109,7 +109,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
 
   return (
     <main className="mx-auto max-w-6xl space-y-8 p-6 md:p-8">
-      <Link href="/analista" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/analista" className="text-sm text-muted transition-colors hover:text-ink">
         ← Carteira
       </Link>
 
@@ -148,7 +148,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
               {visao360.briefing.prioridades.length > 0 ? (
                 <div className="space-y-1.5">
                   <p className="text-xs font-semibold uppercase tracking-wide text-brand">Prioridades</p>
-                  <ul className="list-inside list-disc space-y-1 text-sm text-white/90">
+                  <ul className="list-inside list-disc space-y-1 text-sm text-ink/90">
                     {visao360.briefing.prioridades.map((p, i) => (
                       <li key={i}>{p}</li>
                     ))}
@@ -187,7 +187,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
 
       {/* 3. O que o cliente vê — reuso direto dos componentes do dashboard (extraídos p/ src/components/dashboard) */}
       <Reveal className="space-y-4" data-testid="analista-360-cliente-view">
-        <h2 className="font-heading text-lg font-semibold text-white">O que o cliente vê</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">O que o cliente vê</h2>
 
         {acao && latestDone ? (
           <AcaoPrincipalCard
@@ -223,7 +223,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
 
       {/* 4. Camadas exclusivas do analista (o cliente não vê) */}
       <Reveal className="space-y-3" data-testid="analista-360-score-historico">
-        <h2 className="font-heading text-lg font-semibold text-white">Histórico do Truth Score</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Histórico do Truth Score</h2>
         {scoreHistoricoData.length > 0 ? (
           <Card>
             <LineChart data={scoreHistoricoData} height={220} />
@@ -237,7 +237,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
       </Reveal>
 
       <Reveal className="space-y-3" data-testid="analista-360-estoque">
-        <h2 className="font-heading text-lg font-semibold text-white">Estoque</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Estoque</h2>
         {visao360.estoque.length === 0 ? (
           <EmptyState
             title="Sem dados de estoque ainda"
@@ -290,7 +290,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
       </Reveal>
 
       <Reveal className="space-y-3" data-testid="analista-360-kits">
-        <h2 className="font-heading text-lg font-semibold text-white">Kits sugeridos</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Kits sugeridos</h2>
         {visao360.kits.length === 0 ? (
           <EmptyState
             title="Nenhum kit sugerido ainda"
@@ -315,7 +315,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
                       ))}
                     </ul>
                     {k.precoSugerido !== null ? (
-                      <p className="font-mono text-white">{formatBRL(k.precoSugerido)}</p>
+                      <p className="font-mono text-ink">{formatBRL(k.precoSugerido)}</p>
                     ) : null}
                     <p className="text-xs text-muted">
                       {k.canalRecomendado} · comprados juntos em {k.pedidosJuntos} pedido(s)
@@ -329,7 +329,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
       </Reveal>
 
       <Reveal className="space-y-3" data-testid="analista-360-calendario">
-        <h2 className="font-heading text-lg font-semibold text-white">Calendário comercial</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Calendário comercial</h2>
         {visao360.sugestoesCalendario.length === 0 ? (
           <EmptyState
             title="Nenhuma sugestão de calendário ainda"
@@ -359,7 +359,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
       </Reveal>
 
       <Reveal className="space-y-3" data-testid="analista-360-alertas">
-        <h2 className="font-heading text-lg font-semibold text-white">Linha do tempo de alertas</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Linha do tempo de alertas</h2>
         {visao360.alertas.length === 0 ? (
           <EmptyState title="Nenhum alerta registrado" description="Alertas aparecem aqui quando os detectores rodam." />
         ) : (
@@ -374,7 +374,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
                     <Badge variant={a.resolvido ? 'neutral' : 'success'}>
                       {a.resolvido ? 'Resolvido' : 'Aberto'}
                     </Badge>
-                    <p className="text-sm font-medium text-white">{a.titulo}</p>
+                    <p className="text-sm font-medium text-ink">{a.titulo}</p>
                   </div>
                   <p className="text-sm text-muted">{a.corpo}</p>
                 </div>
@@ -388,7 +388,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
       </Reveal>
 
       <Reveal className="space-y-3" data-testid="analista-360-tasks-impacto">
-        <h2 className="font-heading text-lg font-semibold text-white">Tasks concluídas com impacto</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Tasks concluídas com impacto</h2>
         {visao360.tasksImpacto.length === 0 ? (
           <EmptyState
             title="Nenhuma task concluída com impacto medível ainda"
@@ -400,7 +400,7 @@ export default async function AnalistaOrgPage({ params }: { params: { orgId: str
               <li key={task.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
                 <Link
                   href={`/analista/${orgId}/tasks/${task.id}`}
-                  className="text-sm font-medium text-white outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+                  className="text-sm font-medium text-ink outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   {task.titulo}
                 </Link>

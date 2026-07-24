@@ -26,7 +26,7 @@ export default async function AguardandoPage() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-bg-base p-8">
       <Logo withMark size="lg" />
       <div className="max-w-md space-y-2 text-center">
-        <h1 className="font-heading text-xl font-semibold text-white">
+        <h1 className="font-heading text-xl font-semibold text-ink">
           {suspensa ? 'Conta suspensa' : 'Conta aguardando ativação'}
         </h1>
         <p className="text-sm text-muted">
@@ -39,7 +39,7 @@ export default async function AguardandoPage() {
       {!suspensa ? (
         <Card className="w-full max-w-md">
           <CardContent>
-            <h2 className="mb-4 font-heading text-sm font-semibold text-white">O que acontece agora</h2>
+            <h2 className="mb-4 font-heading text-sm font-semibold text-ink">O que acontece agora</h2>
             <ol className="flex flex-col gap-4">
               {passos.map((p, i) => (
                 <li key={p.titulo} className="flex gap-3">
@@ -47,7 +47,7 @@ export default async function AguardandoPage() {
                     {i + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-medium text-white">{p.titulo}</p>
+                    <p className="text-sm font-medium text-ink">{p.titulo}</p>
                     <p className="text-sm text-muted">{p.texto}</p>
                   </div>
                 </li>

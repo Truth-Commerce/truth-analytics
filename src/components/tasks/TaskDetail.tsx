@@ -147,14 +147,14 @@ export function TaskDetail({
 
   return (
     <div className="space-y-6">
-      <Link href={backHref} className="text-sm text-muted transition-colors hover:text-white">
+      <Link href={backHref} className="text-sm text-muted transition-colors hover:text-ink">
         ← Voltar
       </Link>
 
       <header className="rounded-2xl border border-line bg-bg-surface p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="font-heading text-2xl font-bold text-white">{task.titulo}</h1>
+            <h1 className="font-heading text-2xl font-bold text-ink">{task.titulo}</h1>
             <p className="mt-1 text-xs text-dim">{CRIADO_POR_LABEL[task.criadoPor]}</p>
           </div>
 
@@ -238,7 +238,7 @@ export function TaskDetail({
           </CardHeader>
           <CardContent className="space-y-3" data-testid="crm-hierarquia">
             {pai ? (
-              <p className="text-sm text-white/80">
+              <p className="text-sm text-ink/80">
                 Task-pai:{' '}
                 <Link
                   href={`${taskHrefBase(ator, orgId)}/${pai.id}`}
@@ -331,7 +331,7 @@ export function TaskDetail({
               const corDelta =
                 pctArredondado > 0 ? 'text-success-fg' : pctArredondado < 0 ? 'text-danger-fg' : 'text-dim';
               return (
-                <p data-testid="task-impacto" className="text-sm text-white/90">
+                <p data-testid="task-impacto" className="text-sm text-ink/90">
                   Vendas no período do relatório de origem: {formatBRL(impact.totalOrigem)} → relatório mais recente:{' '}
                   {formatBRL(impact.totalAtual)} (<span className={corDelta}>{formatDeltaPct(pctArredondado)}</span>)
                 </p>
@@ -361,7 +361,7 @@ export function TaskDetail({
             <ol data-testid="task-atividades" className="space-y-2">
               {activities.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-white/80">
+                  <span className="text-ink/80">
                     {eventoLabel(a)}
                     {a.userEmail ? <span className="text-xs text-dim"> — {a.userEmail}</span> : null}
                   </span>

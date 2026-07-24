@@ -12,13 +12,13 @@ export function AlertasSection({ alertas }: { alertas: AlertaAberto[] }) {
       </CardHeader>
       <CardContent className="space-y-3">
         {alertas.map((a) => (
-          <div key={a.id} className="flex flex-wrap items-start justify-between gap-3 rounded border border-white/10 p-3">
+          <div key={a.id} className="flex flex-wrap items-start justify-between gap-3 rounded border border-ink/10 p-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Badge variant={a.severidade === 'critico' ? 'danger' : 'warn'}>
                   {a.severidade === 'critico' ? 'Crítico' : 'Atenção'}
                 </Badge>
-                <p className="text-sm font-medium text-white">{a.titulo}</p>
+                <p className="text-sm font-medium text-ink">{a.titulo}</p>
               </div>
               <p className="text-sm text-muted">{a.corpo}</p>
             </div>

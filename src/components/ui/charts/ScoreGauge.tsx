@@ -37,7 +37,7 @@ export function ScoreGauge({ score, size = 180 }: { score: number; size?: number
         </RadialBarChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
-        <span className="font-mono text-4xl font-bold text-white" style={{ textShadow: `0 0 24px ${cor}66` }}>
+        <span className="font-mono text-4xl font-bold text-ink" style={{ textShadow: `0 0 24px ${cor}66` }}>
           {valor}
         </span>
         <span className="text-xs text-muted">/ 100</span>

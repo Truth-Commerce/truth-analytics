@@ -57,7 +57,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
 
   return (
     <main className="mx-auto max-w-6xl p-6 md:p-8">
-      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-ink">
         ← Voltar
       </Link>
 
@@ -68,7 +68,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'radial-gradient(ellipse 70% 90% at 20% 0%, rgba(7,221,43,0.08) 0%, transparent 60%)',
+              'radial-gradient(ellipse 70% 90% at 20% 0%, rgba(19,122,62,0.08) 0%, transparent 60%)',
           }}
         />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
@@ -76,7 +76,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
             <p className="font-mono text-[11px] uppercase tracking-widest text-brand">
               Análise Truth
             </p>
-            <h1 className="mt-1 font-heading text-3xl font-bold text-white">Relatório</h1>
+            <h1 className="mt-1 font-heading text-3xl font-bold text-ink">Relatório</h1>
             <p className="mt-2 font-mono text-sm text-muted">
               {formatPeriodo(rel.periodoInicio, rel.periodoFim)}
             </p>
@@ -148,7 +148,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
 
             {rel.metricas.truth_score && (
               <section id="score-breakdown" data-testid="score-breakdown" className="space-y-3 scroll-mt-24">
-                <h2 className="font-heading text-xl font-semibold text-white">Truth Score</h2>
+                <h2 className="font-heading text-xl font-semibold text-ink">Truth Score</h2>
                 <Card>
                   <CardContent className="flex flex-wrap items-center gap-8">
                     <ScoreGauge score={rel.metricas.truth_score.score} />
@@ -165,9 +165,9 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                         <div key={label}>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted">{label}</span>
-                            <span className="font-mono text-white">{fator.pontos}/{fator.max}</span>
+                            <span className="font-mono text-ink">{fator.pontos}/{fator.max}</span>
                           </div>
-                          <div className="h-1.5 rounded bg-white/5">
+                          <div className="h-1.5 rounded bg-ink/5">
                             <div
                               className="h-1.5 rounded bg-brand"
                               style={{ width: `${(fator.pontos / fator.max) * 100}%` }}
@@ -184,13 +184,13 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
             {rel.analiseIa ? (
               <>
                 <Reveal id="resumo" className="space-y-4 scroll-mt-24">
-                  <h2 className="font-heading text-xl font-semibold text-white">Análise da IA</h2>
+                  <h2 className="font-heading text-xl font-semibold text-ink">Análise da IA</h2>
                   <Card>
                     <CardHeader>
                       <CardTitle as="h3" className="text-sm">Resumo executivo</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p data-testid="resumo-executivo" className="leading-relaxed text-white/90">
+                      <p data-testid="resumo-executivo" className="leading-relaxed text-ink/90">
                         {rel.analiseIa.resumoExecutivo}
                       </p>
                     </CardContent>
@@ -202,7 +202,7 @@ export default async function RelatorioDetalhePage({ params }: { params: { id: s
                 rel.analiseIa.sugestoesMelhoria.length > 0 ||
                 rel.analiseIa.ideiasVenda.length > 0 ? (
                   <Reveal id="recomendacoes" className="space-y-4 scroll-mt-24">
-                    <h2 className="font-heading text-xl font-semibold text-white">Recomendações</h2>
+                    <h2 className="font-heading text-xl font-semibold text-ink">Recomendações</h2>
                     {rel.analiseIa.achados && rel.analiseIa.achados.length > 0 ? (
                       <AchadosCards
                         reportId={rel.id}

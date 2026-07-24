@@ -71,7 +71,7 @@ export function ClientRow({ orgId, name, status, plano, conexao }: Props) {
   return (
     <TR data-testid={`org-${orgId}`}>
       <TD>
-        <Link href={`/admin/${orgId}`} className="text-white/90 hover:text-brand hover:underline">
+        <Link href={`/admin/${orgId}`} className="text-ink/90 hover:text-brand hover:underline">
           {name}
         </Link>
       </TD>

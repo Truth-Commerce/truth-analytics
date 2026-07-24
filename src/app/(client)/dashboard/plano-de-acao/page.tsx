@@ -29,7 +29,7 @@ export default async function PlanoDeAcaoPage() {
           <Link
             href="/dashboard/plano-de-acao/ciclos"
             data-testid="link-ciclos"
-            className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             Ciclos →
           </Link>
@@ -37,7 +37,7 @@ export default async function PlanoDeAcaoPage() {
       />
 
       <details className="rounded-2xl border border-line bg-bg-surface p-5">
-        <summary className="cursor-pointer font-heading text-sm font-semibold text-white">Nova task</summary>
+        <summary className="cursor-pointer font-heading text-sm font-semibold text-ink">Nova task</summary>
         <div className="mt-4">
           <NewTaskForm />
         </div>
@@ -52,7 +52,7 @@ export default async function PlanoDeAcaoPage() {
           ultimoRelatorio ? (
             <Link
               href={`/dashboard/relatorios/${ultimoRelatorio.id}`}
-              className="rounded-full bg-brand px-4 py-1.5 text-sm font-semibold text-[#04150a] outline-none hover:shadow-glow focus-visible:shadow-glow"
+              className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white outline-none transition-colors hover:bg-brand-strong hover:shadow-glow focus-visible:ring-2 focus-visible:ring-brand/50"
             >
               Ver achados do último relatório
             </Link>

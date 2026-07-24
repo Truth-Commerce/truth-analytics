@@ -17,7 +17,7 @@ export function Toc({ items }: TocProps) {
           <li key={item.href}>
             <a
               href={item.href}
-              className="-ml-px block border-l border-transparent px-3 py-1 text-sm text-muted outline-none transition-colors hover:border-brand hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+              className="-ml-px block border-l border-transparent px-3 py-1 text-sm text-muted outline-none transition-colors hover:border-brand hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
             >
               {item.label}
             </a>

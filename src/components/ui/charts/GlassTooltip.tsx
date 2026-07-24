@@ -27,11 +27,11 @@ export function GlassTooltip({ active, label, payload, formatValue }: GlassToolt
       {payload.map((item, i) => {
         const raw = typeof item.value === 'number' ? item.value : Number(item.value ?? 0);
         return (
-          <p key={i} className="flex items-center gap-2 font-mono text-sm text-white">
+          <p key={i} className="flex items-center gap-2 font-mono text-sm text-ink">
             <span
               aria-hidden="true"
               className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: item.color ?? '#07dd2b' }}
+              style={{ backgroundColor: item.color ?? '#137a3e' }}
             />
             {item.name !== undefined && payload.length > 1 ? (
               <span className="text-muted">{item.name}:</span>

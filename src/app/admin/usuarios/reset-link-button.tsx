@@ -45,7 +45,7 @@ export function ResetLinkButton({ userId }: { userId: string }) {
             Link de redefinição (uso único, expira em 60min) — copie e envie a{' '}
             <span className="font-mono">{state.email}</span>. Nunca compartilhe uma senha diretamente.
           </p>
-          <p className="mt-1 break-all font-mono text-xs text-white/90" data-testid={`usuarios-reset-link-valor-${userId}`}>
+          <p className="mt-1 break-all font-mono text-xs text-ink/90" data-testid={`usuarios-reset-link-valor-${userId}`}>
             {state.link}
           </p>
           <Button type="button" variant="ghost" size="sm" className="mt-1" onClick={() => copiarLink(state.link!)}>

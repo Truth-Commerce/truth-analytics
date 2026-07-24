@@ -25,7 +25,7 @@ export function MoverTaskSelect({
         const para = e.target.value as TaskStatus;
         if (para) onMove(taskId, para);
       }}
-      className="rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+      className="rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
     >
       <option value="" disabled>
         Mover para…

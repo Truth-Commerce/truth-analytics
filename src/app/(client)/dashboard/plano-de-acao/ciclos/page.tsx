@@ -47,7 +47,7 @@ export default async function CiclosPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8" data-testid="crm-ciclos-page">
-      <Link href="/dashboard/plano-de-acao" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/dashboard/plano-de-acao" className="text-sm text-muted transition-colors hover:text-ink">
         ← Plano de Ação
       </Link>
 
@@ -58,7 +58,7 @@ export default async function CiclosPage() {
       />
 
       <details className="rounded-2xl border border-line bg-bg-surface p-5">
-        <summary className="cursor-pointer font-heading text-sm font-semibold text-white">Novo ciclo</summary>
+        <summary className="cursor-pointer font-heading text-sm font-semibold text-ink">Novo ciclo</summary>
         <div className="mt-4">
           <NovoCicloForm />
         </div>

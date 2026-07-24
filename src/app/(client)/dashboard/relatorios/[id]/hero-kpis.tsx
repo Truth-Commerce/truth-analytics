@@ -53,7 +53,7 @@ export function HeroKpisFaixa({ kpis, destaques }: { kpis: HeroKpis; destaques?:
             <li key={d.label} className="flex items-center gap-1.5 rounded-full border border-line bg-bg-elevated px-3 py-1 text-xs">
               <span aria-hidden="true" className={DIRECAO_COR[d.direcao]}>{DIRECAO_ICONE[d.direcao]}</span>
               <span className="text-muted">{d.label}:</span>
-              <span className="font-mono text-white">{d.valor}</span>
+              <span className="font-mono text-ink">{d.valor}</span>
             </li>
           ))}
         </ul>

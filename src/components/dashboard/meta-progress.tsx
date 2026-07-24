@@ -36,21 +36,21 @@ export function MetaProgress({ progresso, meta, totalMes, pace, dadosAte }: Prop
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="font-mono text-white">{formatBRL(totalMes)}</span>
+          <span className="font-mono text-ink">{formatBRL(totalMes)}</span>
           <span className="text-muted">
             de {formatBRL(meta)} ({progresso.percentual}%)
           </span>
         </div>
-        <div className="relative h-2.5 rounded-full bg-white/5">
+        <div className="relative h-2.5 rounded-full bg-ink/5">
           <div
-            className="h-2.5 rounded-full bg-brand shadow-[0_0_12px_#07dd2b66,0_0_24px_#07dd2b33]"
+            className="h-2.5 rounded-full bg-brand shadow-[0_0_12px_#137a3e66,0_0_24px_#137a3e33]"
             style={{ width: `${largura}%` }}
           />
           {marcador !== null ? (
             <div
               aria-hidden="true"
               title={`Esperado até hoje: ~${pace!.pctEsperado}%`}
-              className="absolute -top-[3px] h-4 w-0.5 rounded bg-white/40"
+              className="absolute -top-[3px] h-4 w-0.5 rounded bg-ink/40"
               style={{ left: `${marcador}%` }}
             />
           ) : null}

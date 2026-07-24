@@ -35,7 +35,7 @@ export function RevisaoQueue({ items }: { items: ItemFila[] }) {
               <p className="text-xs text-dim">{item.orgName}</p>
               <Link
                 href={`/analista/${item.orgId}/tasks/${item.id}`}
-                className="text-sm font-medium text-white outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
+                className="text-sm font-medium text-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 {item.titulo}
               </Link>

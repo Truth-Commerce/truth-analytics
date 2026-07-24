@@ -57,7 +57,7 @@ export function DevolverTaskButton({
               onChange={(e) => setMotivo(e.target.value)}
               rows={3}
               maxLength={2000}
-              className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-sm text-white outline-none transition-colors focus:border-brand"
+              className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
             />
           </label>
         }

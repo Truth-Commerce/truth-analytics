@@ -71,10 +71,10 @@ export function TaskComments({
           comments.map((c) => (
             <li key={c.id} className="rounded-xl border border-line bg-bg-elevated p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-white/70">{c.userEmail}</span>
+                <span className="text-xs font-medium text-ink/70">{c.userEmail}</span>
                 <span className="text-xs text-dim">{formatData(c.createdAt)}</span>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-white/90">{renderCorpoComMencoes(c.corpo)}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-ink/90">{renderCorpoComMencoes(c.corpo)}</p>
             </li>
           ))
         )}
@@ -97,7 +97,7 @@ export function TaskComments({
           required
           aria-label="Escreva um comentário"
           placeholder="Escreva um comentário..."
-          className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-white outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="w-full rounded-lg border border-line bg-bg-elevated px-3 py-2 text-ink outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
         />
 
         <div className="flex justify-end">

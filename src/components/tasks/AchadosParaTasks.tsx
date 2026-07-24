@@ -131,7 +131,7 @@ export function AchadosParaTasks({
         {itens.map((texto, indice) => {
           const jaExiste = existentes.has(tituloFromItem(texto));
           return (
-            <li key={indice} className="flex items-start justify-between gap-3 text-sm leading-relaxed text-white/80">
+            <li key={indice} className="flex items-start justify-between gap-3 text-sm leading-relaxed text-ink/80">
               <span className="flex-1">• {texto}</span>
               <VirarTaskButton
                 fonte={fonte}

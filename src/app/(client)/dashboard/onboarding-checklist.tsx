@@ -30,7 +30,7 @@ export function OnboardingChecklist(props: OnboardingInput) {
                 aria-hidden="true"
                 className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border font-mono text-[10px] ${
                   step.done
-                    ? 'border-brand bg-brand text-[#04150a]'
+                    ? 'border-brand bg-brand text-white'
                     : 'border-line bg-bg-elevated text-dim'
                 }`}
               >
@@ -43,7 +43,7 @@ export function OnboardingChecklist(props: OnboardingInput) {
               ) : (
                 <Link
                   href={step.href}
-                  className="text-sm text-white outline-none transition-colors hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+                  className="text-sm text-ink outline-none transition-colors hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   {step.label} →
                 </Link>

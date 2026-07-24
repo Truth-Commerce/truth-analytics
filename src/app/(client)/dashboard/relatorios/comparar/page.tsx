@@ -81,10 +81,10 @@ export default async function CompararPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
-      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-ink">
         ← Voltar
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-white">Comparar períodos</h1>
+      <h1 className="font-heading text-2xl font-bold text-ink">Comparar períodos</h1>
       <CompararForm
         relatorios={dones.map((r) => ({
           id: r.id,
@@ -95,7 +95,7 @@ export default async function CompararPage({
       />
       {comp && relA && relB ? (
         <>
-          <p className="text-sm text-white/90" data-testid="leitura-comparacao">
+          <p className="text-sm text-ink/90" data-testid="leitura-comparacao">
             {leituraComparacao(comp)}
           </p>
           <Card className="!p-0" data-testid="comparacao">

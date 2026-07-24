@@ -132,7 +132,7 @@ export default async function OperacoesPage({ searchParams }: { searchParams: Se
 
       {/* 2. Fila de relatórios */}
       <Reveal className="space-y-3" data-testid="operacoes-fila">
-        <h2 className="font-heading text-lg font-semibold text-white">
+        <h2 className="font-heading text-lg font-semibold text-ink">
           Fila de relatórios <span className="text-muted">({fila.length})</span>
         </h2>
         {fila.length === 0 ? (
@@ -183,7 +183,7 @@ export default async function OperacoesPage({ searchParams }: { searchParams: Se
 
       {/* 3. Custo IA do mês */}
       <Reveal className="space-y-3" data-testid="operacoes-custo-ia">
-        <h2 className="font-heading text-lg font-semibold text-white">Custo IA do mês</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Custo IA do mês</h2>
         <p className="text-xs text-muted">
           Estimado com os preços atuais do Opus: US$ {OPUS_INPUT_USD_PER_MTOK}/Mtok de entrada, US${' '}
           {OPUS_OUTPUT_USD_PER_MTOK}/Mtok de saída.
@@ -221,17 +221,17 @@ export default async function OperacoesPage({ searchParams }: { searchParams: Se
             {custo.porOrg.length > 0 ? (
               <tfoot>
                 <TR className="border-t border-line">
-                  <TD className="font-semibold text-white">Total</TD>
-                  <TD numeric className="font-semibold text-white">
+                  <TD className="font-semibold text-ink">Total</TD>
+                  <TD numeric className="font-semibold text-ink">
                     {custo.total.inputTokens.toLocaleString('pt-BR')}
                   </TD>
-                  <TD numeric className="font-semibold text-white">
+                  <TD numeric className="font-semibold text-ink">
                     {custo.total.outputTokens.toLocaleString('pt-BR')}
                   </TD>
-                  <TD numeric className="font-semibold text-white">
+                  <TD numeric className="font-semibold text-ink">
                     {custo.total.chamadas}
                   </TD>
-                  <TD numeric className="font-semibold text-white" data-testid="operacoes-custo-total">
+                  <TD numeric className="font-semibold text-ink" data-testid="operacoes-custo-total">
                     US$ {custo.total.custoUsd.toFixed(2)}
                   </TD>
                 </TR>
@@ -243,7 +243,7 @@ export default async function OperacoesPage({ searchParams }: { searchParams: Se
 
       {/* 4. Conexões */}
       <Reveal className="space-y-3" data-testid="operacoes-conexoes">
-        <h2 className="font-heading text-lg font-semibold text-white">Conexões</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Conexões</h2>
         <Card className="!p-0">
           <Table>
             <THead>
@@ -274,7 +274,7 @@ export default async function OperacoesPage({ searchParams }: { searchParams: Se
 
       {/* 5. Audit log */}
       <Reveal className="space-y-3" data-testid="operacoes-audit">
-        <h2 className="font-heading text-lg font-semibold text-white">
+        <h2 className="font-heading text-lg font-semibold text-ink">
           Auditoria <span className="text-muted">({auditoria.total})</span>
         </h2>
         <form

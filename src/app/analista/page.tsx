@@ -45,19 +45,19 @@ export default async function AnalistaPage() {
       </Reveal>
 
       <Reveal className="space-y-3">
-        <h2 className="font-heading text-lg font-semibold text-white">Atenção hoje</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Atenção hoje</h2>
         <FilaAtencaoHoje resumos={resumos} />
       </Reveal>
 
       <MeuDiaFaixa meuDia={meuDia} />
 
       <Reveal className="space-y-3">
-        <h2 className="font-heading text-lg font-semibold text-white">Fila de revisão</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Fila de revisão</h2>
         <RevisaoQueue items={fila} />
       </Reveal>
 
       <Reveal className="space-y-3">
-        <h2 className="font-heading text-lg font-semibold text-white">Organizações</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Organizações</h2>
         {carteira.length === 0 ? (
           <EmptyState
             title="Nenhuma organização na carteira."

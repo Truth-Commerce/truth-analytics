@@ -25,7 +25,7 @@ export function GeracaoAutomaticaToggle({ ativa }: { ativa: boolean }) {
   return (
     <form ref={formRef} action={action} className="flex items-center gap-2">
       <input type="hidden" name="ativa" ref={ativaFieldRef} defaultValue={String(checked)} />
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-white/90">
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-ink/90">
         <input
           type="checkbox"
           checked={checked}

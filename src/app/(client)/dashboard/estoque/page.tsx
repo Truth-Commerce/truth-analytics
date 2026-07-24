@@ -48,7 +48,7 @@ export default async function EstoquePage() {
         <>
         {resumo.desalinhados > 0 ? (
           <div
-            className="rounded-lg border border-warning-border bg-warning-tint p-4 text-sm text-white/90"
+            className="rounded-lg border border-warning-border bg-warning-tint p-4 text-sm text-ink/90"
             data-testid="estoque-aviso-desalinhado"
           >
             <strong className="text-warning-fg">

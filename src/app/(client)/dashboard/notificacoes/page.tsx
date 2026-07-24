@@ -19,7 +19,7 @@ export default async function NotificacoesPage({ searchParams }: { searchParams:
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-6 md:p-8">
-      <h1 className="font-heading text-2xl font-bold text-white">Notificações</h1>
+      <h1 className="font-heading text-2xl font-bold text-ink">Notificações</h1>
 
       {items.length === 0 ? (
         <EmptyState title="Nenhuma notificação por aqui." />
@@ -31,12 +31,12 @@ export default async function NotificacoesPage({ searchParams }: { searchParams:
                 {n.href ? (
                   <Link
                     href={n.href}
-                    className="text-sm font-medium text-white outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
+                    className="text-sm font-medium text-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
                   >
                     {n.titulo}
                   </Link>
                 ) : (
-                  <p className="text-sm font-medium text-white">{n.titulo}</p>
+                  <p className="text-sm font-medium text-ink">{n.titulo}</p>
                 )}
                 <p className="mt-0.5 text-xs text-muted">{n.corpo}</p>
                 <p className="mt-1 font-mono text-[10px] text-dim">{formatData(n.createdAt)}</p>

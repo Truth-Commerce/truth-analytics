@@ -52,7 +52,7 @@ export function TaskLabels({
             <span
               key={label}
               data-testid="crm-label-chip"
-              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-elevated px-2.5 py-1 text-xs text-white/80"
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-elevated px-2.5 py-1 text-xs text-ink/80"
             >
               {label}
               <button
@@ -84,7 +84,7 @@ export function TaskLabels({
           placeholder="Nova label..."
           maxLength={20}
           aria-label="Nova label"
-          className="w-36 rounded-lg border border-line bg-bg-elevated px-2.5 py-1.5 text-xs text-white outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="w-36 rounded-lg border border-line bg-bg-elevated px-2.5 py-1.5 text-xs text-ink outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
         />
         <Button
           type="button"
@@ -107,7 +107,7 @@ export function TaskLabels({
             type="button"
             data-testid="crm-label-suggestion"
             onClick={() => enviar([...labels, s])}
-            className="rounded-full border border-dashed border-line px-2.5 py-1 text-xs text-dim outline-none transition-colors hover:border-brand hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="rounded-full border border-dashed border-line px-2.5 py-1 text-xs text-dim outline-none transition-colors hover:border-brand hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             + {s}
           </button>

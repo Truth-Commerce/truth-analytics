@@ -69,7 +69,7 @@ export function TrackedProducts({ produtos }: { produtos: Produto[] }) {
             data-testid={`produto-${p.id}`}
             className="flex items-center justify-between gap-3 py-2.5"
           >
-            <span className="text-white/90">
+            <span className="text-ink/90">
               {p.nome}
               {p.sku ? <span className="ml-1.5 font-mono text-xs text-muted">({p.sku})</span> : ''}
             </span>

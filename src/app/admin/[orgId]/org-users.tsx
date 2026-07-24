@@ -20,7 +20,7 @@ export function OrgUsers({ orgId, usuarios }: { orgId: string; usuarios: Usuario
       <ul className="flex flex-col divide-y divide-line" data-testid="org-users-list">
         {usuarios.map((u) => (
           <li key={u.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-            <span className="font-mono text-white/90">{u.email}</span>
+            <span className="font-mono text-ink/90">{u.email}</span>
             <span className="text-xs text-dim">desde {u.createdAt}</span>
           </li>
         ))}

@@ -22,7 +22,7 @@ export default async function ConfiguracoesPage() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-6 md:p-8">
-      <h1 className="font-heading text-2xl font-bold text-white">Configurações</h1>
+      <h1 className="font-heading text-2xl font-bold text-ink">Configurações</h1>
 
       <Card data-testid="conta-info">
         <CardHeader>
@@ -32,11 +32,11 @@ export default async function ConfiguracoesPage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p className="text-muted">
-            E-mail: <span className="font-mono text-white/80">{user?.email ?? '—'}</span>
+            E-mail: <span className="font-mono text-ink/80">{user?.email ?? '—'}</span>
           </p>
           <p className="text-muted">
             Plano atual:{' '}
-            <span className="font-mono text-white/80">
+            <span className="font-mono text-ink/80">
               {access.plano ? PLANO_LABEL[access.plano] : 'Sem plano'}
             </span>
           </p>

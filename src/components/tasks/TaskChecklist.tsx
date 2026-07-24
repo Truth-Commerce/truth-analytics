@@ -28,7 +28,7 @@ export function TaskChecklist({
               onChange={(e) => e.currentTarget.form?.requestSubmit()}
               className="mt-1 h-4 w-4 shrink-0 rounded border-line bg-bg-elevated accent-brand"
             />
-            <span className={`text-sm leading-relaxed ${item.feito ? 'text-dim line-through' : 'text-white/90'}`}>
+            <span className={`text-sm leading-relaxed ${item.feito ? 'text-dim line-through' : 'text-ink/90'}`}>
               {item.texto}
             </span>
           </form>

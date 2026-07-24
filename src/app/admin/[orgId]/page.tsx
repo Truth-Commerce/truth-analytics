@@ -65,7 +65,7 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
-      <Link href="/admin" className="text-sm text-muted transition-colors hover:text-white">
+      <Link href="/admin" className="text-sm text-muted transition-colors hover:text-ink">
         ← Clientes
       </Link>
 
@@ -217,13 +217,13 @@ export default async function AdminOrgPage({ params }: { params: { orgId: string
                   </p>
                   <p className="text-muted">
                     Token expira em:{' '}
-                    <span className="font-mono text-white/80">
+                    <span className="font-mono text-ink/80">
                       {saude?.expiraEm ? formatData(saude.expiraEm) : '—'}
                     </span>
                   </p>
                   <p className="text-muted">
                     Última sincronização:{' '}
-                    <span className="font-mono text-white/80">
+                    <span className="font-mono text-ink/80">
                       {saude?.lastSyncAt ? formatData(saude.lastSyncAt) : '—'}
                     </span>
                   </p>

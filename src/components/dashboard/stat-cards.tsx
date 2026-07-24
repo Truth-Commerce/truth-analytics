@@ -28,7 +28,7 @@ function StatValue({ value, format }: { value: number; format: 'brl' | 'int' | '
     );
   }
   return (
-    <span className="font-mono text-2xl font-bold text-white">
+    <span className="font-mono text-2xl font-bold text-ink">
       {format === 'brl' ? formatBRL(v) : String(Math.round(v))}
     </span>
   );

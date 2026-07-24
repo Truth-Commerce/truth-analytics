@@ -547,14 +547,14 @@ export function KanbanBoard({
           placeholder="Buscar por título…"
           value={filtroTexto}
           onChange={(e) => setFiltroTexto(e.target.value)}
-          className="rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-sm text-white outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-sm text-ink outline-none transition-colors placeholder:text-dim focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/50"
         />
         <select
           aria-label="Filtrar por prioridade"
           data-testid="crm-board-filtro-prioridade"
           value={filtroPrioridade}
           onChange={(e) => setFiltroPrioridade(e.target.value as TaskPrioridade | '')}
-          className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
         >
           <option value="">Prioridade (todas)</option>
           {TASK_PRIORIDADES.map((p) => (
@@ -569,7 +569,7 @@ export function KanbanBoard({
             data-testid="crm-board-filtro-label"
             value={filtroLabel}
             onChange={(e) => setFiltroLabel(e.target.value)}
-            className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             <option value="">Label (todas)</option>
             {labelsDisponiveis.map((l) => (
@@ -585,7 +585,7 @@ export function KanbanBoard({
             data-testid="crm-board-filtro-epico"
             value={filtroEpico}
             onChange={(e) => setFiltroEpico(e.target.value)}
-            className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             <option value="">Épico (todos)</option>
             {epicosDisponiveis.map((e) => (
@@ -601,7 +601,7 @@ export function KanbanBoard({
             data-testid="crm-board-filtro-responsavel"
             value={filtroResponsavel}
             onChange={(e) => setFiltroResponsavel(e.target.value)}
-            className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             <option value="">Responsável (todos)</option>
             {usuarios.map((u) => (
@@ -616,7 +616,7 @@ export function KanbanBoard({
           data-testid="crm-board-swimlane-select"
           value={swimlanePor}
           onChange={(e) => setSwimlanePor(e.target.value as SwimlanePor)}
-          className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="rounded-lg border border-line bg-bg-elevated px-2 py-1.5 text-sm text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
         >
           {(Object.keys(SWIMLANE_LABEL) as SwimlanePor[]).map((por) => (
             <option key={por} value={por}>
@@ -629,7 +629,7 @@ export function KanbanBoard({
             type="button"
             data-testid="crm-board-limpar-filtros"
             onClick={limparFiltros}
-            className="text-xs text-muted underline-offset-2 outline-none hover:text-white hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="text-xs text-muted underline-offset-2 outline-none hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             Limpar filtros
           </button>
@@ -641,7 +641,7 @@ export function KanbanBoard({
           <Fragment key={lane.chave}>{renderColunas(lane.tasks, lane.chave)}</Fragment>
         ) : (
           <div key={lane.chave} data-testid="crm-board-swimlane" className="space-y-2">
-            <h3 className="font-heading text-sm font-semibold text-white">
+            <h3 className="font-heading text-sm font-semibold text-ink">
               {swimlanePor === 'responsavel' ? (emailPorUsuario.get(lane.chave) ?? lane.label) : lane.label}
             </h3>
             {renderColunas(lane.tasks, lane.chave)}
@@ -653,7 +653,7 @@ export function KanbanBoard({
         <div
           aria-hidden="true"
           data-testid="crm-board-drag-ghost"
-          className="pointer-events-none fixed z-50 rounded-xl border border-brand bg-bg-elevated px-3 py-2 text-sm font-medium text-white shadow-lg"
+          className="pointer-events-none fixed z-50 rounded-xl border border-brand bg-bg-elevated px-3 py-2 text-sm font-medium text-ink shadow-lg"
           style={{ left: arrasto.x - arrasto.offsetX, top: arrasto.y - arrasto.offsetY, width: arrasto.width }}
         >
           {efetivas.find((t) => t.id === arrasto.taskId)?.titulo ?? ''}

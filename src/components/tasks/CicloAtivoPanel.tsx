@@ -116,7 +116,7 @@ export function CicloAtivoPanel({
                   key={t.id}
                   className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm"
                 >
-                  <span className="truncate text-white">{t.titulo}</span>
+                  <span className="truncate text-ink">{t.titulo}</span>
                   <span className="shrink-0 text-xs text-dim">{STATUS_TASK_LABEL[t.status]}</span>
                   <Button
                     size="sm"
@@ -149,7 +149,7 @@ export function CicloAtivoPanel({
                   key={t.id}
                   className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm"
                 >
-                  <span className="truncate text-white">{t.titulo}</span>
+                  <span className="truncate text-ink">{t.titulo}</span>
                   <span className="shrink-0 text-xs text-dim">{STATUS_TASK_LABEL[t.status]}</span>
                   <Button
                     size="sm"

@@ -81,7 +81,7 @@ export default async function ConsultoriaPage() {
       </Reveal>
 
       <section className="space-y-3">
-        <h2 className="font-heading text-lg font-semibold text-white">Impacto por cliente</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink">Impacto por cliente</h2>
         <Card className="!p-0">
           <Table data-testid="impacto-orgs-table">
             <THead>

@@ -45,7 +45,7 @@ export default async function KitsPage() {
                   ))}
                 </ul>
                 {k.precoSugerido !== null ? (
-                  <p className="font-mono text-lg text-white">{formatBRL(k.precoSugerido)}</p>
+                  <p className="font-mono text-lg text-ink">{formatBRL(k.precoSugerido)}</p>
                 ) : null}
                 <p className="text-sm">{k.argumento}</p>
                 <p className="text-xs text-muted">

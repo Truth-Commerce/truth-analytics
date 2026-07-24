@@ -58,7 +58,7 @@ export default async function CalendarioPage() {
                     <div className="space-y-3">
                       {t.sugestoes.map((s) => (
                         <div key={s.id} className="space-y-2 rounded-xl border border-line p-4">
-                          <p className="font-heading text-sm font-semibold text-white">{s.titulo}</p>
+                          <p className="font-heading text-sm font-semibold text-ink">{s.titulo}</p>
                           <p className="text-sm">{s.sugestao}</p>
                           {s.skus.length > 0 ? (
                             <p className="font-mono text-xs text-muted">{s.skus.join(', ')}</p>

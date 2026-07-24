@@ -33,7 +33,7 @@ function ListaExpandivel({
             <li key={t.taskId} className="flex flex-wrap items-center gap-2 text-sm">
               <Link
                 href={`/analista/${t.orgId}/tasks/${t.taskId}`}
-                className="text-white outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
+                className="text-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 {t.titulo}
               </Link>

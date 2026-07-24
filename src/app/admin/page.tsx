@@ -52,7 +52,7 @@ export default async function AdminPage({
 
       <Reveal className="space-y-3" data-testid="admin-atencao-hoje">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-heading text-lg font-semibold text-white">Atenção hoje</h2>
+          <h2 className="font-heading text-lg font-semibold text-ink">Atenção hoje</h2>
           <Link
             href="/admin/performance"
             data-testid="admin-link-performance"

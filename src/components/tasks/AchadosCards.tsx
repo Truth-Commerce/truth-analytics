@@ -157,10 +157,10 @@ export function AchadosCards({
                   </span>
                 ) : null}
               </div>
-              <h3 className="font-heading text-base font-semibold text-white">{achado.titulo}</h3>
-              <p className="text-sm leading-relaxed text-white/80">{achado.descricao}</p>
+              <h3 className="font-heading text-base font-semibold text-ink">{achado.titulo}</h3>
+              <p className="text-sm leading-relaxed text-ink/80">{achado.descricao}</p>
               {achado.comoFazer.length > 0 ? (
-                <ol className="list-decimal space-y-1 pl-5 text-sm text-white/70">
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-ink/70">
                   {achado.comoFazer.map((passo, i) => (
                     <li key={i}>{passo}</li>
                   ))}
@@ -202,7 +202,7 @@ export function AchadosCards({
                       type="date"
                       defaultValue={prazoDefault(achado.prioridade)}
                       onChange={(e) => setPrazos((prev) => ({ ...prev, [indice]: e.target.value }))}
-                      className="mt-1 block w-full rounded-lg border border-line bg-bg-surface px-3 py-1.5 text-sm text-white outline-none focus:border-brand"
+                      className="mt-1 block w-full rounded-lg border border-line bg-bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
                     />
                   </label>
                   {playbook ? (

@@ -64,7 +64,7 @@ export default async function ComparativoPage() {
       ) : (
         <>
           <Reveal className="space-y-3" data-testid="analista-comparativo-quadrantes">
-            <h2 className="font-heading text-lg font-semibold text-white">
+            <h2 className="font-heading text-lg font-semibold text-ink">
               Quadrantes: crescimento × volume
             </h2>
             <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
@@ -105,7 +105,7 @@ export default async function ComparativoPage() {
           </Reveal>
 
           <Reveal className="space-y-3" data-testid="analista-comparativo-nichos">
-            <h2 className="font-heading text-lg font-semibold text-white">Por nicho</h2>
+            <h2 className="font-heading text-lg font-semibold text-ink">Por nicho</h2>
             <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
               <Card className="!p-0">
                 <Table>
@@ -137,7 +137,7 @@ export default async function ComparativoPage() {
           </Reveal>
 
           <Reveal className="space-y-3" data-testid="analista-comparativo-canais">
-            <h2 className="font-heading text-lg font-semibold text-white">Canais da carteira</h2>
+            <h2 className="font-heading text-lg font-semibold text-ink">Canais da carteira</h2>
             {canais.length === 0 ? (
               <EmptyState
                 title="Sem relatórios concluídos ainda"
@@ -176,7 +176,7 @@ export default async function ComparativoPage() {
           </Reveal>
 
           <Reveal className="space-y-3" data-testid="analista-comparativo-o-que-funcionou">
-            <h2 className="font-heading text-lg font-semibold text-white">O que funcionou</h2>
+            <h2 className="font-heading text-lg font-semibold text-ink">O que funcionou</h2>
             {sugestoes.length === 0 ? (
               <EmptyState
                 title="Nenhuma sugestão replicável ainda"
@@ -187,7 +187,7 @@ export default async function ComparativoPage() {
                 {sugestoes.map((s) => (
                   <li key={s.taskId} className="flex flex-wrap items-center justify-between gap-3 p-4">
                     <div className="space-y-1">
-                      <p className="text-sm font-medium text-white">{s.titulo}</p>
+                      <p className="text-sm font-medium text-ink">{s.titulo}</p>
                       <p className="text-xs text-dim">
                         {s.orgName} · {TIPO_TASK_LABEL[s.tipo]} ·{' '}
                         <span className="text-success-fg">+{s.deltaPct.toFixed(1).replace('.', ',')}% vendas</span>
