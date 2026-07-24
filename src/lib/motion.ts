@@ -10,7 +10,7 @@ import type { Variants } from 'framer-motion';
 
 export const EASE_TRUTH = [0.16, 1, 0.3, 1] as const;
 
-export const DUR = { fast: 0.2, base: 0.4, slow: 0.7 } as const;
+export const DUR = { fast: 0.18, base: 0.22, slow: 0.4 } as const;
 
 /** Entrada padrão de cards/seções: fade + lift. */
 export const fadeLift: Variants = {

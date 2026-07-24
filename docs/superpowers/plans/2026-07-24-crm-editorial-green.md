@@ -51,7 +51,7 @@ expect(chartTheme).toMatchObject({
 
 - [ ] **Step 2: Executar o teste e confirmar a falha**
 
-Run: npm test -- --runInBand tests/unit/chart-theme.test.ts
+Run: npm test -- --maxWorkers=1 --minWorkers=1 tests/unit/chart-theme.test.ts
 
 Expected: FAIL porque os tokens ainda usam verde neon e fundo escuro.
 
@@ -61,7 +61,7 @@ Definir paper.0, paper.1, paper.2; ink.DEFAULT, ink.soft, ink.muted; brand.DEFAU
 
 - [ ] **Step 4: Executar teste, lint e typecheck**
 
-Run: npm test -- --runInBand tests/unit/chart-theme.test.ts && npm run lint && npm run typecheck
+Run: npm test -- --maxWorkers=1 --minWorkers=1 tests/unit/chart-theme.test.ts && npm run lint && npm run typecheck
 
 Expected: PASS.
 
@@ -101,7 +101,7 @@ expect(navItems('client')[0]).toMatchObject({ icon: 'dashboard', description: ex
 
 - [ ] **Step 2: Executar e confirmar a falha**
 
-Run: npm test -- --runInBand tests/unit/nav-model.test.ts tests/unit/sidebar-model.test.ts
+Run: npm test -- --maxWorkers=1 --minWorkers=1 tests/unit/nav-model.test.ts tests/unit/sidebar-model.test.ts
 
 Expected: FAIL porque ícones e helpers ainda não existem.
 
@@ -115,7 +115,7 @@ Montar sidebar desktop sticky de 264/76 px, topbar sem navegação duplicada, it
 
 - [ ] **Step 5: Executar testes e verificações**
 
-Run: npm test -- --runInBand tests/unit/nav-model.test.ts tests/unit/sidebar-model.test.ts tests/unit/command-model.test.ts && npm run typecheck
+Run: npm test -- --maxWorkers=1 --minWorkers=1 tests/unit/nav-model.test.ts tests/unit/sidebar-model.test.ts tests/unit/command-model.test.ts && npm run typecheck
 
 Expected: PASS.
 
@@ -162,7 +162,7 @@ Manter assinaturas, variantes, data-testid, aria labels e comportamento dos comp
 
 - [ ] **Step 3: Executar testes dos componentes e modelos**
 
-Run: npm test -- --runInBand tests/unit/dialog-model.test.ts tests/unit/pagination-model.test.ts tests/unit/stepper-model.test.ts tests/unit/toast-store.test.ts tests/unit/href.test.ts
+Run: npm test -- --maxWorkers=1 --minWorkers=1 tests/unit/dialog-model.test.ts tests/unit/pagination-model.test.ts tests/unit/stepper-model.test.ts tests/unit/toast-store.test.ts tests/unit/href.test.ts
 
 Expected: PASS.
 
@@ -213,7 +213,7 @@ Remover dependências visuais do tema escuro, melhorar largura e espaçamento do
 
 - [ ] **Step 3: Executar testes de dados e autenticação**
 
-Run: npm test -- --runInBand tests/unit/landing-data.test.ts tests/unit/auth-actions-zod.test.ts tests/unit/password.test.ts
+Run: npm test -- --maxWorkers=1 --minWorkers=1 tests/unit/landing-data.test.ts tests/unit/auth-actions-zod.test.ts tests/unit/password.test.ts
 
 Expected: PASS.
 
@@ -253,7 +253,7 @@ Expected: nenhuma ocorrência visual; templates de e-mail são fora de escopo.
 
 - [ ] **Step 3: Executar a suíte unitária serial**
 
-Run: npm test -- --runInBand
+Run: npm test -- --maxWorkers=1 --minWorkers=1
 
 Expected: PASS.
 
@@ -297,13 +297,13 @@ Trocar a capa escura por capa de papel, wordmark ink/verde, gauge com trilho beg
 
 - [ ] **Step 3: Executar testes focados**
 
-Run: npm test -- --runInBand tests/unit/chart-theme.test.ts tests/unit/report-pdf.test.ts tests/unit/pdf-gauge.test.ts
+Run: npm test -- --maxWorkers=1 --minWorkers=1 tests/unit/chart-theme.test.ts tests/unit/report-pdf.test.ts tests/unit/pdf-gauge.test.ts
 
 Expected: PASS e buffers iniciando com %PDF-.
 
 - [ ] **Step 4: Executar verificação de produção**
 
-Run: npm run lint && npm run typecheck && npm test -- --runInBand && npm run build
+Run: npm run lint && npm run typecheck && npm test -- --maxWorkers=1 --minWorkers=1 && npm run build
 
 Expected: todos os comandos com exit code 0.
 

@@ -1,11 +1,11 @@
 /** Tema Recharts com o DNA visual Truth — usado por todos os charts. */
 export const chartTheme = {
-  grid: '#ffffff0f',
-  axis: '#a1a1aa',
-  brand: '#07dd2b',
-  areaFrom: 'rgba(7,221,43,0.35)',
-  areaTo: 'rgba(7,221,43,0)',
-  series: ['#07dd2b', '#38bdf8', '#a78bfa', '#fbbf24', '#f87171', '#94a3b8'],
+  grid: '#ded8cd',
+  axis: '#6f685f',
+  brand: '#137a3e',
+  areaFrom: 'rgba(19,122,62,0.24)',
+  areaTo: 'rgba(19,122,62,0)',
+  series: ['#137a3e', '#267aa5', '#7957a8', '#b66a00', '#c93c37', '#6f685f'],
 } as const;
 
 export function seriesColor(i: number): string {
@@ -17,7 +17,7 @@ export function seriesColor(i: number): string {
  * (brand / warning.DEFAULT / danger.DEFAULT). O amarelo fora de token morreu aqui.
  */
 export function corDoScore(score: number): string {
-  if (score >= 70) return '#07dd2b';
-  if (score >= 40) return '#f59e0b';
-  return '#ef4444';
+  if (score >= 70) return '#137a3e';
+  if (score >= 40) return '#b66a00';
+  return '#c93c37';
 }

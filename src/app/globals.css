@@ -4,7 +4,8 @@
 
 @layer base {
   body {
-    @apply bg-bg-base text-white antialiased font-sans;
+    @apply bg-bg-base font-sans text-ink antialiased;
+    min-width: 320px;
   }
 
   h1,
@@ -14,28 +15,38 @@
     @apply font-heading;
   }
 
-  /* Thin dark scrollbar */
+  :focus-visible {
+    outline-color: #137a3e;
+  }
+
+  /* Scrollbar discreta sobre papel. */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #040507;
+    background: #f1ede4;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #ffffff1a;
+    background: #c8c0b4;
     border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: #a9a093;
   }
 
   /* Selection */
   ::selection {
-    background: #07dd2b;
-    color: #04150a;
+    background: #ccebd4;
+    color: #0d3d22;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
 }
