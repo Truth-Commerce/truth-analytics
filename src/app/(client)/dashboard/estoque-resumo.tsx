@@ -23,6 +23,9 @@ export async function EstoqueResumo({ orgId }: { orgId: string }) {
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-3">
         <Badge variant="danger">{resumo.criticos} críticos</Badge>
+        {resumo.desalinhados > 0 ? (
+          <Badge variant="warn">{resumo.desalinhados} desalinhados</Badge>
+        ) : null}
         <Badge variant="warn">{resumo.atencao} em atenção</Badge>
         <Badge variant="neutral">{resumo.parados} parados</Badge>
         <Link href="/dashboard/estoque" className="ml-auto text-sm text-brand hover:underline">

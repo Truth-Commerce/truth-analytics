@@ -45,12 +45,31 @@ export default async function EstoquePage() {
           description="O estoque sincronizou, mas todos os produtos estão com saldo zerado e sem vendas nos últimos 30 dias."
         />
       ) : (
+        <>
+        {resumo.desalinhados > 0 ? (
+          <div
+            className="rounded-lg border border-warning-border bg-warning-tint p-4 text-sm text-white/90"
+            data-testid="estoque-aviso-desalinhado"
+          >
+            <strong className="text-warning-fg">
+              {resumo.desalinhados}{' '}
+              {resumo.desalinhados === 1 ? 'produto com saldo negativo' : 'produtos com saldo negativo'}{' '}
+              no Bling.
+            </strong>{' '}
+            Saldo negativo significa que as vendas foram baixadas, mas as entradas (compras de
+            reposição) não foram lançadas no Bling — não é falta física, é registro desatualizado.
+            Lance as entradas desses produtos no Bling para o estoque refletir a realidade.
+          </div>
+        ) : null}
+
         <Card data-testid="estoque-card">
           <CardHeader>
             <CardTitle>
               Cobertura por produto
               <span className="ml-2 font-mono text-xs text-muted" data-testid="estoque-resumo-inline">
-                {resumo.criticos} críticos · {resumo.atencao} em atenção · {resumo.parados} parados
+                {resumo.criticos} críticos
+                {resumo.desalinhados > 0 ? ` · ${resumo.desalinhados} desalinhados` : ''} ·{' '}
+                {resumo.atencao} em atenção · {resumo.parados} parados
               </span>
             </CardTitle>
           </CardHeader>
@@ -86,6 +105,7 @@ export default async function EstoquePage() {
             </Table>
           </CardContent>
         </Card>
+        </>
       )}
     </div>
   );

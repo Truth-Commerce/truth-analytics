@@ -3,17 +3,20 @@ import type { CoberturaProduto, EstadoEstoque } from '@/modules/estoque/stock-co
 
 export function resumoEstoque(produtos: CoberturaProduto[]): {
   criticos: number;
+  desalinhados: number;
   atencao: number;
   parados: number;
 } {
   return {
     criticos: produtos.filter((p) => p.estado === 'critico').length,
+    desalinhados: produtos.filter((p) => p.estado === 'desalinhado').length,
     atencao: produtos.filter((p) => p.estado === 'atencao').length,
     parados: produtos.filter((p) => p.estado === 'parado').length,
   };
 }
 
 export function labelCobertura(p: CoberturaProduto): string {
+  if (p.estado === 'desalinhado') return 'saldo negativo';
   if (p.coberturaDias === null) return '—';
   if (p.coberturaDias <= 0) return 'esgotando';
   return `~${p.coberturaDias} dias`;
@@ -30,6 +33,8 @@ export function badgeDoEstado(
   switch (estado) {
     case 'critico':
       return { variant: 'danger', label: 'Crítico' };
+    case 'desalinhado':
+      return { variant: 'warn', label: 'Bling desalinhado' };
     case 'atencao':
       return { variant: 'warn', label: 'Atenção' };
     case 'ok':

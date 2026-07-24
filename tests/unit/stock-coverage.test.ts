@@ -34,9 +34,35 @@ describe('montarCobertura', () => {
     expect(p).toMatchObject({ coberturaDias: null, estado: 'parado', vendas30d: 0 });
   });
 
-  it('filtra mortos: saldo<=0 e zero venda somem da lista', () => {
+  it('saldo negativo = desalinhado (registro furado no Bling), mesmo vendendo', () => {
+    const [p] = montarCobertura([{ sku: 'NEG', nome: 'Negativo', saldo: -136 }], vendas([['NEG', 40]]));
+    expect(p).toMatchObject({ saldo: -136, coberturaDias: null, estado: 'desalinhado' });
+  });
+
+  it('saldo negativo entra na lista mesmo SEM venda em 30d (não é morto)', () => {
+    const [p] = montarCobertura([{ sku: 'NEG0', nome: 'Neg sem giro', saldo: -5 }], vendas([]));
+    expect(p).toMatchObject({ estado: 'desalinhado', vendas30d: 0 });
+  });
+
+  it('filtra mortos: saldo EXATAMENTE 0 e zero venda somem da lista', () => {
     const r = montarCobertura([{ sku: 'MORTO', nome: 'Morto', saldo: 0 }], vendas([]));
     expect(r).toEqual([]);
+  });
+
+  it('desalinhado ordena depois de crítico e antes de atenção', () => {
+    const r = montarCobertura(
+      [
+        { sku: 'ATEN', nome: 'a', saldo: 10 }, // 10d = atencao
+        { sku: 'NEG', nome: 'n', saldo: -3 }, // desalinhado
+        { sku: 'CRIT', nome: 'c', saldo: 2 }, // 2d = critico
+      ],
+      vendas([
+        ['ATEN', 30],
+        ['NEG', 30],
+        ['CRIT', 30],
+      ]),
+    );
+    expect(r.map((p) => p.estado)).toEqual(['critico', 'desalinhado', 'atencao']);
   });
 
   it('ordena por prioridade de estado e, no empate, por vendas30d desc', () => {
