@@ -141,7 +141,7 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="relative rounded-full p-2.5 text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+        className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-ink-soft outline-none transition-colors hover:border-line hover:bg-paper-1 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -161,7 +161,7 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
         {unread > 0 && (
           <span
             data-testid="notification-unread"
-            className="absolute right-0.5 top-0.5 inline-flex min-w-[1rem] items-center justify-center rounded-full bg-brand px-1 font-mono text-[10px] leading-4 text-[#04150a]"
+            className="absolute -right-0.5 -top-0.5 inline-flex min-w-[1rem] items-center justify-center rounded-full bg-brand px-1 font-mono text-[10px] font-semibold leading-4 text-white ring-2 ring-bg-base"
           >
             {unread > 9 ? '9+' : unread}
           </span>
@@ -173,7 +173,7 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
           ref={popRef}
           role="dialog"
           aria-label="Notificações"
-          className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-bg-surface/95 p-1.5 backdrop-blur-md"
+          className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-paper-1/95 p-1.5 shadow-paper backdrop-blur-md"
         >
           <div className="max-h-96 overflow-y-auto">
             {items.length === 0 ? (
@@ -191,10 +191,10 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
                   <button
                     type="submit"
                     className={`block w-full rounded-lg px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/50 ${
-                      item.lida ? 'hover:bg-white/5' : 'bg-brand-glow hover:bg-brand-glow'
+                      item.lida ? 'hover:bg-paper-2' : 'bg-brand-soft hover:bg-brand-soft'
                     }`}
                   >
-                    <span className="block text-sm font-medium text-white">{item.titulo}</span>
+                    <span className="block text-sm font-medium text-ink">{item.titulo}</span>
                     <span className="mt-0.5 block line-clamp-2 text-xs text-muted">{item.corpo}</span>
                     <span className="mt-1 block font-mono text-[10px] text-dim">
                       {tempoRelativo(item.createdAt)}
@@ -213,7 +213,7 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
             >
               <button
                 type="submit"
-                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/50"
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 Marcar todas como lidas
               </button>
@@ -221,7 +221,7 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
             {verTodasHref ? (
               <Link
                 href={verTodasHref}
-                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-brand outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-brand/50"
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-brand-strong outline-none transition-colors hover:bg-brand-soft focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 Ver todas
               </Link>

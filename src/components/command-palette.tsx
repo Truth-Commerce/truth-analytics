@@ -41,13 +41,13 @@ export function CommandPalette({ variant }: { variant: 'client' | 'admin' | 'ana
     >
       <Command
         label="Comandos"
-        className="overflow-hidden rounded-2xl border border-line bg-bg-surface/95 shadow-glow-3 backdrop-blur-md"
+        className="overflow-hidden rounded-2xl border border-line bg-paper-1/95 shadow-paper backdrop-blur-md"
       >
         <Command.Input
           autoFocus
           data-autofocus
           placeholder="Digite um comando ou busque…"
-          className="w-full border-b border-line bg-transparent px-4 py-3 text-sm text-white placeholder:text-dim outline-none"
+          className="w-full border-b border-line bg-transparent px-4 py-3 text-sm text-ink placeholder:text-ink-muted outline-none"
         />
         <Command.List className="max-h-72 overflow-y-auto p-2">
           <Command.Empty className="px-3 py-6 text-center text-sm text-muted">
@@ -66,7 +66,7 @@ export function CommandPalette({ variant }: { variant: 'client' | 'admin' | 'ana
                     key={c.id}
                     value={`${c.label} ${c.keywords ?? ''}`}
                     onSelect={() => run(c.href)}
-                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted transition-colors data-[selected=true]:bg-brand-glow data-[selected=true]:text-white"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-ink-soft transition-colors data-[selected=true]:bg-brand-soft data-[selected=true]:text-brand-strong"
                   >
                     {c.label}
                   </Command.Item>

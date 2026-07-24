@@ -5,13 +5,19 @@ import { atalhoPaletaLabel, hrefAtivo, logoHref, navItems } from '@/components/n
 describe('navItems — nav por papel', () => {
   it('client vê Dashboard, Conexões, Estoque, Kits, Calendário, Plano de Ação (com badge) e Configurações', () => {
     expect(navItems('client')).toEqual([
-      { href: '/dashboard', label: 'Dashboard' },
-      { href: '/conexoes', label: 'Conexões' },
-      { href: '/dashboard/estoque', label: 'Estoque' },
-      { href: '/dashboard/kits', label: 'Kits' },
-      { href: '/dashboard/calendario', label: 'Calendário' },
-      { href: '/dashboard/plano-de-acao', label: 'Plano de Ação', badge: true },
-      { href: '/configuracoes', label: 'Configurações' },
+      { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', description: 'Visão geral do negócio' },
+      { href: '/conexoes', label: 'Conexões', icon: 'connections', description: 'Integrações e canais' },
+      { href: '/dashboard/estoque', label: 'Estoque', icon: 'inventory', description: 'Cobertura e disponibilidade' },
+      { href: '/dashboard/kits', label: 'Kits', icon: 'kits', description: 'Oportunidades de combinação' },
+      { href: '/dashboard/calendario', label: 'Calendário', icon: 'calendar', description: 'Planejamento comercial' },
+      {
+        href: '/dashboard/plano-de-acao',
+        label: 'Plano de Ação',
+        icon: 'tasks',
+        description: 'Prioridades e execução',
+        badge: true,
+      },
+      { href: '/configuracoes', label: 'Configurações', icon: 'settings', description: 'Preferências da conta' },
     ]);
   });
 
@@ -32,8 +38,8 @@ describe('navItems — nav por papel', () => {
 
   it('analista vê a Carteira e o Comparativo (H4/T13)', () => {
     expect(navItems('analista')).toEqual([
-      { href: '/analista', label: 'Carteira' },
-      { href: '/analista/comparativo', label: 'Comparativo' },
+      { href: '/analista', label: 'Carteira', icon: 'portfolio', description: 'Clientes sob acompanhamento' },
+      { href: '/analista/comparativo', label: 'Comparativo', icon: 'compare', description: 'Compare contas e períodos' },
     ]);
   });
 });

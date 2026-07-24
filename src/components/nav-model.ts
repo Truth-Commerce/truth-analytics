@@ -1,36 +1,65 @@
 /** Regras puras da navegação do AppShell — testáveis em node. */
 
-export type NavItem = { href: string; label: string; badge?: boolean };
+export type NavIconName =
+  | 'dashboard'
+  | 'connections'
+  | 'inventory'
+  | 'kits'
+  | 'calendar'
+  | 'tasks'
+  | 'settings'
+  | 'clients'
+  | 'playbooks'
+  | 'consulting'
+  | 'portfolio'
+  | 'performance'
+  | 'operations'
+  | 'users'
+  | 'compare';
+
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: NavIconName;
+  description: string;
+  badge?: boolean;
+};
 
 export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
   if (variant === 'admin') {
     return [
-      { href: '/admin', label: 'Clientes' },
-      { href: '/admin/playbooks', label: 'Playbooks' },
-      { href: '/admin/consultoria', label: 'Consultoria' },
+      { href: '/admin', label: 'Clientes', icon: 'clients', description: 'Contas e operação' },
+      { href: '/admin/playbooks', label: 'Playbooks', icon: 'playbooks', description: 'Modelos de execução' },
+      { href: '/admin/consultoria', label: 'Consultoria', icon: 'consulting', description: 'Visão consolidada' },
       // G3/T10: admin precisa de caminho até a fila de revisão do analista
       // (acesso a /analista permitido para admin_truth).
-      { href: '/analista', label: 'Carteira' },
+      { href: '/analista', label: 'Carteira', icon: 'portfolio', description: 'Clientes sob acompanhamento' },
       // H4/T13: painéis de operação e gestão.
-      { href: '/admin/performance', label: 'Performance' },
-      { href: '/admin/operacoes', label: 'Operações' },
-      { href: '/admin/usuarios', label: 'Usuários' },
+      { href: '/admin/performance', label: 'Performance', icon: 'performance', description: 'Resultados da equipe' },
+      { href: '/admin/operacoes', label: 'Operações', icon: 'operations', description: 'Saúde dos processos' },
+      { href: '/admin/usuarios', label: 'Usuários', icon: 'users', description: 'Acessos e permissões' },
     ];
   }
   if (variant === 'analista') {
     return [
-      { href: '/analista', label: 'Carteira' },
-      { href: '/analista/comparativo', label: 'Comparativo' },
+      { href: '/analista', label: 'Carteira', icon: 'portfolio', description: 'Clientes sob acompanhamento' },
+      { href: '/analista/comparativo', label: 'Comparativo', icon: 'compare', description: 'Compare contas e períodos' },
     ];
   }
   return [
-    { href: '/dashboard', label: 'Dashboard' },
-    { href: '/conexoes', label: 'Conexões' },
-    { href: '/dashboard/estoque', label: 'Estoque' },
-    { href: '/dashboard/kits', label: 'Kits' },
-    { href: '/dashboard/calendario', label: 'Calendário' },
-    { href: '/dashboard/plano-de-acao', label: 'Plano de Ação', badge: true },
-    { href: '/configuracoes', label: 'Configurações' },
+    { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', description: 'Visão geral do negócio' },
+    { href: '/conexoes', label: 'Conexões', icon: 'connections', description: 'Integrações e canais' },
+    { href: '/dashboard/estoque', label: 'Estoque', icon: 'inventory', description: 'Cobertura e disponibilidade' },
+    { href: '/dashboard/kits', label: 'Kits', icon: 'kits', description: 'Oportunidades de combinação' },
+    { href: '/dashboard/calendario', label: 'Calendário', icon: 'calendar', description: 'Planejamento comercial' },
+    {
+      href: '/dashboard/plano-de-acao',
+      label: 'Plano de Ação',
+      icon: 'tasks',
+      description: 'Prioridades e execução',
+      badge: true,
+    },
+    { href: '/configuracoes', label: 'Configurações', icon: 'settings', description: 'Preferências da conta' },
   ];
 }
 
@@ -53,3 +82,10 @@ export function hrefAtivo(pathname: string, hrefs: string[]): string | null {
 export function atalhoPaletaLabel(userAgent: string): 'Ctrl K' | '⌘ K' {
   return /Mac|iPhone|iPad|iPod/i.test(userAgent) ? '⌘ K' : 'Ctrl K';
 }
+
+export {
+  SIDEBAR_STORAGE_KEY,
+  pageTitle,
+  parseSidebarCollapsed,
+  variantLabel,
+} from './sidebar-model';
