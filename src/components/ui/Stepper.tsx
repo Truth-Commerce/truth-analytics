@@ -35,7 +35,7 @@ export function Stepper({ steps, activeIndex, failed = false, className = '' }: 
               <span
                 className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border font-mono text-[10px] transition-colors duration-300 ${
                   done
-                    ? 'border-brand bg-brand text-[#04150a]'
+                    ? 'border-brand bg-brand text-white'
                     : isFailed
                       ? 'border-danger-border bg-danger-tint text-danger-fg'
                       : active
@@ -56,11 +56,11 @@ export function Stepper({ steps, activeIndex, failed = false, className = '' }: 
               <span
                 className={`text-sm transition-colors duration-300 ${
                   done
-                    ? 'text-white/80'
+                    ? 'text-ink-soft'
                     : isFailed
                       ? 'text-danger-fg'
                       : active
-                        ? 'font-medium text-white'
+                        ? 'font-medium text-ink'
                         : 'text-dim'
                 }`}
               >

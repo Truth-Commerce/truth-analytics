@@ -28,8 +28,8 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onClose={onCancel} labelledBy="confirm-dialog-title" maxWidthClassName="max-w-sm">
-      <div className="rounded-2xl border border-line bg-bg-surface p-6">
-        <h2 id="confirm-dialog-title" className="font-heading text-base font-semibold text-white">
+      <div className="rounded-2xl border border-line bg-paper-1 p-6 shadow-paper">
+        <h2 id="confirm-dialog-title" className="font-heading text-xl text-ink">
           {title}
         </h2>
         {description ? <p className="mt-2 text-sm text-muted">{description}</p> : null}
@@ -52,7 +52,7 @@ export function ConfirmDialog({
             className={`inline-flex items-center justify-center rounded-full px-3 py-1.5 text-sm font-medium outline-none transition-all duration-150 ${
               variant === 'danger'
                 ? 'border border-danger-border text-danger-fg hover:bg-danger-tint focus-visible:ring-2 focus-visible:ring-danger/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base'
-                : 'bg-brand font-semibold text-[#04150a] hover:shadow-glow focus-visible:shadow-glow'
+                : 'bg-brand font-semibold text-white hover:bg-brand-strong hover:shadow-glow focus-visible:shadow-glow'
             }`}
           >
             {confirmLabel}

@@ -19,11 +19,11 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line bg-glass px-6 py-10 text-center ${className}`}
+      className={`flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line bg-paper-1 px-6 py-10 text-center ${className}`}
       {...rest}
     >
       {icon ? <div className="text-brand">{icon}</div> : null}
-      <p className="font-heading text-sm font-semibold text-white">{title}</p>
+      <p className="font-heading text-xl text-ink">{title}</p>
       {description ? <p className="max-w-sm text-sm text-muted">{description}</p> : null}
       {action ? <div className="mt-1">{action}</div> : null}
     </div>

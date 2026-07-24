@@ -57,7 +57,7 @@ interface TDProps extends TableWrapperProps {
 export function TD({ className = '', children, numeric = false, ...rest }: TDProps) {
   return (
     <td
-      className={`py-2 px-3 text-white/90 ${numeric ? 'font-mono text-right' : ''} ${className}`}
+      className={`px-3 py-2.5 text-ink ${numeric ? 'font-mono text-right' : ''} ${className}`}
       {...rest}
     >
       {children}

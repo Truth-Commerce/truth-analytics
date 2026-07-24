@@ -52,8 +52,8 @@ export function Tabs({ items, defaultValue, className = '' }: TabsProps) {
             data-testid={`tab-${t.id}`}
             className={`-mb-px whitespace-nowrap rounded-t-lg border-b-2 px-4 py-2 text-sm outline-none transition-colors duration-200 ease-truth focus-visible:ring-2 focus-visible:ring-brand/50 ${
               t.id === active
-                ? 'border-brand font-medium text-white'
-                : 'border-transparent text-muted hover:text-white'
+                ? 'border-brand font-medium text-ink'
+                : 'border-transparent text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}

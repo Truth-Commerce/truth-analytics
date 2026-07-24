@@ -11,7 +11,7 @@ interface AlertProps {
 }
 
 const variantClasses: Record<AlertVariant, string> = {
-  info: 'border-line bg-glass text-muted',
+  info: 'border-line bg-paper-2 text-ink-soft',
   success: 'border-success-border bg-success-tint text-success-fg',
   warning: 'border-warning-border bg-warning-tint text-warning-fg',
   danger: 'border-danger-border bg-danger-tint text-danger-fg',

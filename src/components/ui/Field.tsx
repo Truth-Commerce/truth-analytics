@@ -20,7 +20,7 @@ export function Field({ label, htmlFor, className = '', children, error }: Field
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label htmlFor={htmlFor} className="text-sm font-medium text-muted">
+      <label htmlFor={htmlFor} className="text-sm font-medium text-ink-soft">
         {label}
       </label>
       {child}

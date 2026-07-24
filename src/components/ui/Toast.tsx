@@ -108,7 +108,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               onMouseLeave={() => agendar(t.id, t.variant)}
               onFocusCapture={() => pausar(t.id)}
               onBlurCapture={() => agendar(t.id, t.variant)}
-              className={`pointer-events-auto rounded-2xl border bg-bg-surface/80 p-4 backdrop-blur-md ${variantClasses[t.variant]}`}
+              className={`pointer-events-auto rounded-2xl border bg-paper-1/95 p-4 shadow-paper backdrop-blur-md ${variantClasses[t.variant]}`}
             >
               <div className="flex items-start gap-3">
                 <span
@@ -116,7 +116,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotClasses[t.variant]}`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-white">{t.title}</p>
+                  <p className="text-sm font-medium text-ink">{t.title}</p>
                   {t.description ? (
                     <p className="mt-0.5 text-xs text-muted">{t.description}</p>
                   ) : null}
@@ -137,7 +137,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   type="button"
                   aria-label="Fechar aviso"
                   onClick={() => dismiss(t.id)}
-                  className="-my-2 -mr-2 inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-muted outline-none transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-brand/60"
+                  className="-my-2 -mr-2 inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-ink-muted outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/60"
                 >
                   ✕
                 </button>

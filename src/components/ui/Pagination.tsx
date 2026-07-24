@@ -11,7 +11,7 @@ interface PaginationProps {
 }
 
 const linkCls =
-  'inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 font-mono text-sm text-muted outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/60';
+  'inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-2 font-mono text-sm text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50';
 
 export function Pagination({ page, pageCount, hrefFor, className = '' }: PaginationProps) {
   if (pageCount <= 1) return null;
@@ -25,7 +25,7 @@ export function Pagination({ page, pageCount, hrefFor, className = '' }: Paginat
               ←
             </Link>
           ) : (
-            <span className="inline-flex h-10 items-center px-2 text-sm text-white/20">←</span>
+            <span className="inline-flex h-10 items-center px-2 text-sm text-ink/20">←</span>
           )}
         </li>
         {items.map((item, i) => (
@@ -35,7 +35,7 @@ export function Pagination({ page, pageCount, hrefFor, className = '' }: Paginat
             ) : item === page ? (
               <span
                 aria-current="page"
-                className="inline-flex h-10 min-w-10 items-center justify-center rounded-lg bg-brand-glow px-2 font-mono text-sm text-brand"
+                className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-brand-soft px-2 font-mono text-sm font-semibold text-brand-strong"
               >
                 {item}
               </span>
@@ -52,7 +52,7 @@ export function Pagination({ page, pageCount, hrefFor, className = '' }: Paginat
               →
             </Link>
           ) : (
-            <span className="inline-flex h-10 items-center px-2 text-sm text-white/20">→</span>
+            <span className="inline-flex h-10 items-center px-2 text-sm text-ink/20">→</span>
           )}
         </li>
       </ul>

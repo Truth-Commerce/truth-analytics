@@ -20,7 +20,7 @@ export function Markdown({ texto, className = '' }: MarkdownProps) {
   const html = renderMarkdownSeguro(texto);
   return (
     <div
-      className={`text-sm text-white/90 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-0.5 [&_a]:text-brand [&_a]:underline [&_strong]:font-semibold ${className}`}
+      className={`text-sm text-ink-soft [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-0.5 [&_a]:text-brand-strong [&_a]:underline [&_strong]:font-semibold [&_strong]:text-ink ${className}`}
       // eslint-disable-next-line react/no-danger -- único uso permitido: html vem de renderMarkdownSeguro (já escapado)
       dangerouslySetInnerHTML={{ __html: html }}
     />

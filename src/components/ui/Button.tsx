@@ -36,25 +36,25 @@ interface ButtonAsAnchor extends ButtonBaseProps {
 type ButtonProps = ButtonAsButton | ButtonAsAnchor;
 
 const FOCUS_RING =
-  'focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base';
+  'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base';
 
 const FOCUS_RING_DANGER =
   'focus-visible:ring-2 focus-visible:ring-danger/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base';
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: `bg-brand text-[#04150a] font-semibold hover:shadow-glow focus-visible:shadow-glow ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none`,
-  secondary: `border border-strong bg-white/5 text-white hover:bg-white/10 ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
-  ghost: `text-muted hover:text-white ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
+  primary: `bg-brand text-white font-semibold hover:bg-brand-strong hover:shadow-glow ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none`,
+  secondary: `border border-line bg-paper-1 text-ink hover:border-ink/20 hover:bg-paper-2 ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
+  ghost: `text-ink-soft hover:bg-paper-2 hover:text-ink ${FOCUS_RING} disabled:opacity-50 disabled:cursor-not-allowed`,
   danger: `border border-danger-border text-danger-fg hover:bg-danger-tint ${FOCUS_RING_DANGER} disabled:opacity-50 disabled:cursor-not-allowed`,
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-5 py-2 text-sm',
+  sm: 'min-h-9 px-3 py-1.5 text-sm',
+  md: 'min-h-10 px-5 py-2 text-sm',
 };
 
 export function Button({ variant = 'primary', size = 'md', className = '', children, ...rest }: ButtonProps) {
-  const base = `inline-flex items-center justify-center rounded-full font-medium transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 ease-truth outline-none focus-visible:outline-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
+  const base = `inline-flex items-center justify-center rounded-xl font-medium transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 ease-truth outline-none focus-visible:outline-none ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
 
   if (rest.as === 'a') {
     const { as: _as, href, ...anchorRest } = rest as ButtonAsAnchor;
