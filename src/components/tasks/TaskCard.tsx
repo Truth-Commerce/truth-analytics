@@ -109,7 +109,7 @@ export function TaskCard({
     <div
       data-testid="task-card"
       data-task-id={task.id}
-      className={`select-none rounded-xl border border-line bg-bg-elevated p-3 transition-opacity ${
+      className={`min-w-0 select-none rounded-xl border border-line bg-bg-elevated p-3 transition-opacity ${
         arrastando ? 'opacity-40' : ''
       } ${podeArrastar ? 'cursor-grab active:cursor-grabbing' : ''}`}
       onPointerDown={podeArrastar ? (e) => onDragPointerDown!(e, task.id, task.status) : undefined}
@@ -120,7 +120,7 @@ export function TaskCard({
     >
       <Link
         href={`${taskHrefBase}/${task.id}`}
-        className="text-sm font-medium text-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
+        className="block break-words text-sm font-medium text-ink outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand/50"
       >
         {task.titulo}
       </Link>
@@ -216,8 +216,8 @@ export function TaskCard({
       ) : null}
 
       {!somenteLeitura ? (
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <MoverTaskSelect taskId={task.id} destinosValidos={destinosValidos} onMove={onMove} pendente={pendente} />
             {onReorder ? (
               // Fallback acessível do reorder-por-arraste (H5/T7) — botões de

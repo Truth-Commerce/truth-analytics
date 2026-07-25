@@ -463,7 +463,7 @@ export function KanbanBoard({
     const dndAtivo = !temFiltroAtivo;
 
     return (
-      <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible md:pb-0 xl:grid-cols-5">
+      <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible md:pb-0 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {TASK_STATUSES.map((status) => {
           const itensColuna = coluna(status);
           const idsColuna = itensColuna.map((t) => t.id);
@@ -478,16 +478,16 @@ export function KanbanBoard({
                 if (el) colInfoRef.current.set(chave, { el, status, laneChave });
                 else colInfoRef.current.delete(chave);
               }}
-              className={`w-64 flex-shrink-0 rounded-2xl transition-shadow md:w-auto ${anelClasse}`}
+              className={`w-64 min-w-0 flex-shrink-0 rounded-2xl transition-shadow md:w-auto ${anelClasse}`}
             >
-              <Card className="flex h-full flex-col gap-3">
+              <Card className="flex h-full min-w-0 flex-col gap-3">
                 <CardHeader className="mb-0">
                   <CardTitle as="h3" className="text-sm">
                     {STATUS_TASK_LABEL[status]}
                   </CardTitle>
                   <span className="text-xs text-dim">{itensColuna.length}</span>
                 </CardHeader>
-                <CardContent className="flex flex-1 flex-col gap-3">
+                <CardContent className="flex min-w-0 flex-1 flex-col gap-3">
                   {itensColuna.length === 0 ? (
                     <EmptyState title="Nenhuma task" className="px-3 py-6" />
                   ) : (

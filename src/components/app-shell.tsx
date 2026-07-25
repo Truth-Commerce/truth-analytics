@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -116,6 +116,9 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
   const [menuOpen, setMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [atalho, setAtalho] = useState('Ctrl K');
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuCloseRef = useRef<HTMLButtonElement>(null);
+  const restoreMobileMenuFocusRef = useRef(false);
   const pathname = usePathname();
 
   const items = navItems(variant);
@@ -138,7 +141,10 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false);
+      if (event.key === 'Escape') {
+        restoreMobileMenuFocusRef.current = true;
+        setMenuOpen(false);
+      }
     };
     document.addEventListener('keydown', handleKey);
     return () => {
@@ -146,6 +152,23 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
       document.removeEventListener('keydown', handleKey);
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (menuOpen) {
+        mobileMenuCloseRef.current?.focus();
+      } else if (restoreMobileMenuFocusRef.current) {
+        restoreMobileMenuFocusRef.current = false;
+        mobileMenuTriggerRef.current?.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [menuOpen]);
+
+  function closeMobileMenu() {
+    restoreMobileMenuFocusRef.current = true;
+    setMenuOpen(false);
+  }
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -246,6 +269,7 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
           <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <button
+                ref={mobileMenuTriggerRef}
                 type="button"
                 aria-label="Abrir menu"
                 aria-expanded={menuOpen}
@@ -259,7 +283,7 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
                 <p className="hidden text-[10px] font-semibold uppercase tracking-[0.15em] text-ink-muted sm:block">
                   {contextLabel}
                 </p>
-                <h1 className="truncate font-heading text-xl leading-none text-ink sm:text-2xl">{title}</h1>
+                <p className="truncate font-heading text-xl leading-none text-ink sm:text-2xl">{title}</p>
               </div>
             </div>
 
@@ -291,26 +315,30 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
           <button
             type="button"
             aria-label="Fechar menu"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMobileMenu}
             className="absolute inset-0 bg-ink/35 backdrop-blur-[2px]"
           />
           <aside
             id="mobile-sidebar"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navegação principal"
             className="relative flex h-full w-[min(304px,88vw)] flex-col border-r border-line bg-paper-1 px-4 py-4 shadow-2xl"
           >
             <div className="mb-6 flex h-11 items-center justify-between px-1">
               <Link
                 href={logoHref(variant)}
                 aria-label="Truth Analytics — ir ao início"
-                onClick={() => setMenuOpen(false)}
+                onClick={closeMobileMenu}
                 className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 <Logo withMark size="md" />
               </Link>
               <button
+                ref={mobileMenuCloseRef}
                 type="button"
                 aria-label="Fechar menu"
-                onClick={() => setMenuOpen(false)}
+                onClick={closeMobileMenu}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 <NavigationIcon name="close" />
@@ -325,7 +353,7 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
             <NavigationList
               activeHref={activeHref}
               items={items}
-              onNavigate={() => setMenuOpen(false)}
+              onNavigate={closeMobileMenu}
               planoDeAcaoCount={planoDeAcaoCount}
             />
 

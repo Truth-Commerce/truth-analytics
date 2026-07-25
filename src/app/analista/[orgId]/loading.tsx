@@ -6,7 +6,7 @@ export default function AnalistaOrgLoading() {
       <Skeleton className="h-5 w-24" />
       <Skeleton className="h-8 w-72" />
       <Skeleton className="h-10 w-full max-w-md rounded-2xl" />
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-64 rounded-2xl" />
         ))}

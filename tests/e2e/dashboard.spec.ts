@@ -96,3 +96,34 @@ test('gating: cliente sem Bling tem botão de geração desabilitado com motivo'
   // Motivo: Bling não conectado
   await expect(page.getByText('Conecte o Bling em Conexões.')).toBeVisible();
 });
+
+test('shell mantém um único título principal por página', async ({ page }) => {
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', clienteEmail);
+  await page.fill('input[name="senha"]', clienteSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/dashboard');
+  await expect(page.locator('h1')).toHaveCount(1);
+});
+
+test('menu móvel é modal e devolve o foco ao gatilho ao fechar com Escape', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', clienteEmail);
+  await page.fill('input[name="senha"]', clienteSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/dashboard');
+  const trigger = page.getByRole('button', { name: 'Abrir menu' });
+  await trigger.click();
+
+  const dialog = page.getByRole('dialog', { name: 'Navegação principal' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Fechar menu' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+});

@@ -99,13 +99,14 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
 
     // orgRisco: faturamento — 500 no mês corrente, 1000 no mês anterior.
     const inicioMesAtual = inicioDeDiaUtc(`${hoje.slice(0, 7)}-01`);
+    const dataHoje = inicioDeDiaUtc(hoje);
     const mesAnterior = new Date(inicioMesAtual.getTime() - 15 * 86_400_000);
     await db.insert(orders).values([
       {
         org_id: orgRiscoId,
         bling_order_id: `${PREFIX}risco-atual-${RUN}`,
         canal: 'teste',
-        data: agora,
+        data: dataHoje,
         valor_total: '500.00',
       },
       {
@@ -161,7 +162,7 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
       org_id: orgSaudavelId,
       bling_order_id: `${PREFIX}saudavel-atual-${RUN}`,
       canal: 'teste',
-      data: agora,
+      data: dataHoje,
       valor_total: '300.00',
     });
   });
