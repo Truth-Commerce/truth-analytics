@@ -1,5 +1,7 @@
 /** Regras puras da navegação do AppShell — testáveis em node. */
 
+import type { UserRole } from '@/modules/auth/user.types';
+
 export type NavIconName =
   | 'dashboard'
   | 'connections'
@@ -80,6 +82,12 @@ export function logoHref(variant: 'client' | 'admin' | 'analista'): string {
   if (variant === 'admin') return '/admin';
   if (variant === 'analista') return '/analista';
   return '/dashboard';
+}
+
+export function shellVariantForRole(
+  role: UserRole | null | undefined,
+): 'client' | 'analista' {
+  return role === 'analista' ? 'analista' : 'client';
 }
 
 /**

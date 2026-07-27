@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/app-shell';
+import { shellVariantForRole } from '@/components/nav-model';
 import { getImpersonationBanner } from '@/modules/auth/require-active-org';
 import { getSessionContext } from '@/modules/auth/session';
 import { countTasksAbertas } from '@/modules/tasks/task.repository';
@@ -13,11 +14,12 @@ export default async function ClientLayout({ children }: { children: React.React
   // Cliente real: access.role é sempre 'client', getImpersonationBanner
   // devolve null sem sequer olhar o cookie — 0 custo extra no caminho comum.
   const impersonation = await getImpersonationBanner(access);
+  const shellVariant = shellVariantForRole(access?.role);
 
   return (
     <>
       {impersonation ? <ImpersonationBanner orgName={impersonation.orgName} /> : null}
-      <AppShell variant="client" planoDeAcaoCount={planoDeAcaoCount}>
+      <AppShell variant={shellVariant} planoDeAcaoCount={planoDeAcaoCount}>
         {children}
       </AppShell>
     </>

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { atalhoPaletaLabel, hrefAtivo, logoHref, navItems } from '@/components/nav-model';
+import {
+  atalhoPaletaLabel,
+  hrefAtivo,
+  logoHref,
+  navItems,
+  shellVariantForRole,
+} from '@/components/nav-model';
 
 describe('navItems — nav por papel', () => {
   it('client vê Dashboard, Conexões, Estoque, Kits, Calendário, Plano de Ação (com badge) e Configurações', () => {
@@ -68,6 +74,15 @@ describe('logoHref', () => {
     expect(logoHref('client')).toBe('/dashboard');
     expect(logoHref('admin')).toBe('/admin');
     expect(logoHref('analista')).toBe('/analista');
+  });
+});
+
+describe('shellVariantForRole', () => {
+  it('mantém o shell de analista no dashboard e o shell de cliente nos demais papéis', () => {
+    expect(shellVariantForRole('analista')).toBe('analista');
+    expect(shellVariantForRole('client')).toBe('client');
+    expect(shellVariantForRole('admin_truth')).toBe('client');
+    expect(shellVariantForRole(null)).toBe('client');
   });
 });
 

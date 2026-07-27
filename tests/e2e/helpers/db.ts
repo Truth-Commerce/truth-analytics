@@ -104,6 +104,22 @@ export async function seedE2EAdmin(email: string, senha: string): Promise<void> 
   }
 }
 
+export async function seedE2EAnalista(email: string, senha: string): Promise<void> {
+  const { sql, tdb } = makeDb();
+  try {
+    const senha_hash = await hashPassword(senha);
+    const [org] = await tdb
+      .insert(organizations)
+      .values({ name: `${E2E_PREFIX}analista`, status: 'active' })
+      .returning({ id: organizations.id });
+    await tdb
+      .insert(users)
+      .values({ org_id: org!.id, email, senha_hash, role: 'analista' });
+  } finally {
+    await sql.end();
+  }
+}
+
 export async function seedE2EActiveClient(email: string, senha: string): Promise<string> {
   const { sql, tdb } = makeDb();
   try {
