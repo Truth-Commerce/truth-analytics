@@ -42,10 +42,6 @@ export function mobileMenuKey(path: string) {
   return path;
 }
 
-export function mobileMenuPortalTarget(documentRef: Pick<Document, 'body'>) {
-  return documentRef.body;
-}
-
 const SIDEBAR_STORAGE_EVENT = 'truth:sidebar-collapsed';
 
 function subscribeToSidebarCollapsed(onStoreChange: () => void) {
@@ -208,7 +204,7 @@ function MobileMenu({
 
       {menuOpen
         ? createPortal(
-        <div className="fixed inset-0 z-50 lg:hidden">
+            <div className="fixed inset-0 z-50 lg:hidden">
           <button
             type="button"
             aria-label="Fechar menu"
@@ -264,9 +260,9 @@ function MobileMenu({
               <SignOutButton />
             </div>
           </aside>
-        </div>,
-        mobileMenuPortalTarget(document),
-      )
+            </div>,
+            document.body,
+          )
         : null}
     </>
   );
