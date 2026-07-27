@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
+import { resolveTestDatabaseUrls } from '@/lib/test-database-safety';
 
 config({ path: '.env.local' });
 
@@ -11,9 +12,11 @@ const UNIT_AUTH_SECRET = 'truth-analytics-unit-test-secret';
 const UNIT_ENCRYPTION_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
 if (process.env.DATABASE_URL_TEST) {
-  process.env.POSTGRES_URL = process.env.DATABASE_URL_TEST;
-  process.env.POSTGRES_URL_DIRECT =
-    process.env.DATABASE_URL_TEST_DIRECT ?? process.env.DATABASE_URL_TEST;
+  // Resolve against the runtime URLs before overwriting them. This is
+  // synchronous and intentionally happens before Vitest collects test files.
+  const testDatabase = resolveTestDatabaseUrls(process.env);
+  process.env.POSTGRES_URL = testDatabase.databaseUrl;
+  process.env.POSTGRES_URL_DIRECT = testDatabase.directUrl;
 } else {
   process.env.POSTGRES_URL = UNIT_DB_URL;
   process.env.POSTGRES_URL_DIRECT = UNIT_DB_URL;

@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --minWorkers=1 --maxWorkers=1",
     "test:ci": "vitest run --minWorkers=1 --maxWorkers=1 --reporter=dot",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

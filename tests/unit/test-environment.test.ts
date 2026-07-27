@@ -13,7 +13,7 @@ describe('ambiente hermético de testes', () => {
     );
   });
 
-  it('roteia URLs inertes de integração, incluindo o fallback da URL direta', () => {
+  it('roteia somente a configuração de integração previamente validada', () => {
     if (!process.env.DATABASE_URL_TEST) return;
     expect(process.env.POSTGRES_URL).toBe(process.env.DATABASE_URL_TEST);
     expect(process.env.POSTGRES_URL_DIRECT).toBe(
@@ -21,7 +21,15 @@ describe('ambiente hermético de testes', () => {
     );
   });
 
-  it('nunca deixa URL de produção no processo de teste', () => {
-    expect(process.env.POSTGRES_URL).not.toMatch(/neon\.tech|vercel-storage|production|main/i);
+  it('usa exatamente o alvo testado ou o alvo unitário inerte', () => {
+    const expectedUrl =
+      process.env.DATABASE_URL_TEST ??
+      'postgresql://unit:unit@127.0.0.1:5432/truth_analytics_unit';
+    const expectedDirect = process.env.DATABASE_URL_TEST
+      ? (process.env.DATABASE_URL_TEST_DIRECT ?? process.env.DATABASE_URL_TEST)
+      : expectedUrl;
+
+    expect(process.env.POSTGRES_URL).toBe(expectedUrl);
+    expect(process.env.POSTGRES_URL_DIRECT).toBe(expectedDirect);
   });
 });
