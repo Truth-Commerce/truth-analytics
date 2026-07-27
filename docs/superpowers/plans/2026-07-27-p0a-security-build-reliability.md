@@ -366,7 +366,8 @@ Use `Promise.resolve({ id: 'nao-uuid' })` in the invalid-ID case.
 Run:
 
 ```bash
-rg -n 'headers\(\)\.|cookies\(\)\.|params\s*:\s*\{|searchParams\s*:\s*\{' src tests
+rg -n 'headers\(\)\.|cookies\(\)\.' src tests
+rg -n 'params\s*:\s*\{|searchParams\s*:\s*\{' src/app tests
 rg -n "UnsafeUnwrapped|@next-codemod" src
 ```
 
@@ -687,7 +688,7 @@ Expected: all non-DB commands PASS. Do not run `npm run test:e2e` locally withou
 - [ ] **Step 4: Commit CI**
 
 ```bash
-git add .github/workflows/ci.yml package.json
+git add .github/workflows/ci.yml package.json scripts/migrate-test.ts
 git commit -m "ci: gate builds with disposable PostgreSQL"
 ```
 
