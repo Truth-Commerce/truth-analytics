@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: truth
+          POSTGRES_PASSWORD: truth
+          POSTGRES_DB: truth_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U truth -d truth_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgresql://truth:truth@127.0.0.1:5432/truth_test
+      POSTGRES_URL_DIRECT: postgresql://truth:truth@127.0.0.1:5432/truth_test
+      DATABASE_URL_TEST: postgresql://truth:truth@127.0.0.1:5432/truth_test
+      DATABASE_URL_TEST_DIRECT: postgresql://truth:truth@127.0.0.1:5432/truth_test
+      AUTH_SECRET: truth-analytics-ci-auth-secret
+      APP_URL: http://localhost:3100
+      ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run db:migrate:test
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
