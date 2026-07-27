@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gt, lt, lte, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
+import { hasPostgresErrorCode } from '@/db/postgres-error';
 import { reports } from '@/db/schema';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 
@@ -266,7 +267,7 @@ export async function createQueuedReport(
     return row.id;
   } catch (e: unknown) {
     // 23505 = unique_violation no índice parcial reports_org_ativo_uq
-    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+    if (hasPostgresErrorCode(e, '23505')) {
       throw new Error('relatorio_em_andamento');
     }
     throw e;

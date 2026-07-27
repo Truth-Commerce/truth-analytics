@@ -1,11 +1,18 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import postgres from 'postgres';
+import { config } from 'dotenv';
+import { resolveTestDatabaseUrls } from '../src/lib/test-database-safety';
+
+config({ path: '.env.local' });
 
 async function main() {
-  const url = process.env.DATABASE_URL_TEST_DIRECT ?? process.env.DATABASE_URL_TEST;
-  if (!url) throw new Error('DATABASE_URL_TEST ausente — defina no .env.local');
-  const sql = postgres(url, { prepare: false, max: 1 });
+  // Validate before importing postgres/drizzle, which could otherwise create a
+  // client for an unsafe target.
+  const { directUrl } = resolveTestDatabaseUrls(process.env);
+  const [{ drizzle }, { migrate }, { default: postgres }] = await Promise.all([
+    import('drizzle-orm/postgres-js'),
+    import('drizzle-orm/postgres-js/migrator'),
+    import('postgres'),
+  ]);
+  const sql = postgres(directUrl, { prepare: false, max: 1 });
   try {
     await migrate(drizzle(sql), { migrationsFolder: './src/db/migrations' });
     console.info('[migrate-test] branch de teste migrado com sucesso');

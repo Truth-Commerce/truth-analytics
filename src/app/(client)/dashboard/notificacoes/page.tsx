@@ -11,7 +11,8 @@ const PAGE_SIZE = 20;
 
 export const metadata: Metadata = { title: 'Notificações' };
 
-export default async function NotificacoesPage({ searchParams }: { searchParams: { pagina?: string } }) {
+export default async function NotificacoesPage(props: { searchParams: Promise<{ pagina?: string }> }) {
+  const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
   const pagina = Math.max(1, Number(searchParams.pagina ?? '1') || 1);
   const { items, total } = await listNotificationsPage(access.id, pagina, PAGE_SIZE);

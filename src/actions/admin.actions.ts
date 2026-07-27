@@ -498,7 +498,8 @@ export async function iniciarImpersonationAction(orgId: string): Promise<void> {
   }
 
   const valor = assinarImpersonation(org.id, admin.id, new Date());
-  cookies().set(IMPERSONATION_COOKIE, valor, {
+  const cookieStore = await cookies();
+  cookieStore.set(IMPERSONATION_COOKIE, valor, {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
@@ -525,9 +526,10 @@ export async function iniciarImpersonationAction(orgId: string): Promise<void> {
 export async function encerrarImpersonationAction(): Promise<void> {
   const admin = await requireAdmin();
 
-  const cookieValue = cookies().get(IMPERSONATION_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const cookieValue = cookieStore.get(IMPERSONATION_COOKIE)?.value;
   const verificado = cookieValue ? verificarImpersonation(cookieValue, new Date()) : null;
-  cookies().delete(IMPERSONATION_COOKIE);
+  cookieStore.delete(IMPERSONATION_COOKIE);
 
   await recordAudit({
     orgId: verificado?.orgId ?? null,

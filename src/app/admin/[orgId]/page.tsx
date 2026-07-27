@@ -40,12 +40,14 @@ const SAUDE_BADGE = {
 
 import type { Metadata } from 'next';
 
-export async function generateMetadata({ params }: { params: { orgId: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ orgId: string }> }): Promise<Metadata> {
+  const params = await props.params;
   const org = await getOrganizationById(params.orgId);
   return { title: org ? `${org.name} · Cliente` : 'Cliente' };
 }
 
-export default async function AdminOrgPage({ params }: { params: { orgId: string } }) {
+export default async function AdminOrgPage(props: { params: Promise<{ orgId: string }> }) {
+  const params = await props.params;
   await requireAdmin();
   const org = await getOrganizationById(params.orgId);
   if (!org) notFound();

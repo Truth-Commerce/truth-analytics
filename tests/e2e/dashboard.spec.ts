@@ -118,10 +118,27 @@ test('menu móvel é modal e devolve o foco ao gatilho ao fechar com Escape', as
 
   await page.goto('/dashboard');
   const trigger = page.getByRole('button', { name: 'Abrir menu' });
+  await expect(trigger.locator('xpath=ancestor::header')).toHaveCount(1);
   await trigger.click();
 
   const dialog = page.getByRole('dialog', { name: 'Navegação principal' });
   await expect(dialog).toBeVisible();
+  const overlay = dialog.locator('xpath=..');
+  const overlayGeometry = await overlay.evaluate((element) => {
+    const { height, width, x, y } = element.getBoundingClientRect();
+    return {
+      height,
+      parentIsBody: element.parentElement === document.body,
+      width,
+      x,
+      y,
+    };
+  });
+  expect(overlayGeometry.parentIsBody).toBe(true);
+  expect(Math.abs(overlayGeometry.x)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(overlayGeometry.y)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(overlayGeometry.width - 390)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(overlayGeometry.height - 844)).toBeLessThanOrEqual(0.5);
   await expect(dialog.getByRole('button', { name: 'Fechar menu' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();

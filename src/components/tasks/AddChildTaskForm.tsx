@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { criarSubtarefaFormAction, type TaskActionState } from '@/actions/tasks.actions';
@@ -45,13 +45,12 @@ export function AddChildTaskForm({
   filhoNivel: Extract<Nivel, 'task' | 'subtask'>;
   orgId?: string;
 }) {
-  const [state, action] = useFormState(criarSubtarefaFormAction, initial);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   const [aberto, setAberto] = useState(false);
-
-  useEffect(() => {
-    if (state.ok) {
+  const [state, action] = useFormState(async (previousState: TaskActionState, formData: FormData) => {
+    const nextState = await criarSubtarefaFormAction(previousState, formData);
+    if (nextState.ok) {
       toast({
         variant: 'success',
         title: filhoNivel === 'task' ? 'Task filha criada' : 'Subtarefa criada',
@@ -59,10 +58,11 @@ export function AddChildTaskForm({
       formRef.current?.reset();
       setAberto(false);
     }
-    if (state.error) {
-      toast({ variant: 'error', title: 'Não foi possível criar.', description: state.error });
+    if (nextState.error) {
+      toast({ variant: 'error', title: 'Não foi possível criar.', description: nextState.error });
     }
-  }, [state, toast, filhoNivel]);
+    return nextState;
+  }, initial);
 
   if (!aberto) {
     return (

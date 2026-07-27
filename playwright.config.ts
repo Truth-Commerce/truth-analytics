@@ -1,16 +1,11 @@
 import { defineConfig } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
+import { resolveTestDatabaseUrls } from './src/lib/test-database-safety';
 
 loadEnv({ path: '.env.local' });
 
-const testDbUrl = process.env.DATABASE_URL_TEST;
-const testDbDirect = process.env.DATABASE_URL_TEST_DIRECT ?? testDbUrl;
-
-if (!testDbUrl) {
-  throw new Error(
-    'DATABASE_URL_TEST ausente — o E2E precisa do branch de teste; recuso rodar contra produção.',
-  );
-}
+const { databaseUrl: testDbUrl, directUrl: testDbDirect } =
+  resolveTestDatabaseUrls(process.env);
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -29,7 +24,7 @@ export default defineConfig({
     // Força o dev server do E2E a usar o branch `test`, NUNCA produção (`main`).
     env: {
       POSTGRES_URL: testDbUrl,
-      POSTGRES_URL_DIRECT: testDbDirect as string,
+      POSTGRES_URL_DIRECT: testDbDirect,
       AUTH_SECRET: process.env.AUTH_SECRET as string,
       APP_URL: 'http://localhost:3100',
     },

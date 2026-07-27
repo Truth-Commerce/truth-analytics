@@ -47,7 +47,8 @@ type SearchParams = {
   page?: string;
 };
 
-export default async function OperacoesPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function OperacoesPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   await requireAdmin();
   const agora = new Date();
 

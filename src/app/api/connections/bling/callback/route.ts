@@ -15,8 +15,9 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
-  const expected = cookies().get('bling_oauth_state')?.value;
-  cookies().delete('bling_oauth_state');
+  const cookieStore = await cookies();
+  const expected = cookieStore.get('bling_oauth_state')?.value;
+  cookieStore.delete('bling_oauth_state');
 
   if (!code || !state || !expected || state !== expected) {
     return NextResponse.redirect(new URL('/conexoes?erro=state_invalido', base));

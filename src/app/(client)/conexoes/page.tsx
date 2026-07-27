@@ -15,11 +15,10 @@ import { feedbackDeCallback } from './callback-feedback';
 
 export const metadata: Metadata = { title: 'Conexões' };
 
-export default async function ConexoesPage({
-  searchParams,
-}: {
-  searchParams?: { ok?: string; erro?: string };
+export default async function ConexoesPage(props: {
+  searchParams?: Promise<{ ok?: string; erro?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
   const [conn, produtos, settings] = await Promise.all([
     getConnection(access.orgId),

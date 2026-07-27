@@ -41,7 +41,7 @@ export async function changePasswordAction(
   const user = await getUserAuthById(access.id);
   if (!user) return { error: 'Sessão inválida. Entre novamente.' };
 
-  const forwarded = headers().get('x-forwarded-for');
+  const forwarded = (await headers()).get('x-forwarded-for');
   const ip = forwarded ? forwarded.split(',')[0]!.trim() : null;
 
   if (await isTrocaSenhaRateLimited(user.email)) {

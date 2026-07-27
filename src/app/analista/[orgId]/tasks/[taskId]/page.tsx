@@ -11,11 +11,12 @@ import { atorFromRole } from '@/modules/tasks/task.types';
 import { getPaiEFilhas, getTaskById, listLabelsUsadas } from '@/modules/tasks/task.repository';
 import { listWatchers } from '@/modules/tasks/watcher.repository';
 
-export default async function AnalistaTaskDetalhePage({
-  params,
-}: {
-  params: { orgId: string; taskId: string };
-}) {
+export default async function AnalistaTaskDetalhePage(
+  props: {
+    params: Promise<{ orgId: string; taskId: string }>;
+  }
+) {
+  const params = await props.params;
   const access = await requireAnalista();
 
   try {

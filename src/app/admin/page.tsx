@@ -21,11 +21,12 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Admin · Clientes' };
 
-export default async function AdminPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; page?: string };
-}) {
+export default async function AdminPage(
+  props: {
+    searchParams: Promise<{ q?: string; page?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const access = await requireAdmin();
   const q = searchParams.q?.trim() || undefined;
   const page = Math.max(1, Number(searchParams.page) || 1);

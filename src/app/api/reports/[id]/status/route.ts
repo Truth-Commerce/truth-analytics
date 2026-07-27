@@ -17,14 +17,15 @@ const idSchema = z.string().uuid();
  */
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  const { id } = await params;
   const access = await getSessionContext();
   if (!access) {
     return NextResponse.json({ error: 'nao_autenticado' }, { status: 401 });
   }
 
-  const parsed = idSchema.safeParse(params.id);
+  const parsed = idSchema.safeParse(id);
   if (!parsed.success) {
     return NextResponse.json({ error: 'nao_encontrado' }, { status: 404 });
   }

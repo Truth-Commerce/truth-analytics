@@ -9,8 +9,12 @@ import { useToast } from '@/components/ui/Toast';
 const initial: ConnState = {};
 
 export function GeracaoAutomaticaToggle({ ativa }: { ativa: boolean }) {
-  const [state, action] = useFormState(toggleGeracaoAutomaticaAction, initial);
   const [checked, setChecked] = useState(ativa);
+  const [state, action] = useFormState(async (previousState: ConnState, formData: FormData) => {
+    const nextState = await toggleGeracaoAutomaticaAction(previousState, formData);
+    if (nextState.error) setChecked(ativa);
+    return nextState;
+  }, initial);
   const ativaFieldRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const { toast } = useToast();
@@ -18,7 +22,6 @@ export function GeracaoAutomaticaToggle({ ativa }: { ativa: boolean }) {
   useEffect(() => {
     if (state.error) {
       toast({ title: 'Não foi possível salvar.', description: state.error, variant: 'error' });
-      setChecked(ativa);
     }
   }, [state, toast, ativa]);
 

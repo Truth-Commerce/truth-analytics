@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, ilike, or } from 'drizzle-orm';
 
 import { db } from '@/db/client';
+import { hasPostgresErrorCode } from '@/db/postgres-error';
 import { organizations, users } from '@/db/schema';
 import { hashPassword } from '@/modules/auth/password';
 import type { OrgStatus, Plano, UserAccess, UserRole } from '@/modules/auth/user.types';
@@ -72,7 +73,7 @@ export async function createOrgWithUser(input: {
 
       return { orgId: org.id, userId: user.id };
     } catch (e: unknown) {
-      if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+      if (hasPostgresErrorCode(e, '23505')) {
         throw new Error('email_em_uso');
       }
       throw e;
@@ -140,7 +141,7 @@ export async function createOrgClientUser(input: {
       .returning({ id: users.id });
     return { userId: user.id };
   } catch (e: unknown) {
-    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+    if (hasPostgresErrorCode(e, '23505')) {
       throw new Error('email_em_uso');
     }
     throw e;
@@ -187,7 +188,7 @@ export async function createUserInOrg(input: {
       .returning({ id: users.id });
     return { userId: user.id };
   } catch (e: unknown) {
-    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+    if (hasPostgresErrorCode(e, '23505')) {
       throw new Error('email_em_uso');
     }
     throw e;
