@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, exists, ilike, not } from 'drizzle-orm';
 
 import { db } from '@/db/client';
+import { hasPostgresErrorCode } from '@/db/postgres-error';
 import { connections, organizations, reports, users } from '@/db/schema';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import type { OrgStatus, Plano } from '@/modules/auth/user.types';
@@ -281,7 +282,7 @@ export async function requeueFailedReport(input: {
   } catch (e) {
     // 23505 = unique_violation no índice parcial reports_org_ativo_uq:
     // já existe um report queued/running nesta org.
-    if (e instanceof Error && 'code' in e && (e as { code: string }).code === '23505') {
+    if (hasPostgresErrorCode(e, '23505')) {
       throw new Error('relatorio_em_andamento');
     }
     throw e;
