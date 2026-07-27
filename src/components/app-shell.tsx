@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -39,6 +40,10 @@ interface NavigationListProps {
 
 export function mobileMenuKey(path: string) {
   return path;
+}
+
+export function mobileMenuPortalTarget(documentRef: Pick<Document, 'body'>) {
+  return documentRef.body;
 }
 
 const SIDEBAR_STORAGE_EVENT = 'truth:sidebar-collapsed';
@@ -201,7 +206,8 @@ function MobileMenu({
         <NavigationIcon name="menu" />
       </button>
 
-      {menuOpen ? (
+      {menuOpen
+        ? createPortal(
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
             type="button"
@@ -258,8 +264,10 @@ function MobileMenu({
               <SignOutButton />
             </div>
           </aside>
-        </div>
-      ) : null}
+        </div>,
+        mobileMenuPortalTarget(document),
+      )
+        : null}
     </>
   );
 }

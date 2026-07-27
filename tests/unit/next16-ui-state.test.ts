@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mobileMenuKey } from '@/components/app-shell';
+import { mobileMenuKey, mobileMenuPortalTarget } from '@/components/app-shell';
 import {
   shouldFinishCreateTemplate,
   shouldFinishUpdateTemplate,
@@ -21,5 +21,11 @@ describe('estado concorrente da UI no Next 16', () => {
   it('troca a identidade do menu móvel em cada rota', () => {
     expect(mobileMenuKey('/dashboard')).not.toBe(mobileMenuKey('/conexoes'));
     expect(mobileMenuKey('/dashboard')).toBe('/dashboard');
+  });
+
+  it('porta o overlay móvel para o body, fora do header que cria containing block', () => {
+    const body = {} as HTMLElement;
+
+    expect(mobileMenuPortalTarget({ body } as Pick<Document, 'body'>)).toBe(body);
   });
 });
