@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, m } from 'framer-motion';
 
@@ -19,6 +19,10 @@ interface DialogProps {
   'data-testid'?: string;
 }
 
+function subscribeToClient() {
+  return () => {};
+}
+
 /**
  * Primitivo modal único da casa: portal no body, focus-trap com loop de Tab,
  * inert/aria-hidden no #app-content, scroll-lock do body, Escape, restauração
@@ -35,11 +39,13 @@ export function Dialog({
   children,
   'data-testid': testid,
 }: DialogProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(
+    subscribeToClient,
+    () => true,
+    () => false,
+  );
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => setMounted(true), []);
 
   // Scroll-lock + inert no fundo + foco inicial + restauração ao fechar.
   useEffect(() => {

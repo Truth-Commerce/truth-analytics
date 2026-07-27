@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { createTasksFromReportAction, type TaskActionState } from '@/actions/tasks.actions';
@@ -93,19 +93,19 @@ export function AchadosCards({
   titulosExistentes: string[];
   playbooksPorTipo?: Partial<Record<TaskTipo, { id: string; titulo: string }>>;
 }) {
-  const [state, action] = useFormState(createTasksFromReportAction, initial);
   const { toast } = useToast();
   const itensInputRef = useRef<HTMLInputElement>(null);
   const [aberto, setAberto] = useState<number | null>(null);
   const [prazos, setPrazos] = useState<Record<number, string>>({});
   const [usarPlaybook, setUsarPlaybook] = useState<Record<number, boolean>>({});
-
-  useEffect(() => {
-    if (state.ok && typeof state.criadas === 'number') {
-      toast({ variant: 'success', title: `${state.criadas} tarefa(s) criada(s) no Plano de Ação` });
+  const [state, action] = useFormState(async (previousState: State, formData: FormData) => {
+    const nextState = await createTasksFromReportAction(previousState, formData);
+    if (nextState.ok && typeof nextState.criadas === 'number') {
+      toast({ variant: 'success', title: `${nextState.criadas} tarefa(s) criada(s) no Plano de Ação` });
       setAberto(null);
     }
-  }, [state, toast]);
+    return nextState;
+  }, initial);
 
   if (achados.length === 0) return null;
 

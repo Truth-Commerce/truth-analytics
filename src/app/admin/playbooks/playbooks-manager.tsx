@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFormState } from 'react-dom';
 
 import {
@@ -40,21 +40,30 @@ function ToggleAtivo({ id, ativo }: { id: string; ativo: boolean }) {
 
 export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
   const [editing, setEditing] = useState<TaskTemplate | null>(null);
-  const [createState, createAction] = useFormState(createTemplateAction, initial);
-  const [updateState, runUpdateAction] = useFormState(updateTemplateAction, initial);
   const formRef = useRef<HTMLFormElement>(null);
+  const [createState, createAction] = useFormState(
+    async (previousState: TemplateActionState, formData: FormData) => {
+      const nextState = await createTemplateAction(previousState, formData);
+      if (nextState.ok) formRef.current?.reset();
+      return nextState;
+    },
+    initial,
+  );
+  const [updateState, runUpdateAction] = useFormState(
+    async (previousState: TemplateActionState, formData: FormData) => {
+      const nextState = await updateTemplateAction(previousState, formData);
+      if (nextState.ok) {
+        formRef.current?.reset();
+        setEditing(null);
+      }
+      return nextState;
+    },
+    initial,
+  );
 
   const isEditing = editing !== null;
   const action = isEditing ? runUpdateAction : createAction;
   const state = isEditing ? updateState : createState;
-
-  useEffect(() => {
-    if (state.ok) {
-      formRef.current?.reset();
-      setEditing(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.ok]);
 
   return (
     <div className="space-y-6">

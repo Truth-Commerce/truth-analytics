@@ -70,13 +70,14 @@ export function NotificationBell({ verTodasHref }: { verTodasHref?: string } = {
   }, []);
 
   useEffect(() => {
-    fetchNotifications();
+    const initialFetch = window.setTimeout(fetchNotifications, 0);
     const interval = setInterval(fetchNotifications, POLL_INTERVAL_MS);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') fetchNotifications();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      window.clearTimeout(initialFetch);
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
     };

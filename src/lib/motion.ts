@@ -37,10 +37,7 @@ export function useCountUp(target: number, durationS = 1.1): number {
   const [value, setValue] = useState(reduced ? target : 0);
 
   useEffect(() => {
-    if (reduced) {
-      setValue(target);
-      return;
-    }
+    if (reduced) return;
     const controls = animate(0, target, {
       duration: durationS,
       ease: EASE_TRUTH,
@@ -49,5 +46,5 @@ export function useCountUp(target: number, durationS = 1.1): number {
     return () => controls.stop();
   }, [target, durationS, reduced]);
 
-  return value;
+  return reduced ? target : value;
 }

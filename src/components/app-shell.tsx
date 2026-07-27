@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -35,6 +35,25 @@ interface NavigationListProps {
   items: NavItem[];
   onNavigate?: () => void;
   planoDeAcaoCount: number;
+}
+
+const SIDEBAR_STORAGE_EVENT = 'truth:sidebar-collapsed';
+
+function subscribeToSidebarCollapsed(onStoreChange: () => void) {
+  window.addEventListener('storage', onStoreChange);
+  window.addEventListener(SIDEBAR_STORAGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener('storage', onStoreChange);
+    window.removeEventListener(SIDEBAR_STORAGE_EVENT, onStoreChange);
+  };
+}
+
+function getSidebarCollapsed() {
+  return parseSidebarCollapsed(window.localStorage.getItem(SIDEBAR_STORAGE_KEY));
+}
+
+function subscribeToNothing() {
+  return () => {};
 }
 
 function NavigationList({
@@ -113,13 +132,19 @@ function SignOutButton({ collapsed = false }: { collapsed?: boolean }) {
 }
 
 export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }: AppShellProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [atalho, setAtalho] = useState('Ctrl K');
+  const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const mobileMenuCloseRef = useRef<HTMLButtonElement>(null);
   const restoreMobileMenuFocusRef = useRef(false);
   const pathname = usePathname();
+  const currentPath = pathname ?? '';
+  const menuOpen = mobileMenuPath === currentPath;
+  const collapsed = useSyncExternalStore(subscribeToSidebarCollapsed, getSidebarCollapsed, () => false);
+  const atalho = useSyncExternalStore(
+    subscribeToNothing,
+    () => atalhoPaletaLabel(navigator.userAgent),
+    () => 'Ctrl K',
+  );
 
   const items = navItems(variant);
   const activeHref = hrefAtivo(pathname ?? '', items.map((item) => item.href));
@@ -128,22 +153,13 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
   const verTodasHref = variant === 'client' ? '/dashboard/notificacoes' : undefined;
 
   useEffect(() => {
-    setAtalho(atalhoPaletaLabel(navigator.userAgent));
-    setCollapsed(parseSidebarCollapsed(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)));
-  }, []);
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
     if (!menuOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         restoreMobileMenuFocusRef.current = true;
-        setMenuOpen(false);
+        setMobileMenuPath(null);
       }
     };
     document.addEventListener('keydown', handleKey);
@@ -167,15 +183,12 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
 
   function closeMobileMenu() {
     restoreMobileMenuFocusRef.current = true;
-    setMenuOpen(false);
+    setMobileMenuPath(null);
   }
 
   function toggleCollapsed() {
-    setCollapsed((current) => {
-      const next = !current;
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
-      return next;
-    });
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(!collapsed));
+    window.dispatchEvent(new Event(SIDEBAR_STORAGE_EVENT));
   }
 
   function openCommandPalette() {
@@ -274,7 +287,7 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
                 aria-label="Abrir menu"
                 aria-expanded={menuOpen}
                 aria-controls="mobile-sidebar"
-                onClick={() => setMenuOpen(true)}
+                onClick={() => setMobileMenuPath(currentPath)}
                 className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-line bg-paper-1 text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50 lg:hidden"
               >
                 <NavigationIcon name="menu" />
