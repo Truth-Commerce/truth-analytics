@@ -13,6 +13,14 @@ describe('ambiente hermético de testes', () => {
     );
   });
 
+  it('roteia URLs inertes de integração, incluindo o fallback da URL direta', () => {
+    if (!process.env.DATABASE_URL_TEST) return;
+    expect(process.env.POSTGRES_URL).toBe(process.env.DATABASE_URL_TEST);
+    expect(process.env.POSTGRES_URL_DIRECT).toBe(
+      process.env.DATABASE_URL_TEST_DIRECT ?? process.env.DATABASE_URL_TEST,
+    );
+  });
+
   it('nunca deixa URL de produção no processo de teste', () => {
     expect(process.env.POSTGRES_URL).not.toMatch(/neon\.tech|vercel-storage|production|main/i);
   });
