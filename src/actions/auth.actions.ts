@@ -47,7 +47,7 @@ export async function signUpAction(
     return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
   }
 
-  const forwarded = headers().get('x-forwarded-for');
+  const forwarded = (await headers()).get('x-forwarded-for');
   const ip = forwarded ? forwarded.split(',')[0]!.trim() : null;
   if (await isSignupRateLimited(ip)) {
     return { error: 'Muitos cadastros recentes. Tente novamente em alguns minutos.' };
@@ -90,7 +90,7 @@ export async function signInAction(
   }
   const { email, senha } = parsed.data;
 
-  const forwarded = headers().get('x-forwarded-for');
+  const forwarded = (await headers()).get('x-forwarded-for');
   const ip = forwarded ? forwarded.split(',')[0]!.trim() : null;
 
   if (await isLoginRateLimited(email, ip)) {

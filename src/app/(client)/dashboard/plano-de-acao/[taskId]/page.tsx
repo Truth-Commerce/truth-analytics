@@ -9,7 +9,8 @@ import { getTaskImpact } from '@/modules/tasks/task-impact';
 import { getPaiEFilhas, getTaskById, listLabelsUsadas } from '@/modules/tasks/task.repository';
 import { listWatchers } from '@/modules/tasks/watcher.repository';
 
-export default async function TaskDetalhePage({ params }: { params: { taskId: string } }) {
+export default async function TaskDetalhePage(props: { params: Promise<{ taskId: string }> }) {
+  const params = await props.params;
   const access = await requireActiveOrg();
   const task = await getTaskById(params.taskId, access.orgId);
 

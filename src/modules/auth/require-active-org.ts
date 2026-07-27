@@ -28,7 +28,8 @@ async function lerImpersonacaoAtiva(
 ): Promise<{ org: ClientOrganization; adminId: string } | null> {
   if (realAccess.role !== 'admin_truth') return null;
 
-  const cookieValue = cookies().get(IMPERSONATION_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const cookieValue = cookieStore.get(IMPERSONATION_COOKIE)?.value;
   if (!cookieValue) return null;
 
   const verificado = verificarImpersonation(cookieValue, new Date());
@@ -90,7 +91,8 @@ export async function requireActiveOrgParaMutacao(): Promise<UserAccess> {
  * construção), só por portas de entrada diferentes.
  */
 export async function assertNaoImpersonando(): Promise<void> {
-  const cookieValue = cookies().get(IMPERSONATION_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const cookieValue = cookieStore.get(IMPERSONATION_COOKIE)?.value;
   if (!cookieValue) return;
   if (verificarImpersonation(cookieValue, new Date())) {
     throw new Error('Modo visualização: ações desabilitadas');

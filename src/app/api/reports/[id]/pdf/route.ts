@@ -7,9 +7,13 @@ import { formatData, formatPeriodo, slugify } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
   const access = await requireActiveOrg();
-  const rel = await getReportById(params.id, access.orgId);
+  const rel = await getReportById(id, access.orgId);
   if (!rel || rel.status !== 'done' || !rel.metricas) {
     return new Response('Relatório não disponível para exportação.', {
       status: 404,

@@ -24,13 +24,13 @@ const req = new Request(`http://localhost:3000/api/reports/${ID}/status`);
 describe('GET /api/reports/[id]/status', () => {
   it('sem sessão → 401', async () => {
     getSessionContextMock.mockResolvedValueOnce(null);
-    const res = await GET(req, { params: { id: ID } });
+    const res = await GET(req, { params: Promise.resolve({ id: ID }) });
     expect(res.status).toBe(401);
   });
 
   it('uuid inválido → 404 sem consultar o banco', async () => {
     getSessionContextMock.mockResolvedValueOnce({ orgId: 'org-1' });
-    const res = await GET(req, { params: { id: 'nao-uuid' } });
+    const res = await GET(req, { params: Promise.resolve({ id: 'nao-uuid' }) });
     expect(res.status).toBe(404);
   });
 
@@ -38,7 +38,7 @@ describe('GET /api/reports/[id]/status', () => {
     getSessionContextMock.mockResolvedValueOnce({ orgId: 'org-1' });
     selectResult.length = 0;
     selectResult.push({ status: 'running', etapa: 'analisando_ia' });
-    const res = await GET(req, { params: { id: ID } });
+    const res = await GET(req, { params: Promise.resolve({ id: ID }) });
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toEqual({ status: 'running', etapa: 'analisando_ia' });
@@ -47,7 +47,7 @@ describe('GET /api/reports/[id]/status', () => {
   it('report inexistente/da outra org → 404', async () => {
     getSessionContextMock.mockResolvedValueOnce({ orgId: 'org-1' });
     selectResult.length = 0;
-    const res = await GET(req, { params: { id: ID } });
+    const res = await GET(req, { params: Promise.resolve({ id: ID }) });
     expect(res.status).toBe(404);
   });
 });

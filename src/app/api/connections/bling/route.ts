@@ -12,7 +12,8 @@ export async function GET() {
   }
   try {
     const state = randomBytes(16).toString('hex');
-    cookies().set('bling_oauth_state', state, {
+    const cookieStore = await cookies();
+    cookieStore.set('bling_oauth_state', state, {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',

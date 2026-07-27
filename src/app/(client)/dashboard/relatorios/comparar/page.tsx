@@ -50,11 +50,12 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Comparar períodos' };
 
-export default async function CompararPage({
-  searchParams,
-}: {
-  searchParams: { a?: string; b?: string };
-}) {
+export default async function CompararPage(
+  props: {
+    searchParams: Promise<{ a?: string; b?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
   const dones = await listDoneReports(access.orgId);
 

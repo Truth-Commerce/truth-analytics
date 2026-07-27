@@ -25,14 +25,16 @@ import { HeroKpisFaixa } from './hero-kpis';
 
 import type { Metadata } from 'next';
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await props.params;
   const access = await requireActiveOrg();
   const rel = await getReportById(params.id, access.orgId);
   if (!rel) return { title: 'Relatório' };
   return { title: `Relatório ${formatPeriodo(rel.periodoInicio, rel.periodoFim)}` };
 }
 
-export default async function RelatorioDetalhePage({ params }: { params: { id: string } }) {
+export default async function RelatorioDetalhePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const access = await requireActiveOrg();
   const rel = await getReportById(params.id, access.orgId);
 

@@ -28,7 +28,7 @@ export async function requestPasswordResetAction(
     return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
   }
 
-  const forwarded = headers().get('x-forwarded-for');
+  const forwarded = (await headers()).get('x-forwarded-for');
   const ip = forwarded ? forwarded.split(',')[0]!.trim() : null;
 
   if (await isRateLimitedSilencioso(parsed.data.email, ip)) {
