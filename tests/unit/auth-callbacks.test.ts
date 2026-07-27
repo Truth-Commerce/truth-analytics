@@ -48,4 +48,12 @@ describe('authConfig.callbacks.authorized', () => {
     });
     expect(logado).toBe(true);
   });
+
+  it('falha fechada quando Auth.js entrega objeto com erro sem usuário', () => {
+    const result = authConfig.callbacks.authorized!({
+      auth: { user: null, error: 'Configuration' } as never,
+      request: { nextUrl: new URL('http://localhost/dashboard') } as never,
+    });
+    expect(result).toBe(false);
+  });
 });
