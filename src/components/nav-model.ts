@@ -42,8 +42,21 @@ export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
   }
   if (variant === 'analista') {
     return [
+      { href: '/dashboard', label: 'Visão geral', icon: 'dashboard', description: 'Visão geral do negócio' },
       { href: '/analista', label: 'Carteira', icon: 'portfolio', description: 'Clientes sob acompanhamento' },
       { href: '/analista/comparativo', label: 'Comparativo', icon: 'compare', description: 'Compare contas e períodos' },
+      {
+        href: '/dashboard/plano-de-acao',
+        label: 'Plano de Ação',
+        icon: 'tasks',
+        description: 'Prioridades e execução',
+        badge: true,
+      },
+      { href: '/dashboard/estoque', label: 'Estoque', icon: 'inventory', description: 'Cobertura e disponibilidade' },
+      { href: '/dashboard/kits', label: 'Kits', icon: 'kits', description: 'Oportunidades de combinação' },
+      { href: '/dashboard/calendario', label: 'Calendário', icon: 'calendar', description: 'Planejamento comercial' },
+      { href: '/conexoes', label: 'Conexões', icon: 'connections', description: 'Integrações e canais' },
+      { href: '/configuracoes', label: 'Configurações', icon: 'settings', description: 'Preferências da conta' },
     ];
   }
   return [

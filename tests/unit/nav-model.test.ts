@@ -36,11 +36,30 @@ describe('navItems — nav por papel', () => {
     expect(hrefs).not.toContain('/conexoes');
   });
 
-  it('analista vê a Carteira e o Comparativo (H4/T13)', () => {
+  it('analista vê o menu operacional unificado na ordem aprovada', () => {
     expect(navItems('analista')).toEqual([
+      { href: '/dashboard', label: 'Visão geral', icon: 'dashboard', description: 'Visão geral do negócio' },
       { href: '/analista', label: 'Carteira', icon: 'portfolio', description: 'Clientes sob acompanhamento' },
       { href: '/analista/comparativo', label: 'Comparativo', icon: 'compare', description: 'Compare contas e períodos' },
+      {
+        href: '/dashboard/plano-de-acao',
+        label: 'Plano de Ação',
+        icon: 'tasks',
+        description: 'Prioridades e execução',
+        badge: true,
+      },
+      { href: '/dashboard/estoque', label: 'Estoque', icon: 'inventory', description: 'Cobertura e disponibilidade' },
+      { href: '/dashboard/kits', label: 'Kits', icon: 'kits', description: 'Oportunidades de combinação' },
+      { href: '/dashboard/calendario', label: 'Calendário', icon: 'calendar', description: 'Planejamento comercial' },
+      { href: '/conexoes', label: 'Conexões', icon: 'connections', description: 'Integrações e canais' },
+      { href: '/configuracoes', label: 'Configurações', icon: 'settings', description: 'Preferências da conta' },
     ]);
+  });
+
+  it('cliente não recebe áreas exclusivas do analista', () => {
+    const hrefs = navItems('client').map((item) => item.href);
+    expect(hrefs).not.toContain('/analista');
+    expect(hrefs).not.toContain('/analista/comparativo');
   });
 });
 
