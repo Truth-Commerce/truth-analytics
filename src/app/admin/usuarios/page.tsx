@@ -30,7 +30,8 @@ const ROLE_BADGE: Record<UserRole, { variant: 'mono' | 'success' | 'neutral'; la
 
 type SearchParams = { q?: string; page?: string };
 
-export default async function AdminUsuariosPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function AdminUsuariosPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   await requireAdmin();
 
   const page = Math.max(1, Number(searchParams.page) || 1);
