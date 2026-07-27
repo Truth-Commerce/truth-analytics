@@ -26,6 +26,19 @@ import {
 
 const initial: TemplateActionState = {};
 
+export function shouldFinishCreateTemplate(activeGeneration: number, completedGeneration: number) {
+  return activeGeneration === completedGeneration;
+}
+
+export function shouldFinishUpdateTemplate(
+  activeTemplateId: string | null,
+  activeGeneration: number,
+  completedTemplateId: string,
+  completedGeneration: number,
+) {
+  return activeTemplateId === completedTemplateId && activeGeneration === completedGeneration;
+}
+
 function ToggleAtivo({ id, ativo }: { id: string; ativo: boolean }) {
   return (
     <form action={toggleTemplateAtivoAction}>
@@ -40,20 +53,39 @@ function ToggleAtivo({ id, ativo }: { id: string; ativo: boolean }) {
 
 export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
   const [editing, setEditing] = useState<TaskTemplate | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
+  const createFormRef = useRef<HTMLFormElement>(null);
+  const updateFormRef = useRef<HTMLFormElement>(null);
+  const activeEditingIdRef = useRef<string | null>(null);
+  const createFormGenerationRef = useRef(0);
+  const updateFormGenerationRef = useRef(0);
   const [createState, createAction] = useFormState(
     async (previousState: TemplateActionState, formData: FormData) => {
+      const completedGeneration = createFormGenerationRef.current;
       const nextState = await createTemplateAction(previousState, formData);
-      if (nextState.ok) formRef.current?.reset();
+      if (nextState.ok && shouldFinishCreateTemplate(createFormGenerationRef.current, completedGeneration)) {
+        createFormRef.current?.reset();
+      }
       return nextState;
     },
     initial,
   );
   const [updateState, runUpdateAction] = useFormState(
     async (previousState: TemplateActionState, formData: FormData) => {
+      const completedGeneration = updateFormGenerationRef.current;
       const nextState = await updateTemplateAction(previousState, formData);
-      if (nextState.ok) {
-        formRef.current?.reset();
+      const completedTemplateId = String(formData.get('id') ?? '');
+      if (
+        nextState.ok &&
+        shouldFinishUpdateTemplate(
+          activeEditingIdRef.current,
+          updateFormGenerationRef.current,
+          completedTemplateId,
+          completedGeneration,
+        )
+      ) {
+        updateFormRef.current?.reset();
+        activeEditingIdRef.current = null;
+        updateFormGenerationRef.current += 1;
         setEditing(null);
       }
       return nextState;
@@ -65,6 +97,20 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
   const action = isEditing ? runUpdateAction : createAction;
   const state = isEditing ? updateState : createState;
 
+  function startEditing(template: TaskTemplate) {
+    createFormGenerationRef.current += 1;
+    updateFormGenerationRef.current += 1;
+    activeEditingIdRef.current = template.id;
+    setEditing(template);
+  }
+
+  function stopEditing() {
+    createFormGenerationRef.current += 1;
+    updateFormGenerationRef.current += 1;
+    activeEditingIdRef.current = null;
+    setEditing(null);
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -72,7 +118,7 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
           {isEditing ? `Editar playbook — ${editing.titulo}` : 'Novo playbook'}
         </h2>
         <form
-          ref={formRef}
+          ref={isEditing ? updateFormRef : createFormRef}
           action={action}
           data-testid="novo-playbook-form"
           key={editing?.id ?? 'novo'}
@@ -147,7 +193,7 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
               {isEditing ? 'Salvar alterações' : 'Criar playbook'}
             </Button>
             {isEditing ? (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(null)}>
+              <Button type="button" variant="ghost" size="sm" onClick={stopEditing}>
                 Cancelar
               </Button>
             ) : null}
@@ -187,7 +233,7 @@ export function PlaybooksManager({ templates }: { templates: TaskTemplate[] }) {
                   </TD>
                   <TD>
                     <div className="flex items-center gap-2">
-                      <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(t)}>
+                      <Button type="button" variant="secondary" size="sm" onClick={() => startEditing(t)}>
                         Editar
                       </Button>
                       <ToggleAtivo id={t.id} ativo={t.ativo} />

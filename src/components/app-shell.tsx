@@ -37,6 +37,10 @@ interface NavigationListProps {
   planoDeAcaoCount: number;
 }
 
+export function mobileMenuKey(path: string) {
+  return path;
+}
+
 const SIDEBAR_STORAGE_EVENT = 'truth:sidebar-collapsed';
 
 function subscribeToSidebarCollapsed(onStoreChange: () => void) {
@@ -131,26 +135,23 @@ function SignOutButton({ collapsed = false }: { collapsed?: boolean }) {
   );
 }
 
-export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }: AppShellProps) {
-  const [mobileMenuPath, setMobileMenuPath] = useState<string | null>(null);
+function MobileMenu({
+  activeHref,
+  contextLabel,
+  items,
+  planoDeAcaoCount,
+  variant,
+}: {
+  activeHref: string | null;
+  contextLabel: string;
+  items: NavItem[];
+  planoDeAcaoCount: number;
+  variant: NonNullable<AppShellProps['variant']>;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const mobileMenuCloseRef = useRef<HTMLButtonElement>(null);
   const restoreMobileMenuFocusRef = useRef(false);
-  const pathname = usePathname();
-  const currentPath = pathname ?? '';
-  const menuOpen = mobileMenuPath === currentPath;
-  const collapsed = useSyncExternalStore(subscribeToSidebarCollapsed, getSidebarCollapsed, () => false);
-  const atalho = useSyncExternalStore(
-    subscribeToNothing,
-    () => atalhoPaletaLabel(navigator.userAgent),
-    () => 'Ctrl K',
-  );
-
-  const items = navItems(variant);
-  const activeHref = hrefAtivo(pathname ?? '', items.map((item) => item.href));
-  const title = pageTitle(pathname ?? '', items);
-  const contextLabel = variantLabel(variant);
-  const verTodasHref = variant === 'client' ? '/dashboard/notificacoes' : undefined;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -159,7 +160,7 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         restoreMobileMenuFocusRef.current = true;
-        setMobileMenuPath(null);
+        setMenuOpen(false);
       }
     };
     document.addEventListener('keydown', handleKey);
@@ -183,8 +184,101 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
 
   function closeMobileMenu() {
     restoreMobileMenuFocusRef.current = true;
-    setMobileMenuPath(null);
+    setMenuOpen(false);
   }
+
+  return (
+    <>
+      <button
+        ref={mobileMenuTriggerRef}
+        type="button"
+        aria-label="Abrir menu"
+        aria-expanded={menuOpen}
+        aria-controls="mobile-sidebar"
+        onClick={() => setMenuOpen(true)}
+        className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-line bg-paper-1 text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50 lg:hidden"
+      >
+        <NavigationIcon name="menu" />
+      </button>
+
+      {menuOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            onClick={closeMobileMenu}
+            className="absolute inset-0 bg-ink/35 backdrop-blur-[2px]"
+          />
+          <aside
+            id="mobile-sidebar"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navegação principal"
+            className="relative flex h-full w-[min(304px,88vw)] flex-col border-r border-line bg-paper-1 px-4 py-4 shadow-2xl"
+          >
+            <div className="mb-6 flex h-11 items-center justify-between px-1">
+              <Link
+                href={logoHref(variant)}
+                aria-label="Truth Analytics — ir ao início"
+                onClick={closeMobileMenu}
+                className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+              >
+                <Logo withMark size="md" />
+              </Link>
+              <button
+                ref={mobileMenuCloseRef}
+                type="button"
+                aria-label="Fechar menu"
+                onClick={closeMobileMenu}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
+              >
+                <NavigationIcon name="close" />
+              </button>
+            </div>
+
+            <div className="mb-3 px-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                Workspace
+              </p>
+            </div>
+            <NavigationList
+              activeHref={activeHref}
+              items={items}
+              onNavigate={closeMobileMenu}
+              planoDeAcaoCount={planoDeAcaoCount}
+            />
+
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="mb-2 rounded-xl bg-paper-2 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                  Ambiente
+                </p>
+                <p className="mt-0.5 text-sm font-medium text-ink">{contextLabel}</p>
+              </div>
+              <SignOutButton />
+            </div>
+          </aside>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }: AppShellProps) {
+  const pathname = usePathname();
+  const currentPath = pathname ?? '';
+  const collapsed = useSyncExternalStore(subscribeToSidebarCollapsed, getSidebarCollapsed, () => false);
+  const atalho = useSyncExternalStore(
+    subscribeToNothing,
+    () => atalhoPaletaLabel(navigator.userAgent),
+    () => 'Ctrl K',
+  );
+
+  const items = navItems(variant);
+  const activeHref = hrefAtivo(pathname ?? '', items.map((item) => item.href));
+  const title = pageTitle(pathname ?? '', items);
+  const contextLabel = variantLabel(variant);
+  const verTodasHref = variant === 'client' ? '/dashboard/notificacoes' : undefined;
 
   function toggleCollapsed() {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(!collapsed));
@@ -281,17 +375,14 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
         <header className="sticky top-0 z-30 border-b border-line bg-bg-base/90 backdrop-blur-xl">
           <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
-              <button
-                ref={mobileMenuTriggerRef}
-                type="button"
-                aria-label="Abrir menu"
-                aria-expanded={menuOpen}
-                aria-controls="mobile-sidebar"
-                onClick={() => setMobileMenuPath(currentPath)}
-                className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-line bg-paper-1 text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50 lg:hidden"
-              >
-                <NavigationIcon name="menu" />
-              </button>
+              <MobileMenu
+                key={mobileMenuKey(currentPath)}
+                activeHref={activeHref}
+                contextLabel={contextLabel}
+                items={items}
+                planoDeAcaoCount={planoDeAcaoCount}
+                variant={variant}
+              />
               <div className="min-w-0">
                 <p className="hidden text-[10px] font-semibold uppercase tracking-[0.15em] text-ink-muted sm:block">
                   {contextLabel}
@@ -322,66 +413,6 @@ export function AppShell({ children, variant = 'client', planoDeAcaoCount = 0 }:
           {children}
         </div>
       </div>
-
-      {menuOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            aria-label="Fechar menu"
-            onClick={closeMobileMenu}
-            className="absolute inset-0 bg-ink/35 backdrop-blur-[2px]"
-          />
-          <aside
-            id="mobile-sidebar"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navegação principal"
-            className="relative flex h-full w-[min(304px,88vw)] flex-col border-r border-line bg-paper-1 px-4 py-4 shadow-2xl"
-          >
-            <div className="mb-6 flex h-11 items-center justify-between px-1">
-              <Link
-                href={logoHref(variant)}
-                aria-label="Truth Analytics — ir ao início"
-                onClick={closeMobileMenu}
-                className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-              >
-                <Logo withMark size="md" />
-              </Link>
-              <button
-                ref={mobileMenuCloseRef}
-                type="button"
-                aria-label="Fechar menu"
-                onClick={closeMobileMenu}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-ink-soft outline-none transition-colors hover:bg-paper-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
-              >
-                <NavigationIcon name="close" />
-              </button>
-            </div>
-
-            <div className="mb-3 px-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-                Workspace
-              </p>
-            </div>
-            <NavigationList
-              activeHref={activeHref}
-              items={items}
-              onNavigate={closeMobileMenu}
-              planoDeAcaoCount={planoDeAcaoCount}
-            />
-
-            <div className="mt-5 border-t border-line pt-4">
-              <div className="mb-2 rounded-xl bg-paper-2 px-3 py-2.5">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                  Ambiente
-                </p>
-                <p className="mt-0.5 text-sm font-medium text-ink">{contextLabel}</p>
-              </div>
-              <SignOutButton />
-            </div>
-          </aside>
-        </div>
-      ) : null}
 
       <CommandPalette variant={variant} />
     </div>
