@@ -8,6 +8,10 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { logger } from '@/lib/logger';
+import {
+  provisionAnalystAccount,
+  provisionClientAccount,
+} from '@/modules/admin/account-provisioning.repository';
 import { setOrgAnalista, transferCarteiraEmLote } from '@/modules/analista/analista.repository';
 import { buildPasswordResetUrl, createPasswordResetToken } from '@/modules/auth/password-reset.repository';
 import {
@@ -19,7 +23,6 @@ import {
 import { requireAdmin } from '@/modules/auth/require-admin';
 import {
   createOrgClientUser,
-  createUserInOrg,
   getUserWithOrgById,
   normalizeEmail,
 } from '@/modules/auth/user.repository';
@@ -330,20 +333,23 @@ export async function adminCreateOrgUserAction(
 }
 
 // ---------------------------------------------------------------------------
-// Gestão de contas cross-org (H4 T11) — /admin/usuarios.
+// Provisionamento administrativo de contas — /admin/usuarios.
 // ---------------------------------------------------------------------------
 
-const CriarUsuarioCrossOrgSchema = z.object({
-  orgId: z.string().trim().min(1, 'Selecione uma organização.'),
+const CriarClienteAdminSchema = z.object({
+  orgName: z
+    .string()
+    .trim()
+    .min(2, 'Informe o nome da empresa.')
+    .max(255, 'O nome da empresa deve ter no máximo 255 caracteres.'),
   email: z.string().trim().email('E-mail inválido.'),
-  // Só 'client' | 'analista' passam no zod — 'admin_truth' (ou qualquer outro
-  // valor arbitrário de FormData) já cai fora aqui. `createUserInOrg` repete a
-  // mesma checagem no repositório (defesa em profundidade: nenhum admin_truth
-  // é criável por este caminho mesmo que a validação da action seja driblada).
-  role: z.enum(['client', 'analista'], { errorMap: () => ({ message: 'Papel inválido.' }) }),
 });
 
-export type CriarUsuarioCrossOrgState = {
+const CriarAnalistaAdminSchema = z.object({
+  email: z.string().trim().email('E-mail inválido.'),
+});
+
+export type CriarContaState = {
   error?: string;
   ok?: boolean;
   email?: string;
@@ -351,50 +357,74 @@ export type CriarUsuarioCrossOrgState = {
 };
 
 /**
- * Cria um usuário em QUALQUER org (client ou analista) — /admin/usuarios.
- * Mesmo modelo de segurança do `adminCreateOrgUserAction`: senha temporária
- * gerada aqui, devolvida só no state (exibida uma vez), nunca em audit/log.
+ * Cria organização pending + primeiro usuário client atomicamente. A action
+ * aceita somente empresa/e-mail; status, plano, role e orgId nunca vêm do
+ * navegador.
  */
-export async function adminCreateUserAction(
-  _prev: CriarUsuarioCrossOrgState,
+export async function adminCreateClientAccountAction(
+  _prev: CriarContaState,
   formData: FormData,
-): Promise<CriarUsuarioCrossOrgState> {
+): Promise<CriarContaState> {
   const admin = await requireAdmin();
-  const parsed = CriarUsuarioCrossOrgSchema.safeParse({
-    orgId: formData.get('orgId'),
+  const parsed = CriarClienteAdminSchema.safeParse({
+    orgName: formData.get('orgName'),
     email: formData.get('email'),
-    role: formData.get('role'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
   }
-  const { orgId, email, role } = parsed.data;
-
-  const org = await getOrganizationById(orgId);
-  if (!org) return { error: 'Organização inválida.' };
+  const { orgName, email } = parsed.data;
 
   const senhaTemporaria = randomBytes(9).toString('base64url'); // 12 chars
   try {
-    const { userId } = await createUserInOrg({ orgId, email, role, senha: senhaTemporaria });
-    await recordAudit({
-      orgId,
-      userId: admin.id,
-      acao: 'user.criado_admin',
-      detalhes: { email: normalizeEmail(email), novoUserId: userId, role },
+    await provisionClientAccount({
+      orgName,
+      email,
+      senha: senhaTemporaria,
+      actorUserId: admin.id,
     });
   } catch (e) {
     if (e instanceof Error && e.message === 'email_em_uso') {
       return { error: 'Já existe uma conta com este e-mail.' };
     }
-    if (e instanceof Error && e.message === 'limite_usuarios') {
-      return { error: 'Limite de usuários desta organização atingido (máx. 3).' };
-    }
-    if (e instanceof Error && e.message === 'role_invalida') {
-      return { error: 'Papel inválido.' };
+    throw e;
+  }
+  revalidatePath('/admin/usuarios');
+  revalidatePath('/admin');
+  return { ok: true, email: normalizeEmail(email), senhaTemporaria };
+}
+
+/**
+ * Cria analista na organização interna da sessão. Não aceita orgId nem role
+ * do formulário, impedindo criação acidental em organizações de clientes.
+ */
+export async function adminCreateAnalystAccountAction(
+  _prev: CriarContaState,
+  formData: FormData,
+): Promise<CriarContaState> {
+  const admin = await requireAdmin();
+  const parsed = CriarAnalistaAdminSchema.safeParse({ email: formData.get('email') });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
+  }
+
+  const { email } = parsed.data;
+  const senhaTemporaria = randomBytes(9).toString('base64url'); // 12 chars
+  try {
+    await provisionAnalystAccount({
+      internalOrgId: admin.orgId,
+      email,
+      senha: senhaTemporaria,
+      actorUserId: admin.id,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === 'email_em_uso') {
+      return { error: 'Já existe uma conta com este e-mail.' };
     }
     throw e;
   }
   revalidatePath('/admin/usuarios');
+  revalidatePath('/admin/performance');
   return { ok: true, email: normalizeEmail(email), senhaTemporaria };
 }
 

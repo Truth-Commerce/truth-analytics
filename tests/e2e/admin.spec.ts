@@ -7,6 +7,8 @@ const adminEmail = `${E2E_PREFIX}admin-${RUN}@example.com`;
 const adminSenha = 'admin-forte-123';
 const clienteEmail = `${E2E_PREFIX}cli-${RUN}@example.com`;
 const clienteSenha = 'cliente-forte-123';
+const clienteAdminEmail = `${E2E_PREFIX}cli-admin-${RUN}@example.com`;
+const analistaAdminEmail = `${E2E_PREFIX}analista-admin-${RUN}@example.com`;
 
 test.beforeAll(async () => {
   await seedE2EAdmin(adminEmail, adminSenha);
@@ -48,4 +50,29 @@ test('admin ativa um cliente pendente definindo plano', async ({ page, browser }
   } finally {
     await adminCtx.close();
   }
+});
+
+test('admin cria cliente com organização e analista interno em fluxos separados', async ({ page }) => {
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', adminEmail);
+  await page.fill('input[name="senha"]', adminSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/admin/usuarios');
+
+  const clientForm = page.getByTestId('usuarios-criar-cliente-form');
+  await expect(clientForm.locator('select')).toHaveCount(0);
+  await clientForm.locator('input[name="orgName"]').fill(`${E2E_PREFIX}Cliente Admin ${RUN}`);
+  await clientForm.locator('input[name="email"]').fill(clienteAdminEmail);
+  await clientForm.getByRole('button', { name: 'Criar cliente' }).click();
+  await expect(page.getByTestId('usuarios-criar-cliente-sucesso')).toBeVisible();
+  await expect(page.getByText(clienteAdminEmail, { exact: true }).first()).toBeVisible();
+
+  const analystForm = page.getByTestId('usuarios-criar-analista-form');
+  await expect(analystForm.locator('select')).toHaveCount(0);
+  await analystForm.locator('input[name="email"]').fill(analistaAdminEmail);
+  await analystForm.getByRole('button', { name: 'Criar analista' }).click();
+  await expect(page.getByTestId('usuarios-criar-analista-sucesso')).toBeVisible();
+  await expect(page.getByText(analistaAdminEmail, { exact: true }).first()).toBeVisible();
 });
