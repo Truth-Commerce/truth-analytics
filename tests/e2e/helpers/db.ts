@@ -104,7 +104,7 @@ export async function seedE2EAdmin(email: string, senha: string): Promise<void> 
   }
 }
 
-export async function seedE2EAnalista(email: string, senha: string): Promise<void> {
+export async function seedE2EAnalista(email: string, senha: string): Promise<string> {
   const { sql, tdb } = makeDb();
   try {
     const senha_hash = await hashPassword(senha);
@@ -112,21 +112,32 @@ export async function seedE2EAnalista(email: string, senha: string): Promise<voi
       .insert(organizations)
       .values({ name: `${E2E_PREFIX}analista`, status: 'active' })
       .returning({ id: organizations.id });
-    await tdb
+    const [analista] = await tdb
       .insert(users)
-      .values({ org_id: org!.id, email, senha_hash, role: 'analista' });
+      .values({ org_id: org!.id, email, senha_hash, role: 'analista' })
+      .returning({ id: users.id });
+    return analista!.id;
   } finally {
     await sql.end();
   }
 }
 
-export async function seedE2EActiveClient(email: string, senha: string): Promise<string> {
+export async function seedE2EActiveClient(
+  email: string,
+  senha: string,
+  opts: { analistaId?: string } = {},
+): Promise<string> {
   const { sql, tdb } = makeDb();
   try {
     const senha_hash = await hashPassword(senha);
     const [org] = await tdb
       .insert(organizations)
-      .values({ name: `${E2E_PREFIX}cliente-ativo`, status: 'active', plano: 'weekly' })
+      .values({
+        name: `${E2E_PREFIX}cliente-ativo`,
+        status: 'active',
+        plano: 'weekly',
+        analista_id: opts.analistaId,
+      })
       .returning({ id: organizations.id });
     await tdb
       .insert(users)

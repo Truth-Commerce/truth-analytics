@@ -17,8 +17,8 @@ const taskTitulo = `${E2E_PREFIX}task-responsavel-${RUN}`;
 let clienteOrgId: string;
 
 test.beforeAll(async () => {
-  await seedE2EAnalista(email, senha);
-  clienteOrgId = await seedE2EActiveClient(clienteEmail, 'cliente-forte-kanban-789');
+  const analistaId = await seedE2EAnalista(email, senha);
+  clienteOrgId = await seedE2EActiveClient(clienteEmail, 'cliente-forte-kanban-789', { analistaId });
   await seedTask(clienteOrgId, { titulo: taskTitulo });
 });
 
