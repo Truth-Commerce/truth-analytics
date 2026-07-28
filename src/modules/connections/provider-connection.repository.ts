@@ -315,7 +315,11 @@ export async function saveRefreshedProviderTokens(input: {
   now?: Date;
 }): Promise<boolean> {
   const current = await getVersionedProviderRow(input.context.orgId, input.context.provider);
-  if (!current || connectionVersion(current) !== input.context.version) return false;
+  if (
+    !current ||
+    !hasVersionedSecrets(current) ||
+    connectionVersion(current) !== input.context.version
+  ) return false;
   const now = input.now ?? new Date();
   const updated = await db
     .update(connections)
@@ -417,6 +421,7 @@ export async function markProviderConnectionError(input: {
   const current = await getVersionedProviderRow(input.orgId, input.provider);
   if (
     !current ||
+    !hasVersionedSecrets(current) ||
     current.status !== 'configurado' ||
     connectionVersion(current) !== input.expectedVersion
   ) return false;
@@ -427,7 +432,7 @@ export async function markProviderConnectionError(input: {
       last_error_at: input.now ?? new Date(),
       ...(input.permanent ? { status: 'expirado' } : {}),
     })
-    .where(versionWhere(current, input.orgId, input.provider))
+    .where(configuredVersionWhere(current, input.orgId, input.provider))
     .returning({ id: connections.id });
   return updated.length === 1;
 }
@@ -447,6 +452,13 @@ type VersionedProviderRow = {
   oauthClientSecret: string | null;
   accessToken: string | null;
   refreshToken: string | null;
+};
+
+type CompleteVersionedProviderRow = VersionedProviderRow & {
+  oauthClientId: string;
+  oauthClientSecret: string;
+  accessToken: string;
+  refreshToken: string;
 };
 
 async function getVersionedProviderRow(
@@ -480,23 +492,34 @@ function connectionVersion(row: Omit<VersionedProviderRow, 'id' | 'status'>): st
     .digest('hex');
 }
 
-function versionWhere(row: VersionedProviderRow, orgId: string, provider: ErpProviderId) {
-  if (!row.oauthClientId || !row.oauthClientSecret || !row.accessToken || !row.refreshToken) {
-    return and(
-      eq(connections.id, row.id),
-      eq(connections.org_id, orgId),
-      eq(connections.provider, provider),
-      eq(connections.status, 'configurado'),
-    );
-  }
+function hasVersionedSecrets(row: VersionedProviderRow): row is CompleteVersionedProviderRow {
+  return Boolean(
+    row.oauthClientId &&
+    row.oauthClientSecret &&
+    row.accessToken &&
+    row.refreshToken
+  );
+}
+
+function versionWhere(row: CompleteVersionedProviderRow, orgId: string, provider: ErpProviderId) {
   return and(
     eq(connections.id, row.id),
     eq(connections.org_id, orgId),
     eq(connections.provider, provider),
-    eq(connections.status, 'configurado'),
     eq(connections.oauth_client_id, row.oauthClientId),
     eq(connections.oauth_client_secret, row.oauthClientSecret),
     eq(connections.access_token, row.accessToken),
     eq(connections.refresh_token, row.refreshToken),
+  );
+}
+
+function configuredVersionWhere(
+  row: CompleteVersionedProviderRow,
+  orgId: string,
+  provider: ErpProviderId,
+) {
+  return and(
+    versionWhere(row, orgId, provider),
+    eq(connections.status, 'configurado'),
   );
 }
