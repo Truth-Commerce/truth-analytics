@@ -26,6 +26,7 @@ import {
   getUserWithOrgById,
   normalizeEmail,
 } from '@/modules/auth/user.repository';
+import type { UserRole } from '@/modules/auth/user.types';
 import {
   activateOrganization,
   getOrgConnectionHealth,
@@ -37,7 +38,14 @@ import {
   suspendOrganization,
   updateOrgNicho,
 } from '@/modules/admin/admin.repository';
+import { avaliarTrocaDePapel, type MotivoBloqueio } from '@/modules/admin/mudanca-de-papel';
 import { periodoDoPlano } from '@/modules/admin/periodo-plano';
+import {
+  aplicarTrocaDePapel,
+  contarAdmins,
+  contarCarteira,
+  moverUsuarioParaOrg,
+} from '@/modules/admin/staff-accounts.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { setMetaMensal } from '@/modules/organizations/organization-settings.repository';
 import { dispatchPipelineRun } from '@/modules/pipeline/dispatch';
@@ -426,6 +434,93 @@ export async function adminCreateAnalystAccountAction(
   revalidatePath('/admin/usuarios');
   revalidatePath('/admin/performance');
   return { ok: true, email: normalizeEmail(email), senhaTemporaria };
+}
+
+// ---------------------------------------------------------------------------
+// Manutenção de contas existentes — papel e organização (/admin/usuarios).
+// ---------------------------------------------------------------------------
+
+export type ContaState = { error?: string; ok?: boolean; mensagem?: string };
+
+const ERRO_POR_MOTIVO: Record<MotivoBloqueio, string> = {
+  papel_invalido: 'Papel inválido.',
+  proprio_usuario: 'Você não pode alterar o próprio papel. Peça a outro admin.',
+  papel_igual: 'O usuário já tem esse papel.',
+  ultimo_admin: 'Este é o único admin da Truth — promova outro antes de rebaixá-lo.',
+  carteira_pendente:
+    'Este analista ainda tem empresas na carteira. Transfira a carteira antes de trocar o papel.',
+  sem_empresa_destino:
+    'Para virar cliente o usuário precisa estar numa empresa cliente. Crie uma conta de cliente para ele.',
+};
+
+/**
+ * Troca o papel de um usuário já existente. Quem deixa de ser cliente vai
+ * junto para a organização interna — analista lotado na org de um cliente
+ * some com ela numa purga LGPD.
+ */
+export async function adminSetUserRoleAction(
+  _prev: ContaState,
+  formData: FormData,
+): Promise<ContaState> {
+  const admin = await requireAdmin();
+  const userId = String(formData.get('userId') ?? '');
+  const novoPapel = String(formData.get('role') ?? '') as UserRole;
+  if (!userId) return { error: 'Usuário inválido.' };
+
+  const alvo = await getUserWithOrgById(userId);
+  if (!alvo) return { error: 'Usuário inválido.' };
+
+  const [carteiraDoAlvo, totalAdmins] = await Promise.all([contarCarteira(alvo.id), contarAdmins()]);
+
+  const veredicto = avaliarTrocaDePapel({
+    atorUserId: admin.id,
+    alvo: { id: alvo.id, role: alvo.role, orgId: alvo.orgId },
+    novoPapel,
+    orgInternaId: admin.orgId,
+    carteiraDoAlvo,
+    totalAdmins,
+  });
+  if (!veredicto.ok) return { error: ERRO_POR_MOTIVO[veredicto.motivo] };
+
+  await aplicarTrocaDePapel({
+    userId: alvo.id,
+    novoPapel,
+    moverParaOrgId: veredicto.moverParaOrgInterna ? admin.orgId : null,
+    actorUserId: admin.id,
+  });
+
+  revalidatePath('/admin/usuarios');
+  revalidatePath('/admin');
+  revalidatePath('/admin/performance');
+  return {
+    ok: true,
+    mensagem: veredicto.moverParaOrgInterna
+      ? 'Papel alterado e usuário movido para a operação interna.'
+      : 'Papel alterado.',
+  };
+}
+
+/** Move um analista/admin lotado na org de um cliente para a org interna. */
+export async function adminMoveUserToInternalOrgAction(
+  _prev: ContaState,
+  formData: FormData,
+): Promise<ContaState> {
+  const admin = await requireAdmin();
+  const userId = String(formData.get('userId') ?? '');
+  if (!userId) return { error: 'Usuário inválido.' };
+
+  const alvo = await getUserWithOrgById(userId);
+  if (!alvo) return { error: 'Usuário inválido.' };
+  if (alvo.role === 'client') {
+    return { error: 'Contas de cliente pertencem à empresa delas — troque o papel primeiro.' };
+  }
+  if (alvo.orgId === admin.orgId) return { error: 'O usuário já está na operação interna.' };
+
+  await moverUsuarioParaOrg({ userId: alvo.id, orgId: admin.orgId, actorUserId: admin.id });
+
+  revalidatePath('/admin/usuarios');
+  revalidatePath('/admin');
+  return { ok: true, mensagem: 'Usuário movido para a operação interna.' };
 }
 
 export type ResetLinkState = { error?: string; ok?: boolean; email?: string; link?: string };
