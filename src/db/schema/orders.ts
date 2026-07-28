@@ -20,6 +20,9 @@ export const orders = pgTable(
       .notNull()
       .references(() => organizations.id),
     bling_order_id: varchar('bling_order_id', { length: 64 }).notNull(),
+    provider: varchar('provider', { length: 32 }).notNull().default('bling'),
+    // The database trigger keeps legacy Bling inserts compatible while new providers send this explicitly.
+    provider_order_id: varchar('provider_order_id', { length: 64 }).notNull().default(''),
     canal: varchar('canal', { length: 32 }).notNull(),
     data: timestamp('data', { withTimezone: true, mode: 'date' }).notNull(),
     valor_total: numeric('valor_total', { precision: 12, scale: 2 }).notNull(),
@@ -40,6 +43,11 @@ export const orders = pgTable(
   },
   (t) => ({
     org_bling_uq: unique('orders_org_bling_uq').on(t.org_id, t.bling_order_id),
+    org_provider_order_uq: unique('orders_org_provider_order_uq').on(
+      t.org_id,
+      t.provider,
+      t.provider_order_id,
+    ),
     org_data_idx: index('orders_org_data_idx').on(t.org_id, t.data),
     // Fila de enriquecimento: pedidos ainda não detalhados, mais recentes primeiro.
     org_pendente_idx: index('orders_org_pendente_idx')

@@ -10,6 +10,8 @@ export const productStock = pgTable(
     org_id: uuid('org_id')
       .notNull()
       .references(() => organizations.id),
+    provider: varchar('provider', { length: 32 }).notNull().default('bling'),
+    provider_product_id: varchar('provider_product_id', { length: 64 }),
     sku: varchar('sku', { length: 64 }).notNull(),
     nome: varchar('nome', { length: 255 }).notNull(),
     saldo: numeric('saldo', { precision: 12, scale: 2 }).notNull().default('0'),
@@ -20,6 +22,11 @@ export const productStock = pgTable(
   },
   (t) => ({
     org_sku_uq: unique('product_stock_org_sku_uq').on(t.org_id, t.sku),
+    org_provider_sku_uq: unique('product_stock_org_provider_sku_uq').on(
+      t.org_id,
+      t.provider,
+      t.sku,
+    ),
     org_idx: index('product_stock_org_idx').on(t.org_id),
   }),
 );

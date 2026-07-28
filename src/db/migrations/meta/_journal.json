@@ -141,6 +141,13 @@
       "when": 1785255792145,
       "tag": "0019_allow_troca_senha_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785261456475,
+      "tag": "0020_olist_provider_foundation",
+      "breakpoints": true
     }
   ]
 }
