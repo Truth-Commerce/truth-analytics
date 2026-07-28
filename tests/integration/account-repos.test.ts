@@ -3,9 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import { organizations, passwordResetTokens, users } from '@/db/schema';
+import { loginAttempts, organizations, passwordResetTokens, users } from '@/db/schema';
 import { hashPassword, verifyPassword } from '@/modules/auth/password';
 import { invalidateUserResetTokens } from '@/modules/auth/password-reset.repository';
+import { recordAttempt } from '@/modules/auth/rate-limit';
 import { getUserAuthById, setUserPasswordHash } from '@/modules/auth/user.repository';
 import { renameOrganization } from '@/modules/organizations/organization-settings.repository';
 
@@ -38,6 +39,7 @@ describe.skipIf(!url)('account repos — integração', () => {
 
   afterAll(async () => {
     try {
+      await tdb.delete(loginAttempts).where(eq(loginAttempts.email, `conta-${RUN}@ta-test.com`));
       await tdb.delete(passwordResetTokens).where(eq(passwordResetTokens.user_id, userId));
       await tdb.delete(users).where(eq(users.org_id, orgId));
       await tdb.delete(organizations).where(eq(organizations.id, orgId));
@@ -53,6 +55,18 @@ describe.skipIf(!url)('account repos — integração', () => {
     expect(user).not.toBeNull();
     expect(await verifyPassword('senha-nova-456', user!.senha_hash)).toBe(true);
     expect(await verifyPassword('senha-antiga-123', user!.senha_hash)).toBe(false);
+  });
+
+  it('registra troca_senha sem violar a constraint de escopo', async () => {
+    const email = `conta-${RUN}@ta-test.com`;
+    await recordAttempt({ escopo: 'troca_senha', email, ip: null, success: true });
+
+    const rows = await tdb
+      .select({ escopo: loginAttempts.escopo, success: loginAttempts.success })
+      .from(loginAttempts)
+      .where(eq(loginAttempts.email, email));
+
+    expect(rows).toContainEqual({ escopo: 'troca_senha', success: true });
   });
 
   it('invalidateUserResetTokens marca todos os tokens abertos como usados', async () => {

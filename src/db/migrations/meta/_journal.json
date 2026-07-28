@@ -134,6 +134,13 @@
       "when": 1784800000000,
       "tag": "0018_coleta_bling_detalhe",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785255792145,
+      "tag": "0019_allow_troca_senha_scope",
+      "breakpoints": true
     }
   ]
 }

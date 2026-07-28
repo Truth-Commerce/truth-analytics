@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/headers', () => ({ headers: () => new Headers() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn() } }));
 vi.mock('@/modules/auth/require-active-org', () => ({
   requireActiveOrgParaMutacao: vi.fn().mockResolvedValue({
     id: 'u1', orgId: 'o1', role: 'client', orgStatus: 'active', plano: 'monthly',
@@ -97,6 +98,19 @@ describe('changePasswordAction', () => {
       expect.objectContaining({ orgId: 'o1', userId: 'u1', acao: 'user.senha_alterada' }),
     );
     expect(sendPasswordChangedEmail).toHaveBeenCalledWith(USER.email);
+  });
+
+  it('falha na telemetria após trocar a senha não transforma sucesso em erro para o usuário', async () => {
+    vi.mocked(getUserAuthById).mockResolvedValueOnce(USER);
+    vi.mocked(verifyPassword).mockResolvedValueOnce(true);
+    vi.mocked(recordAttempt).mockRejectedValueOnce(new Error('telemetria_indisponivel'));
+
+    const res = await changePasswordAction({}, form({
+      senhaAtual: 'atual-123', novaSenha: 'nova-senha-8', confirmarSenha: 'nova-senha-8',
+    }));
+
+    expect(res).toEqual({ ok: true });
+    expect(setUserPasswordHash).toHaveBeenCalledWith('u1', 'novo-hash');
   });
 });
 
