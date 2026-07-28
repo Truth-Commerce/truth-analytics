@@ -53,6 +53,8 @@ test('analista encontra e navega pelas áreas próprias desde o dashboard', asyn
 
   await sidebar.getByRole('link', { name: 'Comparativo' }).click();
   await expect(page).toHaveURL(/\/analista\/comparativo$/);
+  await expect(page.getByTestId('analista-comparativo-page')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Comparativo da carteira' })).toBeVisible();
   await expect(sidebar.getByRole('link', { name: 'Comparativo' })).toHaveAttribute(
     'aria-current',
     'page',

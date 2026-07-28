@@ -1,7 +1,6 @@
 import { Badge } from '@/components/ui/Badge';
 import { CanalDot } from '@/components/ui/CanalDot';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { BarChart } from '@/components/ui/charts/BarChart';
 import { DonutChart } from '@/components/ui/charts/DonutChart';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
@@ -21,6 +20,7 @@ import { requireAnalista } from '@/modules/auth/require-analista';
 import { TIPO_TASK_LABEL } from '@/modules/tasks/task.types';
 
 import { ReplicarTaskButton } from './replicar-task-button';
+import { ComparativoBarChart, ComparativoDonutChart } from './comparativo-charts';
 
 import type { Metadata } from 'next';
 
@@ -128,9 +128,8 @@ export default async function ComparativoPage() {
                 </Table>
               </Card>
               <Card>
-                <BarChart
+                <ComparativoBarChart
                   data={nichos.map((n) => ({ label: n.nicho, value: n.faturamentoMedio }))}
-                  formatValue={formatBRL}
                 />
               </Card>
             </div>
@@ -146,7 +145,7 @@ export default async function ComparativoPage() {
             ) : (
               <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
                 <Card>
-                  <DonutChart data={canais.map((c) => ({ label: c.canal, value: c.total }))} formatValue={formatBRL} />
+                  <ComparativoDonutChart data={canais.map((c) => ({ label: c.canal, value: c.total }))} />
                 </Card>
                 <Card className="!p-0">
                   <Table>
