@@ -69,7 +69,15 @@ describe('Olist OAuth attempt', () => {
   });
 
   it.each([
-    ['signature', (cookie: string, state: string) => `${cookie.slice(0, -1)}x`, undefined],
+    [
+      'signature',
+      (cookie: string) => {
+        const [encoded, signature] = cookie.split('.');
+        const changedFirst = signature.startsWith('A') ? 'B' : 'A';
+        return `${encoded}.${changedFirst}${signature.slice(1)}`;
+      },
+      undefined,
+    ],
     ['state', (cookie: string) => cookie, 'wrong-state'],
   ] as const)('rejeita %s adulterado', (_label, mutateCookie, changedState) => {
     const attempt = createOlistOAuthAttempt({
@@ -80,7 +88,7 @@ describe('Olist OAuth attempt', () => {
     });
     expect(
       verifyOlistOAuthAttempt({
-        cookieValue: mutateCookie(attempt.cookieValue, attempt.state),
+        cookieValue: mutateCookie(attempt.cookieValue),
         state: changedState ?? attempt.state,
         expectedUserId: 'user-a',
         expectedOrgId: 'org-a',
