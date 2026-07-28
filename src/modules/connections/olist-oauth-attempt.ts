@@ -59,7 +59,7 @@ export function verifyOlistOAuthAttempt(input: {
   cookieValue: string;
   state: string;
   expectedUserId: string;
-  expectedOrgId: string;
+  expectedOrgId?: string;
 }): VerifiedOlistOAuthAttempt | null {
   try {
     const [encoded, signature, extra] = input.cookieValue.split('.');
@@ -80,7 +80,7 @@ export function verifyOlistOAuthAttempt(input: {
     if (ageSeconds < 0 || ageSeconds > OLIST_OAUTH_TTL_SECONDS) return null;
     if (payload.state !== input.state) return null;
     if (payload.userId !== input.expectedUserId) return null;
-    if (payload.orgId !== input.expectedOrgId) return null;
+    if (input.expectedOrgId && payload.orgId !== input.expectedOrgId) return null;
     return payload;
   } catch {
     return null;
