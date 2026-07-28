@@ -100,6 +100,10 @@ As fronteiras mais importantes são:
 - **Pipeline:** integrações coletam dados; métricas determinísticas consolidam a base; a análise por IA produz uma camada complementar validada por contratos.
 - **Operação agendada:** rotas protegidas executam sincronizações, relatórios, alertas, digest semanal e monitoramento de rotinas.
 
+### ERPs
+
+O banco e o registry de provedores já aceitam a evolução para múltiplos ERPs, preservando os identificadores e o fluxo legado do Bling. Nesta versão, **Bling é o único provedor operacional e conectável**; Olist (antigo Tiny) ainda não possui OAuth, sincronização nem interface disponíveis. Os próximos incrementos são OAuth e refresh do Olist, coleta de pedidos e detalhes, e estoque com controle de rate limit.
+
 ```mermaid
 flowchart LR
     Goal["Meta e contexto"] --> Data["Pedidos, estoque<br/>e mercado"]
