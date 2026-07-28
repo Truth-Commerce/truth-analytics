@@ -18,6 +18,7 @@ describe.skipIf(!url)('provider foundation schema — integração', () => {
   const sql = postgres(url ?? '', { prepare: false });
   const db = drizzle(sql);
   let orgId = '';
+  let otherOrgId = '';
 
   beforeAll(async () => {
     const [organization] = await db
@@ -25,25 +26,31 @@ describe.skipIf(!url)('provider foundation schema — integração', () => {
       .values({ name: `ta-test-provider-foundation-${RUN}`, status: 'active' })
       .returning({ id: organizations.id });
     orgId = organization.id;
+    const [otherOrganization] = await db
+      .insert(organizations)
+      .values({ name: `ta-test-provider-foundation-other-${RUN}`, status: 'active' })
+      .returning({ id: organizations.id });
+    otherOrgId = otherOrganization.id;
   });
 
   afterAll(async () => {
-    await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
-    await db.delete(orders).where(eq(orders.org_id, orgId));
-    await db.delete(productStock).where(eq(productStock.org_id, orgId));
-    await db.delete(connections).where(eq(connections.org_id, orgId));
-    await db.delete(organizations).where(eq(organizations.id, orgId));
+    for (const id of [orgId, otherOrgId]) {
+      await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, id));
+      await db.delete(orders).where(eq(orders.org_id, id));
+      await db.delete(productStock).where(eq(productStock.org_id, id));
+      await db.delete(connections).where(eq(connections.org_id, id));
+      await db.delete(organizations).where(eq(organizations.id, id));
+    }
     await sql.end();
   });
 
-  it('defaults legacy-compatible provider ids to bling', async () => {
+  it('preenche o identificador do provider em inserções legadas do Bling', async () => {
     const providerOrderId = `foundation-${RUN}`;
     const [order] = await db
       .insert(orders)
       .values({
         org_id: orgId,
         bling_order_id: providerOrderId,
-        provider_order_id: providerOrderId,
         canal: 'Teste',
         data: new Date(),
         valor_total: '10.00',
@@ -52,6 +59,16 @@ describe.skipIf(!url)('provider foundation schema — integração', () => {
 
     expect(order.provider).toBe('bling');
     expect(order.provider_order_id).toBe(providerOrderId);
+
+    await expect(
+      db.insert(orders).values({
+        org_id: otherOrgId,
+        bling_order_id: providerOrderId,
+        canal: 'Teste',
+        data: new Date(),
+        valor_total: '10.00',
+      }),
+    ).resolves.toBeDefined();
   });
 
   it('impede dois ERPs saudáveis para a mesma organização', async () => {

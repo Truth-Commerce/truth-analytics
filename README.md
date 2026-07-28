@@ -102,7 +102,7 @@ As fronteiras mais importantes são:
 
 ### ERPs
 
-O banco e o registry de provedores já aceitam a evolução para múltiplos ERPs, preservando os identificadores e o fluxo legado do Bling. Nesta versão, **Bling é o único provedor operacional e conectável**; Olist (antigo Tiny) ainda não possui OAuth, sincronização nem interface disponíveis. Os próximos incrementos são OAuth e refresh do Olist, coleta de pedidos e detalhes, e estoque com controle de rate limit.
+O banco e o registry de provedores já aceitam a evolução para múltiplos ERPs, preservando os identificadores e o fluxo legado do Bling. Nesta versão, **Bling é o único provedor operacional e conectável**; Olist (antigo Tiny) ainda não possui OAuth, sincronização nem interface disponíveis. Antes de ativar o writer de pedidos Olist, a próxima fase deve tornar `bling_order_id` nullable e revisar a constraint legada correspondente, para que um pedido exclusivamente Olist não dependa de um identificador Bling. Depois disso, os incrementos são OAuth e refresh do Olist, coleta de pedidos e detalhes, e estoque com controle de rate limit.
 
 ```mermaid
 flowchart LR

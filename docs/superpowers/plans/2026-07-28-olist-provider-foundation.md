@@ -18,6 +18,11 @@
 - Cada organização pode ter no máximo uma conexão ERP com `status = 'ok'`.
 - Migrações precisam preservar e preencher todos os registros existentes como `bling`.
 
+## Notas operacionais e pré-requisitos das próximas fases
+
+- Antes de habilitar o writer de pedidos Olist, tornar `orders.bling_order_id` nullable e revisar a constraint legada `orders_org_bling_uq`; pedidos exclusivamente Olist não podem depender de uma chave Bling.
+- A migração desta fase inclui backfills em `orders` e `product_stock`. Em bases grandes, execute em janela de menor tráfego, monitore duração/locks e confirme o plano de execução em staging antes de produção. Não altere o migration runner para tentar contornar isso sem uma estratégia de rollout separada.
+
 ---
 
 ### Task 1: Expandir o schema de dados de forma retrocompatível
