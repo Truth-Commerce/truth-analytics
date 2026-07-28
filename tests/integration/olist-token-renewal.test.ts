@@ -8,6 +8,8 @@ import {
   getProviderConnectionSummary,
   getProviderOAuthCredentials,
   listProviderConnectionsExpiring,
+  getProviderRefreshContext,
+  markProviderConnectionError,
   saveProviderTokens,
 } from '@/modules/connections/provider-connection.repository';
 import {
@@ -134,7 +136,7 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
     expect(await getProviderConnectionSummary(orgId, 'olist')).toMatchObject({
       status: 'configurado',
       authorized: true,
-      lastErrorCode: 'olist_token_erro_transiente',
+      lastErrorCode: 'olist_refresh_transiente',
     });
     expect(
       await db
@@ -151,7 +153,7 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
     await expect(renewOlistConnection(orgId)).resolves.toBe('expired');
     expect(await getProviderConnectionSummary(orgId, 'olist')).toMatchObject({
       status: 'expirado',
-      lastErrorCode: 'olist_token_erro_permanente',
+      lastErrorCode: 'olist_refresh_invalido',
     });
     const alerts = await db
       .select({ userId: notifications.user_id, href: notifications.href, titulo: notifications.titulo })
@@ -164,6 +166,28 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
       ]),
     );
     expect(JSON.stringify(alerts)).toContain('Olist');
+  });
+
+  it('CAS permanente só expira uma vez quando o status já mudou', async () => {
+    const context = await getProviderRefreshContext(orgId, 'olist');
+    await expect(
+      markProviderConnectionError({
+        orgId,
+        provider: 'olist',
+        code: 'olist_refresh_invalido',
+        permanent: true,
+        expectedVersion: context.version,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      markProviderConnectionError({
+        orgId,
+        provider: 'olist',
+        code: 'olist_refresh_invalido',
+        permanent: true,
+        expectedVersion: context.version,
+      }),
+    ).resolves.toBe(false);
   });
 
   it.each(['success', 'error'] as const)('não sobrescreve atualização concorrente antes de %s', async (mode) => {

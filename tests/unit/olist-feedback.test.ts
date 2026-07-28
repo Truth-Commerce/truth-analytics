@@ -15,6 +15,8 @@ describe('olistFeedback', () => {
     'olist_credenciais_ausentes',
     'olist_credenciais_alteradas',
     'olist_oauth_transiente',
+    'olist_refresh_invalido',
+    'olist_refresh_transiente',
     'acesso_negado',
     'organizacao_inativa',
   ])('mapeia erro allowlisted %s', (erro) => {
@@ -31,4 +33,9 @@ describe('olistFeedback', () => {
       });
     },
   );
+
+  it('explica códigos seguros de renovação sem cair no fallback genérico', () => {
+    expect(olistFeedback({ erro: 'olist_refresh_invalido' })?.message).toMatch(/autorize novamente/i);
+    expect(olistFeedback({ erro: 'olist_refresh_transiente' })?.message).toMatch(/temporariamente/i);
+  });
 });

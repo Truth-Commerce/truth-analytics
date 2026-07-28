@@ -44,10 +44,7 @@ export async function renewOlistConnection(
     return 'renewed';
   } catch (error) {
     const permanent = error instanceof OAuthProviderError && error.kind === 'permanent';
-    const code =
-      error instanceof OAuthProviderError
-        ? error.code
-        : 'olist_token_erro_transiente';
+    const code = permanent ? 'olist_refresh_invalido' : 'olist_refresh_transiente';
     const marked = await markProviderConnectionError({
       orgId,
       provider: 'olist',

@@ -57,4 +57,33 @@ describe('OlistConnectionCard', () => {
     expect(html).toContain('Desconectar');
     expect(html).not.toContain('name="clientSecret"');
   });
+
+  it('expõe reconexão necessária, vencimentos e CTA coerente quando expirou', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(OlistConnectionCard, {
+        orgId: 'org-a',
+        surface: 'client_connections',
+        summary: {
+          provider: 'olist',
+          status: 'expirado',
+          credentialsConfigured: true,
+          authorized: false,
+          operational: false,
+          expiresAt: new Date('2026-07-28T12:00:00.000Z'),
+          refreshExpiresAt: new Date('2026-07-29T12:00:00.000Z'),
+          lastRefreshAt: null,
+          lastSyncAt: null,
+          lastErrorCode: 'olist_refresh_invalido',
+        },
+        redirectUri,
+      }),
+    );
+    expect(html).toContain('Reconexão necessária');
+    expect(html).toContain('Access token');
+    expect(html).toContain('Refresh token');
+    expect(html).toContain('28/07/2026');
+    expect(html).toContain('29/07/2026');
+    expect(html).toContain('Reconectar Olist');
+    expect(html).not.toContain('Autorizar no Olist');
+  });
 });

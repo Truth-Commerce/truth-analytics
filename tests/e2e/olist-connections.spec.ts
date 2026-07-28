@@ -42,8 +42,9 @@ test('cliente e analista atribuído configuram credenciais sem vazar segredo', a
 
   await page.context().clearCookies();
   await login(page, analystEmail);
-  await page.goto(`/analista/${orgId}?tab=conexao`);
+  await page.goto(`/analista/${orgId}?tab=conexao&olist=conectado`);
   await expect(page.getByTestId('tab-conexao')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('Olist autorizado')).toBeVisible();
   await expect(page.getByText('Olist ERP (antigo Tiny)')).toBeVisible();
   await page.getByRole('button', { name: 'Alterar credenciais' }).click();
   await page.fill('input[name="clientId"]', 'e2e-client-id-2');

@@ -415,7 +415,11 @@ export async function markProviderConnectionError(input: {
   now?: Date;
 }): Promise<boolean> {
   const current = await getVersionedProviderRow(input.orgId, input.provider);
-  if (!current || connectionVersion(current) !== input.expectedVersion) return false;
+  if (
+    !current ||
+    current.status !== 'configurado' ||
+    connectionVersion(current) !== input.expectedVersion
+  ) return false;
   const updated = await db
     .update(connections)
     .set({
@@ -438,6 +442,7 @@ export function credentialVersion(clientIdCiphertext: string, clientSecretCipher
 
 type VersionedProviderRow = {
   id: string;
+  status: string;
   oauthClientId: string | null;
   oauthClientSecret: string | null;
   accessToken: string | null;
@@ -451,6 +456,7 @@ async function getVersionedProviderRow(
   const [row] = await db
     .select({
       id: connections.id,
+      status: connections.status,
       oauthClientId: connections.oauth_client_id,
       oauthClientSecret: connections.oauth_client_secret,
       accessToken: connections.access_token,
@@ -462,7 +468,7 @@ async function getVersionedProviderRow(
   return row ?? null;
 }
 
-function connectionVersion(row: Omit<VersionedProviderRow, 'id'>): string {
+function connectionVersion(row: Omit<VersionedProviderRow, 'id' | 'status'>): string {
   return createHash('sha256')
     .update(row.oauthClientId ?? '')
     .update('\0')
@@ -476,12 +482,18 @@ function connectionVersion(row: Omit<VersionedProviderRow, 'id'>): string {
 
 function versionWhere(row: VersionedProviderRow, orgId: string, provider: ErpProviderId) {
   if (!row.oauthClientId || !row.oauthClientSecret || !row.accessToken || !row.refreshToken) {
-    return and(eq(connections.id, row.id), eq(connections.org_id, orgId), eq(connections.provider, provider));
+    return and(
+      eq(connections.id, row.id),
+      eq(connections.org_id, orgId),
+      eq(connections.provider, provider),
+      eq(connections.status, 'configurado'),
+    );
   }
   return and(
     eq(connections.id, row.id),
     eq(connections.org_id, orgId),
     eq(connections.provider, provider),
+    eq(connections.status, 'configurado'),
     eq(connections.oauth_client_id, row.oauthClientId),
     eq(connections.oauth_client_secret, row.oauthClientSecret),
     eq(connections.access_token, row.accessToken),

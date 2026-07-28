@@ -12,6 +12,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   olist_credenciais_ausentes: 'Salve o Client ID e o Client Secret antes de autorizar.',
   olist_credenciais_alteradas: 'As credenciais mudaram durante a autorização. Comece novamente.',
   olist_oauth_transiente: 'O Olist está temporariamente indisponível. Tente novamente em instantes.',
+  olist_refresh_invalido: 'A autorização expirou. Autorize novamente a conexão com o Olist.',
+  olist_refresh_transiente: 'O Olist está temporariamente indisponível. A renovação será tentada novamente.',
   acesso_negado: 'Você não tem acesso a esta organização.',
   organizacao_inativa: 'Esta organização não está ativa.',
 };

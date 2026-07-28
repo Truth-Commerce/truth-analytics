@@ -11,6 +11,7 @@ import { DashboardCharts } from '@/components/dashboard/dashboard-charts';
 import { MetaProgress } from '@/components/dashboard/meta-progress';
 import { StatCards } from '@/components/dashboard/stat-cards';
 import { Badge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { LineChart } from '@/components/ui/charts/LineChart';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -43,6 +44,7 @@ import { atorFromRole } from '@/modules/tasks/task.types';
 import { listTasksKanban } from '@/modules/tasks/task.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { OlistConnectionCard } from '@/components/connections/olist-connection-card';
+import { olistFeedback } from '@/components/connections/olist-feedback';
 import { olistCallbackUri } from '@/modules/connections/olist-oauth-attempt';
 import { getProviderConnectionSummary } from '@/modules/connections/provider-connection.repository';
 
@@ -56,10 +58,11 @@ export async function generateMetadata(props: { params: Promise<{ orgId: string 
 
 export default async function AnalistaOrgPage(props: {
   params: Promise<{ orgId: string }>;
-  searchParams?: Promise<{ tab?: string }>;
+  searchParams?: Promise<{ tab?: string; olist?: string; erro?: string }>;
 }) {
   const params = await props.params;
   const searchParams = await props.searchParams;
+  const connectionFeedback = olistFeedback(searchParams);
   const access = await requireAnalista();
 
   // Multi-tenancy: analista só acessa orgs da carteira; org fora da carteira
@@ -122,6 +125,12 @@ export default async function AnalistaOrgPage(props: {
       <Link href="/analista" className="text-sm text-muted transition-colors hover:text-ink">
         ← Carteira
       </Link>
+
+      {connectionFeedback ? (
+        <Alert variant={connectionFeedback.variant} title={connectionFeedback.title}>
+          {connectionFeedback.message}
+        </Alert>
+      ) : null}
 
       {/* 1. Hero — nome/nicho/plano/risco (T3 orgResumoUnico + T2 score de risco) */}
       <div data-testid="analista-360-hero">

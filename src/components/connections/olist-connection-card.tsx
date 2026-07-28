@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { formatDataHora } from '@/lib/format';
 import type { OlistOAuthSurface } from '@/modules/connections/olist-oauth-attempt';
 import type { ProviderConnectionSummary } from '@/modules/connections/provider-connection.repository';
 
@@ -24,6 +25,8 @@ export function OlistConnectionCard(props: {
 }) {
   const configured = props.summary?.credentialsConfigured ?? false;
   const authorized = props.summary?.authorized ?? false;
+  const reconnectRequired =
+    props.summary?.status === 'expirado' || props.summary?.lastErrorCode === 'olist_refresh_invalido';
   const [editorMode, setEditorMode] = useState<'auto' | 'open' | 'closed'>('auto');
   const [saveState, saveAction, savePending] = useActionState(
     saveOlistCredentialsAction,
@@ -46,9 +49,38 @@ export function OlistConnectionCard(props: {
             Olist ERP (antigo Tiny)
           </CardTitle>
           <p className="mt-1 text-xs text-muted">
-            {authorized ? 'Autorizado' : configured ? 'Credenciais salvas' : 'Não configurado'}
+            {reconnectRequired
+              ? 'Reconexão necessária'
+              : authorized
+                ? 'Autorizado'
+                : configured
+                  ? 'Credenciais salvas'
+                  : 'Não configurado'}
           </p>
         </div>
+
+        {props.summary?.expiresAt || props.summary?.refreshExpiresAt ? (
+          <dl className="grid gap-2 text-xs text-muted sm:grid-cols-2">
+            {props.summary.expiresAt ? (
+              <div>
+                <dt className="font-medium text-ink">Access token</dt>
+                <dd>Expira em {formatDataHora(props.summary.expiresAt)}</dd>
+              </div>
+            ) : null}
+            {props.summary.refreshExpiresAt ? (
+              <div>
+                <dt className="font-medium text-ink">Refresh token</dt>
+                <dd>Expira em {formatDataHora(props.summary.refreshExpiresAt)}</dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+
+        {reconnectRequired ? (
+          <Alert variant="warning" title="Reconexão necessária">
+            A autorização expirou. Reconecte o Olist para manter a integração disponível.
+          </Alert>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2 text-sm text-muted">
@@ -101,7 +133,11 @@ export function OlistConnectionCard(props: {
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button as="a" href={authorizeHref} size="sm">
-              {authorized ? 'Refazer autorização' : 'Autorizar no Olist'}
+              {reconnectRequired
+                ? 'Reconectar Olist'
+                : authorized
+                  ? 'Refazer autorização'
+                  : 'Autorizar no Olist'}
             </Button>
             <Button type="button" variant="secondary" size="sm" onClick={() => setEditorMode('open')}>
               Alterar credenciais
