@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { z } from 'zod';
 
+import { logger } from '@/lib/logger';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { hashPassword, verifyPassword } from '@/modules/auth/password';
 import { invalidateUserResetTokens } from '@/modules/auth/password-reset.repository';
@@ -14,6 +15,30 @@ import { sendPasswordChangedEmail } from '@/modules/notifications/email';
 import { renameOrganization } from '@/modules/organizations/organization-settings.repository';
 
 export type AccountState = { error?: string; ok?: boolean };
+
+async function recordPasswordAttempt(input: {
+  email: string;
+  ip: string | null;
+  success: boolean;
+  userId: string;
+}): Promise<void> {
+  try {
+    await recordAttempt({
+      escopo: 'troca_senha',
+      email: input.email,
+      ip: input.ip,
+      success: input.success,
+    });
+  } catch (error) {
+    // Telemetria/rate-limit não pode transformar uma senha já alterada em
+    // erro na UI. O alerta mantém a falha observável sem expor credenciais.
+    logger.warn(
+      'falha ao registrar tentativa de troca de senha',
+      { userId: input.userId, success: input.success },
+      error,
+    );
+  }
+}
 
 const trocarSenhaSchema = z
   .object({
@@ -50,14 +75,14 @@ export async function changePasswordAction(
 
   const senhaOk = await verifyPassword(parsed.data.senhaAtual, user.senha_hash);
   if (!senhaOk) {
-    await recordAttempt({ escopo: 'troca_senha', email: user.email, ip, success: false });
+    await recordPasswordAttempt({ email: user.email, ip, success: false, userId: user.id });
     return { error: 'Senha atual incorreta.' };
   }
 
   const novoHash = await hashPassword(parsed.data.novaSenha);
   await setUserPasswordHash(user.id, novoHash);
   await invalidateUserResetTokens(user.id);
-  await recordAttempt({ escopo: 'troca_senha', email: user.email, ip, success: true });
+  await recordPasswordAttempt({ email: user.email, ip, success: true, userId: user.id });
   await recordAudit({ orgId: access.orgId, userId: user.id, acao: 'user.senha_alterada' });
 
   // Best-effort: sendEmail já nunca lança; o try é cinto-e-suspensório
