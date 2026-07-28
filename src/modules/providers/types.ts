@@ -33,7 +33,7 @@ export type Periodo = {
 };
 
 export interface ConnectionProvider {
-  readonly name: string;
+  readonly name: ErpProviderId;
   buildAuthorizeUrl(state: string): string;
   exchangeCode(code: string): Promise<OAuthTokens>;
   refresh(refreshToken: string): Promise<OAuthTokens>;
@@ -44,3 +44,4 @@ export interface ConnectionProvider {
   ): Promise<RawOrder[]>;
   fetchStock(orgId: string): Promise<RawStockItem[]>;
 }
+export type ErpProviderId = 'bling' | 'olist';
