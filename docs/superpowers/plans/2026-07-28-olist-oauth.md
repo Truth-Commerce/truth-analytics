@@ -444,11 +444,11 @@ git commit -m "feat(olist): renovar tokens automaticamente"
 - Documents: criação do app por cliente, callback fixa, permissões, estados e cron.
 - States explicitly: Olist autorizado ainda não importa dados; Bling remains operational.
 
-- [ ] **Step 1: Update operator documentation**
+- [x] **Step 1: Update operator documentation**
 
 Document the exact production callback, how client/analyst configure, read-only permissions, 4h/1d token lifetime, 2h refresh cadence, safe disconnect/secret rotation, and the next phase (orders/details). Do not publish credential examples that resemble real secrets.
 
-- [ ] **Step 2: Scan scope and secret exposure**
+- [x] **Step 2: Scan scope and secret exposure**
 
 ```powershell
 rg -n "client_secret|access_token|refresh_token" src tests README.md
@@ -472,11 +472,11 @@ git diff --check
 
 Expected: `db:generate` reports no schema changes; lint has zero errors; all tests, build and E2E pass. Any pre-existing warning is reported and no new warning is introduced.
 
-- [ ] **Step 4: Review rollback invariants**
+- [x] **Step 4: Review rollback invariants**
 
 Confirm the diff has no migration, Olist never becomes `ok`, Bling tests remain green, callback uses only `APP_URL`, all mutation paths call the shared guard, remote bodies are never logged, and removing the new code leaves Olist rows inert.
 
-- [ ] **Step 5: Commit documentation**
+- [x] **Step 5: Commit documentation**
 
 ```powershell
 git add README.md docs/superpowers/plans/2026-07-28-olist-oauth.md
@@ -486,3 +486,13 @@ git commit -m "docs(olist): documentar conexão OAuth"
 ## Execution Handoff
 
 Execute with `superpowers:subagent-driven-development`, one task at a time, with specification-compliance and code-quality review after every task. Use an isolated worktree created through `superpowers:using-git-worktrees`. Do not merge or deploy until CI, PostgreSQL integration tests and the full Playwright suite are green.
+
+## Execution record — 28/07/2026
+
+- Tasks 1–6 implementadas no branch `feat/olist-oauth`, em seis commits coerentes.
+- Adapter, state/PKCE, persistência tenant-bound, rotas, interface, CAS de refresh, notificações, heartbeat e cron concluídos.
+- Olist permanece deliberadamente fora do registry operacional e nunca assume status `ok`.
+- `db:generate`: nenhum drift de schema; lint: 0 erros e 24 avisos legados; typecheck e build de produção: aprovados.
+- `test:ci`: 1.007 testes aprovados e 440 testes dependentes de PostgreSQL ignorados sem `DATABASE_URL_TEST`.
+- Playwright foi solicitado, mas o safety encerrou antes do browser por ausência de `DATABASE_URL_TEST`; integração PostgreSQL e E2E ficam obrigatórios na CI com banco descartável.
+- Merge, push e deploy permanecem fora deste plano e dependem do gate com banco descartável/CI.
