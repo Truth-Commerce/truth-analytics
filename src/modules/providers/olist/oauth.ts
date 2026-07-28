@@ -9,6 +9,7 @@ import type { OAuthTokens } from '@/modules/providers/types';
 const AUTHORIZE_URL = 'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/auth';
 const TOKEN_URL = 'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token';
 const MAX_RETRY_AFTER_SECONDS = 30;
+export const OLIST_TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 
 const TokenResponse = z.object({
   access_token: z.string().min(1),
@@ -69,7 +70,7 @@ async function requestTokens(body: URLSearchParams): Promise<OAuthTokens> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let response: Response;
     try {
-      response = await fetch(TOKEN_URL, {
+      response = await fetchWithTimeout(TOKEN_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
@@ -93,6 +94,16 @@ async function requestTokens(body: URLSearchParams): Promise<OAuthTokens> {
     throw new OAuthProviderError('olist_token_erro_permanente', 'permanent');
   }
   throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OLIST_TOKEN_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function parseTokens(response: Response): Promise<OAuthTokens> {

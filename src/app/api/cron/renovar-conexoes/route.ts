@@ -1,5 +1,6 @@
 import { serverEnv } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { pLimit } from '@/lib/p-limit';
 import { secretsMatch } from '@/lib/secret-compare';
 import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 import {
@@ -11,6 +12,7 @@ import { listProviderConnectionsExpiring } from '@/modules/connections/provider-
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
+export const OLIST_REFRESH_CONCURRENCY = 10;
 
 export async function GET(request: Request): Promise<Response> {
   if (
@@ -25,22 +27,23 @@ export async function GET(request: Request): Promise<Response> {
     marginMs: OLIST_REFRESH_MARGIN_MS,
     limit: OLIST_REFRESH_BATCH,
   });
-  let renovadas = 0;
-  let expiradas = 0;
-  let transitorias = 0;
-
-  for (const candidate of candidates) {
+  const limit = pLimit(OLIST_REFRESH_CONCURRENCY);
+  const results = await Promise.all(candidates.map((candidate) => limit(async () => {
     try {
       const result = await renewOlistConnection(candidate.orgId);
-      if (result === 'renewed' || result === 'won-by-peer') renovadas += 1;
-      else if (result === 'expired') expiradas += 1;
-      else transitorias += 1;
       logger.info('cron.renovar_conexoes.org', { orgId: candidate.orgId, result });
+      return result;
     } catch {
-      transitorias += 1;
       logger.error('cron.renovar_conexoes.unexpected', { orgId: candidate.orgId });
+      return 'transient' as const;
     }
-  }
+  })));
+
+  const renovadas = results.filter(
+    (result) => result === 'renewed' || result === 'won-by-peer',
+  ).length;
+  const expiradas = results.filter((result) => result === 'expired').length;
+  const transitorias = results.filter((result) => result === 'transient').length;
 
   const response = {
     candidatas: candidates.length,

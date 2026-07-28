@@ -31,6 +31,12 @@ vi.mock('@/modules/connections/olist-oauth-attempt', () => ({
   OLIST_OAUTH_COOKIE: 'olist_oauth_attempt',
   OLIST_OAUTH_TTL_SECONDS: 600,
   createOlistOAuthAttempt: vi.fn(),
+  olistOAuthCookieOptions: vi.fn(() => ({
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: true,
+    path: '/api/connections/olist/callback',
+  })),
   verifyOlistOAuthAttempt: vi.fn(),
   olistCallbackUri: vi.fn(() =>
     'https://truth-analytics.vercel.app/api/connections/olist/callback'),
@@ -141,9 +147,20 @@ describe('GET /api/connections/olist', () => {
 });
 
 describe('GET /api/connections/olist/callback', () => {
-  it('apaga cookie antes de trocar o code e salva por compare-and-swap', async () => {
+  it('expira no path original antes de trocar o code e salva por compare-and-swap', async () => {
     adapter.exchangeCode.mockImplementationOnce(async () => {
-      expect(cookieStore.delete).toHaveBeenCalledWith('olist_oauth_attempt');
+      expect(cookieStore.set).toHaveBeenCalledWith(
+        'olist_oauth_attempt',
+        '',
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: true,
+          path: '/api/connections/olist/callback',
+          maxAge: 0,
+        }),
+      );
+      expect(cookieStore.delete).not.toHaveBeenCalled();
       return { accessToken: 'access', refreshToken: 'refresh', expiresInSeconds: 14_400 };
     });
     const response = await callback(

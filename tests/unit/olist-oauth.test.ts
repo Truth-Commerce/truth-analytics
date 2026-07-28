@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OAuthProviderError } from '@/modules/providers/oauth.types';
 import { olistOAuthProvider } from '@/modules/providers/olist/provider';
+import { OLIST_TOKEN_REQUEST_TIMEOUT_MS } from '@/modules/providers/olist/oauth';
 
 const credentials = {
   clientId: 'olist-client',
@@ -112,6 +113,35 @@ describe('Olist OAuth adapter', () => {
     await expect(
       olistOAuthProvider.refresh({ credentials, refreshToken: 'refresh-1' }),
     ).rejects.toMatchObject({ code: 'olist_token_resposta_invalida', kind: 'permanent' });
+  });
+
+  it('aborta cada tentativa de token no timeout e retorna erro transitório seguro', async () => {
+    vi.useFakeTimers();
+    let aborts = 0;
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          'abort',
+          () => {
+            aborts += 1;
+            reject(new DOMException('aborted', 'AbortError'));
+          },
+          { once: true },
+        );
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = olistOAuthProvider.refresh({ credentials, refreshToken: 'refresh-1' });
+    const assertion = expect(promise).rejects.toMatchObject({
+      code: 'olist_token_erro_transiente',
+      kind: 'transient',
+    });
+    await vi.advanceTimersByTimeAsync(OLIST_TOKEN_REQUEST_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(OLIST_TOKEN_REQUEST_TIMEOUT_MS);
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(aborts).toBe(2);
   });
 
   it.each([400, 401])('classifica HTTP %s como permanente e não repete', async (status) => {

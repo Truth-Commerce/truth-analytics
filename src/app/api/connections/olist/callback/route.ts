@@ -8,6 +8,7 @@ import { assertConnectionOrgAccess } from '@/modules/connections/connection-acce
 import {
   OLIST_OAUTH_COOKIE,
   olistCallbackUri,
+  olistOAuthCookieOptions,
   olistReturnPath,
   verifyOlistOAuthAttempt,
 } from '@/modules/connections/olist-oauth-attempt';
@@ -28,7 +29,11 @@ export async function GET(request: Request) {
   const remoteError = url.searchParams.get('error');
   const cookieStore = await cookies();
   const cookieValue = cookieStore.get(OLIST_OAUTH_COOKIE)?.value;
-  cookieStore.delete(OLIST_OAUTH_COOKIE);
+  cookieStore.set(OLIST_OAUTH_COOKIE, '', {
+    ...olistOAuthCookieOptions(),
+    maxAge: 0,
+    expires: new Date(0),
+  });
 
   const fallback = access.role === 'client' ? '/conexoes' : '/analista';
   if (!cookieValue || !state) return localRedirect(fallback, 'olist_state_invalido');

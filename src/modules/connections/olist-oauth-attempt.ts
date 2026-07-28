@@ -5,6 +5,7 @@ import { serverEnv } from '@/lib/env';
 
 export const OLIST_OAUTH_COOKIE = 'olist_oauth_attempt';
 export const OLIST_OAUTH_TTL_SECONDS = 600;
+export const OLIST_OAUTH_COOKIE_PATH = '/api/connections/olist/callback';
 
 export type OlistOAuthSurface = 'client_connections' | 'analyst_org';
 
@@ -78,7 +79,7 @@ export function verifyOlistOAuthAttempt(input: {
     );
     const ageSeconds = Math.floor(Date.now() / 1000) - payload.issuedAt;
     if (ageSeconds < 0 || ageSeconds > OLIST_OAUTH_TTL_SECONDS) return null;
-    if (payload.state !== input.state) return null;
+    if (!constantTimeStringEqual(payload.state, input.state)) return null;
     if (payload.userId !== input.expectedUserId) return null;
     if (input.expectedOrgId && payload.orgId !== input.expectedOrgId) return null;
     return payload;
@@ -89,6 +90,21 @@ export function verifyOlistOAuthAttempt(input: {
 
 export function olistCallbackUri(): string {
   return new URL('/api/connections/olist/callback', serverEnv.APP_URL).toString();
+}
+
+export function olistOAuthCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: new URL(serverEnv.APP_URL).protocol === 'https:',
+    path: OLIST_OAUTH_COOKIE_PATH,
+  };
+}
+
+export function constantTimeStringEqual(left: string, right: string): boolean {
+  const leftDigest = createHash('sha256').update(left).digest();
+  const rightDigest = createHash('sha256').update(right).digest();
+  return timingSafeEqual(leftDigest, rightDigest);
 }
 
 export function olistReturnPath(surface: string, orgId: string): string | null {

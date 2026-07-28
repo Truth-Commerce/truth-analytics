@@ -37,40 +37,40 @@ describe('cron renovar-conexoes', () => {
     expect((await GET(request('Bearer cron-olist-seguro'))).status).toBe(401);
   });
 
-  it('processa sequencialmente, isola falha por org e publica só quatro contadores', async () => {
+  it('limita concorrência, isola falha por org e publica só quatro contadores', async () => {
     const repo = await import('@/modules/connections/provider-connection.repository');
     const renewal = await import('@/modules/connections/olist-token-renewal');
     const heartbeat = await import('@/modules/admin/heartbeat.repository');
     const logger = await import('@/lib/logger');
 
-    vi.mocked(repo.listProviderConnectionsExpiring).mockResolvedValue([
-      { id: 'c-a', orgId: 'org-a', provider: 'olist' },
-      { id: 'c-b', orgId: 'org-b', provider: 'olist' },
-      { id: 'c-c', orgId: 'org-c', provider: 'olist' },
-      { id: 'c-d', orgId: 'org-d', provider: 'olist' },
-      { id: 'c-e', orgId: 'org-e', provider: 'olist' },
-    ]);
+    vi.mocked(repo.listProviderConnectionsExpiring).mockResolvedValue(
+      Array.from({ length: 12 }, (_, index) => ({
+        id: `c-${index}`,
+        orgId: `org-${index}`,
+        provider: 'olist' as const,
+      })),
+    );
 
     let active = 0;
     let maxActive = 0;
     vi.mocked(renewal.renewOlistConnection).mockImplementation(async (orgId) => {
       active += 1;
       maxActive = Math.max(maxActive, active);
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 10));
       active -= 1;
-      if (orgId === 'org-a') return 'renewed';
-      if (orgId === 'org-b') return 'expired';
-      if (orgId === 'org-c') return 'transient';
-      if (orgId === 'org-d') return 'won-by-peer';
-      throw new Error('refresh-token-ultrassecreto');
+      if (orgId === 'org-1') return 'expired';
+      if (orgId === 'org-2') return 'transient';
+      if (orgId === 'org-3') return 'won-by-peer';
+      if (orgId === 'org-4') throw new Error('refresh-token-ultrassecreto');
+      return 'renewed';
     });
 
     const { GET } = await import('@/app/api/cron/renovar-conexoes/route');
     const response = await GET(request('Bearer cron-olist-seguro'));
     expect(response.status).toBe(200);
-    const expected = { candidatas: 5, renovadas: 2, expiradas: 1, transitorias: 2 };
+    const expected = { candidatas: 12, renovadas: 9, expiradas: 1, transitorias: 2 };
     expect(await response.json()).toEqual(expected);
-    expect(maxActive).toBe(1);
+    expect(maxActive).toBe(10);
     expect(heartbeat.registrarHeartbeat).toHaveBeenCalledWith(
       'renovar-conexoes',
       true,

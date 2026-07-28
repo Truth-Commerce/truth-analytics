@@ -11,6 +11,7 @@ import {
   OLIST_OAUTH_COOKIE,
   OLIST_OAUTH_TTL_SECONDS,
   olistCallbackUri,
+  olistOAuthCookieOptions,
   olistReturnPath,
 } from '@/modules/connections/olist-oauth-attempt';
 import { getProviderOAuthCredentials } from '@/modules/connections/provider-connection.repository';
@@ -44,11 +45,8 @@ export async function GET(request: Request) {
     });
     const cookieStore = await cookies();
     cookieStore.set(OLIST_OAUTH_COOKIE, attempt.cookieValue, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: new URL(serverEnv.APP_URL).protocol === 'https:',
+      ...olistOAuthCookieOptions(),
       maxAge: OLIST_OAUTH_TTL_SECONDS,
-      path: '/api/connections/olist/callback',
     });
     return NextResponse.redirect(
       getOAuthProvider('olist').buildAuthorizeUrl({

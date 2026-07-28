@@ -13,6 +13,7 @@ vi.mock('@/lib/env', () => ({
 
 import {
   createOlistOAuthAttempt,
+  constantTimeStringEqual,
   OLIST_OAUTH_COOKIE,
   OLIST_OAUTH_TTL_SECONDS,
   olistCallbackUri,
@@ -29,6 +30,12 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('Olist OAuth attempt', () => {
+  it('compara state em tempo constante mesmo quando os tamanhos diferem', () => {
+    expect(constantTimeStringEqual('state-correto', 'state-correto')).toBe(true);
+    expect(constantTimeStringEqual('state-correto', 'state-incorreto')).toBe(false);
+    expect(constantTimeStringEqual('state-correto', 'x')).toBe(false);
+  });
+
   it('cria state, verifier e challenge PKCE fortes e verificáveis', () => {
     const attempt = createOlistOAuthAttempt({
       orgId: 'org-a',
