@@ -42,6 +42,9 @@ import { listTemplates } from '@/modules/tasks/task-template.repository';
 import { atorFromRole } from '@/modules/tasks/task.types';
 import { listTasksKanban } from '@/modules/tasks/task.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { OlistConnectionCard } from '@/components/connections/olist-connection-card';
+import { olistCallbackUri } from '@/modules/connections/olist-oauth-attempt';
+import { getProviderConnectionSummary } from '@/modules/connections/provider-connection.repository';
 
 import type { Metadata } from 'next';
 
@@ -51,8 +54,12 @@ export async function generateMetadata(props: { params: Promise<{ orgId: string 
   return { title: org ? `${org.name} · Cliente` : 'Cliente' };
 }
 
-export default async function AnalistaOrgPage(props: { params: Promise<{ orgId: string }> }) {
+export default async function AnalistaOrgPage(props: {
+  params: Promise<{ orgId: string }>;
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const params = await props.params;
+  const searchParams = await props.searchParams;
   const access = await requireAnalista();
 
   // Multi-tenancy: analista só acessa orgs da carteira; org fora da carteira
@@ -70,7 +77,7 @@ export default async function AnalistaOrgPage(props: { params: Promise<{ orgId: 
   const ator = atorFromRole(access.role);
   const agora = new Date();
 
-  const [resumo, dashboardData, visao360, tarefas, templates, produtos, usuariosOrg] = await Promise.all([
+  const [resumo, dashboardData, visao360, tarefas, templates, produtos, usuariosOrg, olistSummary] = await Promise.all([
     orgResumoUnico(access, orgId, agora),
     getDashboardData(orgId),
     getVisao360(orgId, agora),
@@ -78,6 +85,7 @@ export default async function AnalistaOrgPage(props: { params: Promise<{ orgId: 
     listTemplates(true),
     listTrackedProducts(orgId),
     listOrgUsers(orgId),
+    getProviderConnectionSummary(orgId, 'olist'),
   ]);
 
   const { org, historico, latestDone, doneAnterior, settings, totalMes, conn, ultimaDataPedido, titulosTasksUltimoDone } =
@@ -421,7 +429,7 @@ export default async function AnalistaOrgPage(props: { params: Promise<{ orgId: 
 
       {/* 5. Gestão de tarefas do cliente — seções preservadas da página anterior (Kanban/Nova task/Achados/Produtos) */}
       <Tabs
-        defaultValue="kanban"
+        defaultValue={searchParams?.tab === 'conexao' ? 'conexao' : 'kanban'}
         items={[
           {
             id: 'kanban',
@@ -539,6 +547,18 @@ export default async function AnalistaOrgPage(props: { params: Promise<{ orgId: 
                   />
                 </CardContent>
               </Card>
+            ),
+          },
+          {
+            id: 'conexao',
+            label: 'Conexão',
+            content: (
+              <OlistConnectionCard
+                orgId={orgId}
+                surface="analyst_org"
+                summary={olistSummary}
+                redirectUri={olistCallbackUri()}
+              />
             ),
           },
         ]}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface TabItem {
   id: string;
@@ -15,8 +15,13 @@ interface TabsProps {
 }
 
 export function Tabs({ items, defaultValue, className = '' }: TabsProps) {
-  const [active, setActive] = useState(defaultValue ?? items[0]?.id);
+  const ids = items.map((item) => item.id);
+  const [active, setActive] = useState(() => resolveTabValue(ids, defaultValue, items[0]?.id));
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setActive((current) => resolveTabValue(ids, defaultValue, current));
+  }, [defaultValue, ids.join('|')]);
 
   function onKeyDown(e: React.KeyboardEvent) {
     const idx = items.findIndex((t) => t.id === active);
@@ -74,4 +79,12 @@ export function Tabs({ items, defaultValue, className = '' }: TabsProps) {
       ))}
     </div>
   );
+}
+
+export function resolveTabValue(
+  itemIds: readonly string[],
+  requested: string | undefined,
+  fallback: string | undefined,
+): string | undefined {
+  return requested && itemIds.includes(requested) ? requested : fallback;
 }
