@@ -10,6 +10,7 @@ import {
   organizations,
   productStock,
 } from '@/db/schema';
+import { hasPostgresErrorCode } from '@/db/postgres-error';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -74,9 +75,13 @@ describe.skipIf(!url)('provider foundation schema — integração', () => {
   it('impede dois ERPs saudáveis para a mesma organização', async () => {
     await db.insert(connections).values({ org_id: orgId, provider: 'bling', status: 'ok' });
 
-    await expect(
-      db.insert(connections).values({ org_id: orgId, provider: 'olist', status: 'ok' }),
-    ).rejects.toMatchObject({ code: '23505' });
+    const duplicateProviderError = await db
+      .insert(connections)
+      .values({ org_id: orgId, provider: 'olist', status: 'ok' })
+      .then(() => undefined)
+      .catch((error: unknown) => error);
+
+    expect(hasPostgresErrorCode(duplicateProviderError, '23505')).toBe(true);
   });
 
   it('persiste cursor e lease por recurso do provider', async () => {
