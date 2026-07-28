@@ -47,6 +47,16 @@ export async function cleanupE2E(): Promise<void> {
       .select({ id: organizations.id })
       .from(organizations)
       .where(like(organizations.name, `${E2E_PREFIX}%`));
+    const orgIds = orgs.map((org) => org.id);
+    if (orgIds.length > 0) {
+      // Uma org cliente pode apontar para o usuário analista de outra org E2E.
+      // Remova essas referências antes de apagar usuários, independentemente
+      // da ordem em que as organizações foram retornadas pelo PostgreSQL.
+      await tdb
+        .update(organizations)
+        .set({ analista_id: null })
+        .where(inArray(organizations.id, orgIds));
+    }
     for (const org of orgs) {
       // FK order (CRM tables, Task 14): notifications (→ users) → task_activities
       // & task_comments (→ tasks, users) → tasks (→ orgs, reports, users) —

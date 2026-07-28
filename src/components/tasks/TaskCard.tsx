@@ -200,7 +200,7 @@ export function TaskCard({
               value={task.assigneeUserId ?? ''}
               disabled={salvandoEdicao}
               onChange={(e) => onQuickEdit!(task.id, 'assigneeUserId', e.target.value)}
-              className="rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
+              className="w-full min-w-0 max-w-full rounded-lg border border-line bg-bg-elevated px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/50"
             >
               <option value="" disabled={task.assigneeUserId !== null}>
                 Sem responsável
