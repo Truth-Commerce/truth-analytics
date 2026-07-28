@@ -1,220 +1,343 @@
-<div align="center">
+# Truth Analytics
 
-# 🚀 Truth Analytics
+Plataforma de gestão e inteligência para operações de marketplace. O Truth Analytics reúne dados, diagnóstico, execução e acompanhamento em um único ambiente para que clientes, analistas e administradores trabalhem sobre a mesma realidade operacional.
 
-**Inteligência de marketplace para o seu e-commerce.**
+O objetivo de longo prazo é transformar a plataforma no sistema de operação que ajuda cada projeto a buscar **R$ 300 mil de faturamento bruto anual**. A meta orienta o roadmap; não é uma promessa automática de resultado.
 
-Relatórios periódicos gerados por IA a partir do seu Bling — métricas de vendas consolidadas,
-benchmark de preços de mercado e recomendações acionáveis de precificação.
+[![Produção](https://img.shields.io/badge/produção-Vercel-176B45?logo=vercel&logoColor=white)](https://truth-analytics.vercel.app)
+[![CI](https://github.com/Truth-Commerce/truth-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/Truth-Commerce/truth-analytics/actions/workflows/ci.yml)
+[![Next.js](https://img.shields.io/badge/Next.js-16-111111?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-176B45?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-176B45?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Licença MIT](https://img.shields.io/badge/licença-MIT-176B45)](./LICENSE)
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Drizzle ORM](https://img.shields.io/badge/Drizzle-ORM-C5F74F?logo=drizzle&logoColor=black)](https://orm.drizzle.team/)
-[![Claude](https://img.shields.io/badge/IA-Claude%20Opus%204.8-D97757)](https://www.anthropic.com/)
-[![Tests](https://img.shields.io/badge/tests-188%20unit%2Fint%20%2B%2010%20e2e-3FB950)](#-testes)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[Acessar a plataforma](https://truth-analytics.vercel.app) · [Ver o repositório](https://github.com/Truth-Commerce/truth-analytics) · [Consultar o roadmap de R$ 300 mil](./docs/superpowers/specs/2026-07-27-growth-operating-system-300k-design.md)
 
-</div>
+## O que o produto resolve
 
----
+Gerenciar marketplace exige mais do que consultar vendas. É preciso descobrir onde existe perda de receita, priorizar ações, distribuir responsabilidades, acompanhar prazos e verificar se o trabalho produziu efeito. O Truth Analytics conecta essas etapas:
 
-## 📖 Visão geral
+- integra pedidos, estoque e produtos do Bling;
+- consolida indicadores e histórico por organização;
+- compara preços com referências públicas de mercado;
+- transforma dados em relatórios e recomendações estruturadas;
+- organiza a execução em planos de ação, ciclos, tarefas e playbooks;
+- acompanha estoque, kits, calendário comercial, alertas e notificações;
+- oferece visões específicas para cliente, analista e administração;
+- registra atividades sensíveis para rastreabilidade operacional.
 
-**Truth Analytics** é um SaaS multi-tenant da [Truth Commerce](https://truthcommerce.com.br) que unifica
-as vendas de e-commerce via **Bling API v3** (que centraliza os marketplaces — Mercado Livre, Shopee,
-Amazon, loja própria), coleta **benchmark de mercado** (Mercado Livre público + SerpAPI) e entrega ao
-cliente um **relatório periódico completo gerado por IA** (Claude), conforme a frequência do seu plano
-(7, 15 ou 30 dias).
+Os cálculos determinísticos continuam sendo a fonte de verdade. A IA interpreta contexto e sugere caminhos, mas não substitui as métricas nem decide silenciosamente pelo usuário.
 
-Cada relatório inclui: resumo executivo, métricas por canal, evolução de vendas, top produtos,
-posição de preço vs. mercado e **recomendações de precificação com justificativa** — saída estruturada,
-validada com Zod.
+## Para quem foi construído
 
-> **Modelo de negócio:** venda consultiva. O admin ativa o cliente e define o plano pelo painel interno
-> (sem gateway de pagamento no MVP).
+| Perfil | Trabalho principal na plataforma |
+|---|---|
+| **Cliente** | Acompanha resultados, relatórios e comparativos; consulta estoque, kits e calendário; executa e revisa tarefas do plano de ação. |
+| **Analista** | Enxerga sua carteira, compara operações, acessa a visão 360º de cada cliente e conduz prioridades, tarefas e ciclos sem depender de URLs manuais. |
+| **Admin Truth** | Ativa clientes, organiza usuários e analistas, acompanha operação e performance, mantém playbooks e supervisiona a consultoria. |
 
-## ✨ Funcionalidades
+A interface atual utiliza tema claro editorial, verde como cor de marca, menu lateral recolhível e navegação responsiva. A arquitetura de informação foi desenhada para deixar o trabalho diário visível mesmo para quem não tem familiaridade técnica.
 
-- 🔐 **Autenticação e multi-tenancy** — e-mail + senha (Auth.js v5 / bcrypt); todo dado é isolado por `org_id`.
-- 🧑‍💼 **Painel administrativo** — ativar/suspender clientes, definir plano; rate-limit de login; auditoria.
-- 🔌 **Conexões Bling (OAuth v3)** — cada cliente autoriza a própria conta Bling; tokens cifrados em repouso (AES-256-GCM) + refresh automático.
-- 📊 **Pipeline de relatório** — orquestrador próprio: coleta Bling ∥ coleta mercado → métricas (SQL determinístico) → análise IA → finalização.
-- 🤖 **Análise por IA (Claude)** — *structured outputs* validados por Zod, com re-tentativa automática.
-- 📈 **Dashboard do cliente** — último relatório, histórico e visualização completa (o pipeline escreve, o dashboard só lê).
-- ✉️ **Notificações (Resend)** — conta ativada, relatório pronto, falha de conexão Bling, falha de pipeline.
-- 🎨 **Identidade visual da marca** — tema dark, verde neon, tipografia Sora / Inter / Space Mono.
+## Capacidades disponíveis hoje
 
-## 🏗️ Arquitetura
+### Inteligência e dados
 
+- OAuth por cliente com a API v3 do Bling, atualização de tokens e sincronização de pedidos e estoque.
+- Benchmark público do Mercado Livre e enriquecimento opcional por SerpAPI.
+- Pipeline de métricas, análise estruturada por IA e geração de relatórios.
+- Histórico, comparação entre relatórios e exportação em PDF.
+- Produtos acompanhados, cobertura de estoque e alertas operacionais.
+- Sugestões de kits e oportunidades de calendário comercial.
+
+### Execução e acompanhamento
+
+- Kanban com hierarquia de tarefas, prioridade, etiquetas, responsável, prazo, SLA e movimentação entre etapas.
+- Comentários, atividades, seguidores e fluxo de revisão com o cliente.
+- Ciclos de trabalho, templates e playbooks reutilizáveis.
+- Carteira do analista, visão “Meu dia”, comparativo e visão 360º por cliente.
+- Notificações no produto e comunicações por e-mail quando configuradas.
+
+### Administração e operação
+
+- Ativação, suspensão e configuração de planos de clientes.
+- Associação entre organizações e analistas.
+- Gestão de usuários, consultoria, performance, operações e playbooks.
+- Rotas autenticadas para rotinas agendadas, heartbeats e watchdog operacional.
+- Auditoria de operações administrativas e controles de acesso por papel e organização.
+
+## Como o sistema se organiza
+
+O Truth Analytics é um monólito modular em Next.js. As páginas, Server Actions e rotas de API compartilham contratos de domínio e persistência, sem misturar dados entre organizações.
+
+```mermaid
+flowchart LR
+    Client["Cliente"]
+    Analyst["Analista"]
+    Admin["Admin Truth"]
+    App["Truth Analytics<br/>Next.js"]
+    DB[("PostgreSQL")]
+    Bling["Bling API v3"]
+    Market["Mercado Livre<br/>SerpAPI opcional"]
+    AI["Anthropic"]
+    Email["Resend"]
+
+    Client --> App
+    Analyst --> App
+    Admin --> App
+    App <--> DB
+    App <--> Bling
+    App --> Market
+    App --> AI
+    App --> Email
 ```
-┌──────────────┐   OAuth    ┌───────────────────────── Pipeline (orquestrador próprio) ─────────────────────────┐
-│   Bling v3   │◀──────────▶│                                                                                    │
-│ (por cliente)│  pedidos   │   coletar Bling  ∥  coletar mercado  →  métricas (SQL)  →  análise IA  →  finalizar │
-└──────────────┘            │   (falha dura)      (degr. graciosa)     (determinístico)    (Claude/Zod)   (trava)│
-┌──────────────┐  benchmark │                                                                                    │
-│ ML / SerpAPI │───────────▶└──────────────────────────────────────────┬─────────────────────────────────────┘
-└──────────────┘                                                        │ escreve
-                                                                        ▼
-       cliente  ──login──▶  Dashboard (RSC, só leitura)  ◀────────  reports / orders / market_snapshots  (Neon)
-       admin    ──login──▶  Painel Admin                                 │
-                                                                         ▼
-                                                              Notificações (Resend)
+
+As fronteiras mais importantes são:
+
+- **Organização:** registros de negócio são vinculados a `org_id`; a autorização é conferida no servidor.
+- **Carteira do analista:** o vínculo da organização com `analista_id` limita quais clientes o profissional pode acessar.
+- **Administração:** ações privilegiadas passam por guardas de papel e geram trilha de auditoria quando aplicável.
+- **Pipeline:** integrações coletam dados; métricas determinísticas consolidam a base; a análise por IA produz uma camada complementar validada por contratos.
+- **Operação agendada:** rotas protegidas executam sincronizações, relatórios, alertas, digest semanal e monitoramento de rotinas.
+
+```mermaid
+flowchart LR
+    Goal["Meta e contexto"] --> Data["Pedidos, estoque<br/>e mercado"]
+    Data --> Diagnosis["Métricas e diagnóstico"]
+    Diagnosis --> Priority["Oportunidades<br/>priorizadas"]
+    Priority --> Plan["Plano de ação"]
+    Plan --> Work["Tarefas, ciclos<br/>e playbooks"]
+    Work --> Review["Revisão de resultado"]
+    Review --> Learning["Histórico e aprendizado"]
+    Learning --> Goal
 ```
 
-**Princípios de design**
-- **O pipeline só escreve; o dashboard só lê.** A única fronteira de escrita do fluxo de análise é a Server Action que dispara o pipeline.
-- **Dados do cliente são sagrados:** Bling indisponível → falha dura e o ciclo do plano **não é consumido**. Mercado indisponível → degradação graciosa (`benchmarkParcial`).
-- **Multi-tenancy em todas as camadas:** toda query filtra por `org_id`; o gating de acesso sempre reconsulta o banco (o JWT é só um retrato barato na borda).
-- **Orquestrador próprio swappable:** steps são funções puras testáveis; trocar para um motor de workflow durável depois é trocar o orquestrador, não reescrever os steps.
-
-## 🧰 Stack
+## Stack
 
 | Camada | Tecnologia |
 |---|---|
-| Framework | Next.js 14 (App Router) · React 18 · TypeScript 5 |
-| Estilo | Tailwind CSS 3 · `next/font` (Sora / Inter / Space Mono) |
-| Banco | PostgreSQL ([Neon](https://neon.tech)) · Drizzle ORM · `postgres` (postgres-js) |
-| Auth | Auth.js v5 (`next-auth`) · CredentialsProvider · bcrypt |
-| IA | [Claude](https://www.anthropic.com/) (`@anthropic-ai/sdk`, Opus 4.8) · structured outputs · Zod |
-| Integrações | Bling API v3 (OAuth) · SerpAPI / Mercado Livre público · Resend |
-| Cripto | AES-256-GCM (tokens OAuth em repouso) |
-| Testes | Vitest (unit/integração) · Playwright (E2E) |
-| Deploy | Vercel |
+| Aplicação | Next.js 16.2, React 19.2 e TypeScript 5 |
+| Interface | Tailwind CSS 3.4, Framer Motion e Recharts |
+| Banco | PostgreSQL, Drizzle ORM 0.45 e postgres-js |
+| Autenticação | Auth.js 5, Credentials Provider e bcrypt |
+| IA | Anthropic SDK, saída estruturada e validação com Zod |
+| Integrações | Bling API v3, Mercado Livre, SerpAPI e Resend |
+| Documentos | React PDF |
+| Testes | Vitest e Playwright |
+| Entrega | GitHub Actions e Vercel |
 
-## 📂 Estrutura do projeto
+## Estrutura do repositório
 
-```
+```text
 src/
-├─ app/                       # rotas (App Router)
-│  ├─ (auth)/                 # sign-in, sign-up
-│  ├─ (client)/               # dashboard, conexões, relatórios, aguardando
-│  ├─ admin/                  # painel administrativo
-│  └─ api/                    # auth + callbacks OAuth Bling
-├─ components/ui/             # design system (Button, Card, Table, Badge, …)
-├─ db/                        # schema Drizzle + migrations
-├─ modules/                   # domínios
-│  ├─ auth/  admin/  connections/  tracked-products/
-│  ├─ pipeline/               # steps + orquestrador + contratos Zod
-│  ├─ market/                 # provedores de benchmark
-│  ├─ reports/                # camada de leitura (dashboard)
-│  └─ notifications/          # e-mail (Resend)
-├─ actions/                   # Server Actions
-└─ lib/                       # env (Zod), helpers, crypto
-tests/  ├─ unit/  ├─ integration/  └─ e2e/
-docs/   └─ superpowers/plans/ # planos de implementação
+├── app/                 # rotas, layouts e APIs do App Router
+├── actions/             # Server Actions e fronteiras de escrita
+├── components/          # componentes de interface e domínio
+├── db/
+│   ├── migrations/      # migrações SQL versionadas
+│   └── schema/          # tabelas e relações do Drizzle
+├── lib/                 # ambiente, segurança e utilitários compartilhados
+└── modules/             # regras organizadas por capacidade de negócio
+scripts/                 # seeds, migração de chaves e exclusão de organizações
+tests/
+├── unit/                # regras isoladas
+├── integration/         # banco e integrações internas
+└── e2e/                 # jornadas reais no navegador
+docs/
+├── runbooks/            # procedimentos operacionais
+└── superpowers/         # especificações e planos de implementação
 ```
 
-## 🚀 Começando
+Entre os domínios de `src/modules` estão autenticação, organizações, analista, tarefas, relatórios, pipeline, estoque, kits, calendário, mercado, alertas, notificações, auditoria e integrações.
+
+## Desenvolvimento local
 
 ### Pré-requisitos
-- **Node.js 20+**
-- Um banco **PostgreSQL** (recomendado: [Neon](https://neon.tech), com um branch dedicado de testes)
-- Chaves (opcionais para subir, necessárias em produção): Anthropic, Bling, SerpAPI, Resend
+
+- Node.js 22 — a CI usa exatamente a versão `22.19.0`;
+- npm;
+- PostgreSQL;
+- Git.
 
 ### Instalação
 
 ```bash
 git clone https://github.com/Truth-Commerce/truth-analytics.git
 cd truth-analytics
-npm install
+npm ci
+cp .env.example .env.local
+```
+
+No PowerShell, a última linha pode ser substituída por:
+
+```powershell
+Copy-Item .env.example .env.local
 ```
 
 ### Variáveis de ambiente
 
-Crie um `.env.local` na raiz (veja `.env.example` para a lista completa):
+O arquivo [`.env.example`](./.env.example) é a referência completa. Para iniciar a aplicação, configure ao menos o banco, a autenticação e a criptografia:
 
 ```dotenv
-# Banco (produção)
-POSTGRES_URL=postgres://...
-POSTGRES_URL_DIRECT=postgres://...
-# Banco de TESTES (branch dedicado — nunca produção)
-DATABASE_URL_TEST=postgres://...
-DATABASE_URL_TEST_DIRECT=postgres://...
-
-# Auth & cripto
-AUTH_SECRET=...                 # openssl rand -base64 32
-ENCRYPTION_KEY=...              # 32 bytes em base64
+POSTGRES_URL=postgres://usuario:senha@host:5432/banco
+AUTH_SECRET=gere-um-segredo-longo-e-aleatorio
 APP_URL=http://localhost:3000
 
-# IA (Claude)
-ANTHROPIC_API_KEY=sk-ant-...
-ANALYSIS_MODEL=claude-opus-4-8  # opcional (default)
-
-# Integrações (opcionais)
-BLING_CLIENT_ID=...
-BLING_CLIENT_SECRET=...
-BLING_REDIRECT_URI=http://localhost:3000/api/connections/bling/callback
-SERPAPI_KEY=...
-RESEND_API_KEY=...
-EMAIL_FROM=...
-ADMIN_ALERT_EMAIL=...
+# Chaveiro versionado recomendado para criptografar tokens OAuth.
+ENCRYPTION_KEYS={"v1":"chave-de-32-bytes-em-base64"}
+ENCRYPTION_KEY_ACTIVE=v1
 ```
 
-### Banco de dados
+`ENCRYPTION_KEY` continua disponível apenas para compatibilidade com instalações antigas. Novas instalações devem usar `ENCRYPTION_KEYS` e `ENCRYPTION_KEY_ACTIVE` para permitir rotação sem interromper a leitura de dados já cifrados.
 
-```bash
-npm run db:generate   # gera migrations a partir do schema (quando houver mudança)
-npm run db:migrate    # aplica as migrations
-npm run db:seed-admin # cria o 1º admin (SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD no .env.local)
-```
+Recursos adicionais dependem de suas próprias credenciais:
 
-### Rodar
-
-```bash
-npm run dev           # http://localhost:3000
-```
-
-## 🧪 Testes
-
-Os testes de integração/E2E rodam **somente** contra o branch Neon de testes (blindagem em `tests/setup.ts` e `playwright.config.ts`) — **nunca** contra produção.
-
-```bash
-npm run test        # unit + integração (Vitest)
-npm run test:e2e    # end-to-end (Playwright)
-npm run typecheck   # TypeScript
-npm run lint        # ESLint
-```
-
-> Suíte atual: **188 testes** unit/integração + **10 testes E2E** verdes.
-
-## 📜 Scripts
-
-| Script | Descrição |
+| Grupo | Variáveis principais |
 |---|---|
-| `npm run dev` | Servidor de desenvolvimento |
-| `npm run build` / `npm start` | Build de produção / servir |
-| `npm run lint` / `npm run typecheck` | Lint / checagem de tipos |
-| `npm run test` / `npm run test:watch` | Testes unit/integração |
-| `npm run test:e2e` | Testes end-to-end |
-| `npm run db:generate` / `db:migrate` | Migrations (Drizzle) |
-| `npm run db:seed-admin` | Seed do 1º administrador |
+| Bling | `BLING_CLIENT_ID`, `BLING_CLIENT_SECRET`, `BLING_REDIRECT_URI` |
+| IA | `ANTHROPIC_API_KEY`, `ANALYSIS_MODEL` |
+| Mercado | `SERPAPI_KEY` — opcional; a fonte pública continua disponível sem ela |
+| E-mail | `RESEND_API_KEY`, `EMAIL_FROM`, `ADMIN_ALERT_EMAIL` |
+| Rotinas | `PIPELINE_SECRET`, `CRON_SECRET` |
+| Observabilidade | `SENTRY_DSN` — opcional |
 
-## ☁️ Deploy (Vercel)
+### Banco e primeiro acesso
 
-1. Importe o repositório na Vercel (detecção automática de Next.js).
-2. Configure as **Environment Variables** de produção (use o banco `main`; **não** inclua as `DATABASE_URL_TEST*`).
-3. Após o primeiro deploy, defina `APP_URL` e `BLING_REDIRECT_URI` com o domínio gerado e faça **redeploy**.
+```bash
+npm run db:migrate
+npm run db:seed-admin
+npm run dev
+```
 
-## 🔒 Segurança
+O seed administrativo lê `SEED_ADMIN_EMAIL` e `SEED_ADMIN_PASSWORD`. Para criar um analista, use `ANALISTA_EMAIL` e `ANALISTA_SENHA` com `npm run db:seed-analista`; é necessário que já exista um usuário `admin_truth`.
 
-- Tokens OAuth do Bling **cifrados em repouso** (AES-256-GCM); a senha do Bling do cliente nunca é vista.
-- Senhas de usuário com **bcrypt** (cost 12).
-- Isolamento **multi-tenant** por `org_id` em todas as consultas.
-- Segredos **fora do versionamento** (`.env.local` no `.gitignore`).
-- Rate-limit de login contra força bruta e rotação de cabeçalhos.
+A aplicação estará disponível em [http://localhost:3000](http://localhost:3000).
 
-## 🗺️ Status
+## Scripts úteis
 
-MVP **completo de ponta a ponta** (Fundação → Admin → Conexões → Pipeline+IA → Dashboard → Notificações → UI).
-Próximos passos: smoke real com conta Bling de produção e deploy.
+| Comando | Finalidade |
+|---|---|
+| `npm run dev` | Inicia o ambiente de desenvolvimento. |
+| `npm run build` | Gera o build de produção. |
+| `npm start` | Serve o build produzido. |
+| `npm run lint` | Executa o ESLint. |
+| `npm run typecheck` | Valida os tipos sem gerar arquivos. |
+| `npm test` | Executa a suíte Vitest. |
+| `npm run test:ci` | Executa o Vitest no modo usado pela CI. |
+| `npm run test:watch` | Mantém os testes em observação. |
+| `npm run test:e2e` | Executa as jornadas Playwright. |
+| `npm run db:generate` | Gera migrações a partir do schema. |
+| `npm run db:migrate` | Aplica migrações no banco da aplicação. |
+| `npm run db:migrate:test` | Aplica migrações exclusivamente no banco de testes. |
+| `npm run db:seed-admin` | Cria ou promove o administrador inicial. |
+| `npm run db:seed-analista` | Cria o usuário analista inicial. |
+| `npm run db:reencrypt` | Recriptografa segredos após rotação de chave. |
+| `npm run db:purge-org` | Executa a exclusão controlada dos dados de uma organização. |
 
-## 📄 Licença
+## Testes e proteção do banco
 
-Distribuído sob a licença **MIT**. Veja [`LICENSE`](./LICENSE).
+A suíte combina testes unitários, integração com PostgreSQL e jornadas E2E. Na CI, o projeto cria um PostgreSQL 16 descartável e executa migrações antes dos testes.
+
+Para operações destrutivas locais, `DATABASE_URL_TEST` é obrigatória. Endereços loopback são aceitos automaticamente. Um banco remoto exige a confirmação literal abaixo:
+
+```dotenv
+ALLOW_REMOTE_TEST_DATABASE=I_UNDERSTAND_THIS_IS_DESTRUCTIVE
+```
+
+Mesmo com essa confirmação, a proteção rejeita um endpoint remoto que corresponda a `POSTGRES_URL` ou `POSTGRES_URL_DIRECT` pelo host, porta e nome do banco. Nunca aponte `DATABASE_URL_TEST` para produção.
+
+Validação recomendada antes de abrir um pull request:
+
+```bash
+npm run lint
+npm run typecheck
+npm run test:ci
+npm run build
+npm run test:e2e
+```
+
+## CI, deploy e operação
+
+O workflow [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) roda em pull requests e em alterações na `master`. A sequência inclui:
+
+1. instalação reproduzível com `npm ci`;
+2. auditoria das dependências de produção;
+3. PostgreSQL descartável e migrações de teste;
+4. lint, typecheck, Vitest e build;
+5. instalação do Chromium e Playwright E2E.
+
+O projeto está conectado à Vercel. Alterações integradas à `master` seguem para produção pela integração Git e devem ser acompanhadas no workflow e no deployment correspondente.
+
+As rotas para sincronização de pedidos e estoque, geração de relatórios, alertas, digest semanal e watchdog já existem e exigem autenticação por segredo. O agendamento deve ser configurado no ambiente de hospedagem; não há um cronograma versionado em `vercel.json` neste repositório.
+
+## Segurança e privacidade
+
+Os controles implementados incluem:
+
+- senhas armazenadas com bcrypt e sessões geridas pelo Auth.js;
+- papéis `client`, `analista` e `admin_truth`, com autorização no servidor;
+- escopo por organização e validação explícita da carteira do analista;
+- tokens OAuth do Bling cifrados com AES-256-GCM e suporte a rotação de chaves;
+- limitação de tentativas de login e fluxo de redefinição de senha;
+- auditoria de operações administrativas relevantes;
+- CSP, HSTS, proteção contra framing, `nosniff` e política de permissões;
+- segredos fora do repositório e validação centralizada das variáveis de ambiente;
+- barreira contra uso acidental do banco de produção nos testes;
+- auditoria de dependências de produção como etapa da CI.
+
+Segurança é um processo contínuo. Mudanças em autenticação, autorização, criptografia, integrações ou retenção de dados devem incluir testes e revisão específica.
+
+## Entregas recentes
+
+- migração para Next.js 16 e React 19;
+- menu lateral recolhível e tema claro editorial em toda a aplicação;
+- Carteira e Comparativo expostos diretamente no menu do analista;
+- visão de cliente, execução em Kanban e navegação móvel refinadas;
+- correção do campo de responsável para permanecer dentro do card no Kanban;
+- atualização crítica do Auth.js e reforço do pipeline de dependências;
+- atualização do Drizzle, incluindo compatibilidade de identificadores e erros do PostgreSQL;
+- testes herméticos, proteção destrutiva do banco e PostgreSQL descartável na CI;
+- ações oficiais do GitHub e imagem de banco fixadas por versão/digest;
+- produção ativa na Vercel.
+
+## Limitações conhecidas
+
+- O sistema operacional completo de crescimento rumo a R$ 300 mil ainda está em construção; metas versionadas, forecast, waterfall de gap, ledger de impacto e experimentos pertencem ao roadmap.
+- Alguns formulários ainda usam `useFormState` e devem migrar para `useActionState` do React 19.
+- Permanecem avisos não bloqueantes de lint em pontos legados.
+- A ordem entre carregamento de metadata e autorização em algumas páginas dinâmicas de admin e analista precisa de endurecimento adicional.
+- Testes de integração que dependem do banco podem ser ignorados localmente quando `DATABASE_URL_TEST` não está configurada; a CI os executa com banco descartável.
+- As rotas operacionais estão prontas para agendamento, mas o cronograma da hospedagem não é mantido neste repositório.
+
+## Caminho para R$ 300 mil brutos anuais
+
+A meta de produto é apoiar cada operação na busca por **R$ 300.000 de faturamento bruto anual**, considerando pedidos válidos e excluindo cancelamentos e reembolsos integrais. A definição financeira definitiva será versionada no produto para impedir divergências entre telas e períodos.
+
+O avanço está organizado em etapas:
+
+1. **Estabilização:** segurança, autorização, consistência visual, confiabilidade dos dados e da entrega.
+2. **Fundação 300K:** metas, fases do projeto, camada semântica de métricas, forecast inicial, qualidade e atualização dos dados.
+3. **Oportunidades e execução:** waterfall do gap, motor de oportunidades, plano vinculado aos indicadores e modo de reunião.
+4. **Impacto e playbooks:** experimentos, registro de impacto, avaliação antes/depois e aprendizado reutilizável.
+5. **Expansão de marketplace:** catálogo, integrações, tráfego e conversão.
+6. **Copiloto:** briefings, simulação de cenários, plano semanal e automações controladas.
+
+O desenho completo, com limites entre capacidades atuais e futuras, está em [Growth Operating System — R$ 300 mil](./docs/superpowers/specs/2026-07-27-growth-operating-system-300k-design.md).
+
+## Documentação
+
+| Documento | Uso |
+|---|---|
+| [Onboarding de cliente](./docs/runbooks/onboarding-cliente.md) | Preparação e ativação de uma nova operação. |
+| [Rotação de segredos](./docs/runbooks/rotacao-segredos.md) | Troca segura de credenciais e chaves de criptografia. |
+| [Exclusão de dados por organização](./docs/runbooks/exclusao-de-dados-org.md) | Procedimento controlado de remoção. |
+| [Auditoria completa — 03/07/2026](./docs/auditoria-completa-2026-07-03.md) | Diagnóstico técnico e de produto. |
+| [Auditoria de qualidade — 14/07/2026](./docs/auditoria-qualidade-2026-07-14.md) | Verificação complementar de qualidade. |
+| [Especificação deste README](./docs/superpowers/specs/2026-07-28-readme-design.md) | Decisões editoriais e critérios da documentação. |
+
+## Licença
+
+Distribuído sob a [licença MIT](./LICENSE).
 
 ---
 
-<div align="center">
-<sub>Feito com ☕ pela <strong>Truth Commerce</strong> — Agência de Inteligência para E-commerce.</sub>
-</div>
+Desenvolvido pela Truth Commerce para transformar análise em rotina, responsabilidade e evolução mensurável.
