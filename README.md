@@ -60,7 +60,8 @@ A interface atual utiliza tema claro editorial, verde como cor de marca, menu la
 ### Administração e operação
 
 - Ativação, suspensão e configuração de planos de clientes.
-- Associação entre organizações e analistas.
+- Provisionamento administrativo separado: empresa + primeiro cliente em uma operação atômica, e analistas criados diretamente na organização interna.
+- Associação posterior entre organizações cliente e analistas responsáveis.
 - Gestão de usuários, consultoria, performance, operações e playbooks.
 - Rotas autenticadas para rotinas agendadas, heartbeats e watchdog operacional.
 - Auditoria de operações administrativas e controles de acesso por papel e organização.

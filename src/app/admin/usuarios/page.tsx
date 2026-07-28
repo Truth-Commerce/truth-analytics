@@ -10,13 +10,13 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/Button';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
 import { formatDataHora } from '@/lib/format';
-import { listAllOrganizationsMinimal } from '@/modules/admin/admin.repository';
 import { listAnalistas } from '@/modules/analista/analista.repository';
 import { requireAdmin } from '@/modules/auth/require-admin';
 import { listUsersPage } from '@/modules/auth/user.repository';
 import type { UserRole } from '@/modules/auth/user.types';
 
-import { CriarUsuarioForm } from './criar-usuario-form';
+import { CriarAnalistaForm } from './criar-analista-form';
+import { CriarClienteForm } from './criar-cliente-form';
 import { ResetLinkButton } from './reset-link-button';
 import { TransferirCarteiraForm } from './transferir-carteira-form';
 
@@ -37,9 +37,8 @@ export default async function AdminUsuariosPage(props: { searchParams: Promise<S
   const page = Math.max(1, Number(searchParams.page) || 1);
   const q = searchParams.q?.trim() || undefined;
 
-  const [usuarios, orgs, analistas] = await Promise.all([
+  const [usuarios, analistas] = await Promise.all([
     listUsersPage({ q, page }),
-    listAllOrganizationsMinimal(),
     listAnalistas(),
   ]);
 
@@ -55,22 +54,37 @@ export default async function AdminUsuariosPage(props: { searchParams: Promise<S
       <PageHeader
         eyebrow="Operação Truth"
         title="Gestão de contas"
-        description="Lista cross-org de usuários, criação em qualquer organização, reset de senha por link e transferência de carteira em lote."
+        description="Crie empresas com seu primeiro acesso, cadastre analistas internos, redefina senhas e organize a carteira da operação."
       />
 
-      {/* 1. Criar usuário */}
-      <Reveal>
-        <Card data-testid="usuarios-criar-card">
-          <CardHeader>
-            <CardTitle as="h2" className="text-base">
-              Criar usuário
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CriarUsuarioForm orgs={orgs} />
-          </CardContent>
-        </Card>
-      </Reveal>
+      {/* 1. Provisionar cliente ou analista */}
+      <section className="grid gap-5 lg:grid-cols-2" aria-label="Criar contas">
+        <Reveal className="h-full">
+          <Card className="h-full" data-testid="usuarios-criar-cliente-card">
+            <CardHeader>
+              <CardTitle as="h2" className="text-base">
+                Criar conta de cliente
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CriarClienteForm />
+            </CardContent>
+          </Card>
+        </Reveal>
+
+        <Reveal className="h-full">
+          <Card className="h-full" data-testid="usuarios-criar-analista-card">
+            <CardHeader>
+              <CardTitle as="h2" className="text-base">
+                Criar conta de analista
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CriarAnalistaForm />
+            </CardContent>
+          </Card>
+        </Reveal>
+      </section>
 
       {/* 2. Transferir carteira em lote */}
       <Reveal>
