@@ -484,3 +484,24 @@ export function blingConnectionFailedTemplate(appUrl: string): EmailContent {
 
   return { subject, html, text };
 }
+
+/** Template provider-aware: a autorização Olist deixou de ser válida. */
+export function olistConnectionFailedTemplate(appUrl: string, href: string): EmailContent {
+  const url = `${appUrl}${href}`;
+  const subject = 'A conexão com o Olist precisa ser renovada — Truth Analytics';
+  const text = [
+    'A autorização da conexão com o Olist ERP (antigo Tiny) expirou.',
+    '',
+    `Acesse a configuração em: ${url}`,
+    '',
+    'Autorize novamente para manter a conexão pronta para as próximas integrações.',
+    '',
+    'Atenciosamente,',
+    'Equipe Truth Analytics',
+  ].join('\n');
+  const html = `<p>A autorização da conexão com o <strong>Olist ERP (antigo Tiny)</strong> expirou.</p>
+<p><a href="${escapeHtml(url)}">Clique aqui para autorizar novamente</a></p>
+<p>Autorize novamente para manter a conexão pronta para as próximas integrações.</p>
+<p>Atenciosamente,<br>Equipe Truth Analytics</p>`;
+  return { subject, html, text };
+}

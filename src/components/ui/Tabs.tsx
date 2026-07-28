@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 export interface TabItem {
   id: string;
@@ -17,14 +17,22 @@ interface TabsProps {
 export function Tabs({ items, defaultValue, className = '' }: TabsProps) {
   const ids = items.map((item) => item.id);
   const [active, setActive] = useState(() => resolveTabValue(ids, defaultValue, items[0]?.id));
+  const [previousDefault, setPreviousDefault] = useState(defaultValue);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setActive((current) => resolveTabValue(ids, defaultValue, current));
-  }, [defaultValue, ids.join('|')]);
+  if (previousDefault !== defaultValue) {
+    setPreviousDefault(defaultValue);
+    if (defaultValue && ids.includes(defaultValue)) setActive(defaultValue);
+  }
+
+  const resolvedActive = resolveTabValue(
+    ids,
+    active,
+    resolveTabValue(ids, defaultValue, items[0]?.id),
+  );
 
   function onKeyDown(e: React.KeyboardEvent) {
-    const idx = items.findIndex((t) => t.id === active);
+    const idx = items.findIndex((t) => t.id === resolvedActive);
     if (idx === -1) return;
     let next = idx;
     if (e.key === 'ArrowRight') next = (idx + 1) % items.length;
@@ -50,13 +58,13 @@ export function Tabs({ items, defaultValue, className = '' }: TabsProps) {
             type="button"
             role="tab"
             id={`tab-${t.id}`}
-            aria-selected={t.id === active}
+            aria-selected={t.id === resolvedActive}
             aria-controls={`tabpanel-${t.id}`}
-            tabIndex={t.id === active ? 0 : -1}
+            tabIndex={t.id === resolvedActive ? 0 : -1}
             onClick={() => setActive(t.id)}
             data-testid={`tab-${t.id}`}
             className={`-mb-px whitespace-nowrap rounded-t-lg border-b-2 px-4 py-2 text-sm outline-none transition-colors duration-200 ease-truth focus-visible:ring-2 focus-visible:ring-brand/50 ${
-              t.id === active
+              t.id === resolvedActive
                 ? 'border-brand font-medium text-ink'
                 : 'border-transparent text-ink-soft hover:text-ink'
             }`}
@@ -71,7 +79,7 @@ export function Tabs({ items, defaultValue, className = '' }: TabsProps) {
           role="tabpanel"
           id={`tabpanel-${t.id}`}
           aria-labelledby={`tab-${t.id}`}
-          hidden={t.id !== active}
+          hidden={t.id !== resolvedActive}
           className="pt-5"
         >
           {t.content}

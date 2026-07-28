@@ -41,6 +41,16 @@ export type ConnectionRef = {
   provider: ErpProviderId;
 };
 
+export type ProviderRefreshContext = {
+  orgId: string;
+  provider: ErpProviderId;
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  expiresAt: Date;
+  version: string;
+};
+
 export async function configureProviderCredentials(input: {
   orgId: string;
   provider: ErpProviderId;
@@ -124,7 +134,7 @@ export async function getProviderConnectionSummary(
     provider,
     status: row.status,
     credentialsConfigured: Boolean(row.oauthClientId && row.oauthClientSecret),
-    authorized: Boolean(row.accessToken && row.refreshToken),
+    authorized: Boolean(row.accessToken && row.refreshToken && row.status === 'configurado'),
     operational: provider === 'bling' && row.status === 'ok',
     expiresAt: row.expiresAt,
     refreshExpiresAt: row.refreshExpiresAt,
@@ -249,6 +259,93 @@ export async function getValidAccessTokenForProvider(
   });
 }
 
+export async function getProviderRefreshContext(
+  orgId: string,
+  provider: ErpProviderId,
+): Promise<ProviderRefreshContext> {
+  const [row] = await db
+    .select({
+      oauthClientId: connections.oauth_client_id,
+      oauthClientSecret: connections.oauth_client_secret,
+      accessToken: connections.access_token,
+      refreshToken: connections.refresh_token,
+      expiresAt: connections.expira_em,
+    })
+    .from(connections)
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, provider)))
+    .limit(1);
+  if (
+    !row?.oauthClientId ||
+    !row.oauthClientSecret ||
+    !row.accessToken ||
+    !row.refreshToken ||
+    !row.expiresAt
+  ) {
+    throw new Error('provider_not_authorized');
+  }
+  return {
+    orgId,
+    provider,
+    clientId: decryptConnectionSecret({
+      orgId,
+      provider,
+      kind: 'client_id',
+      ciphertext: row.oauthClientId,
+    }),
+    clientSecret: decryptConnectionSecret({
+      orgId,
+      provider,
+      kind: 'client_secret',
+      ciphertext: row.oauthClientSecret,
+    }),
+    refreshToken: decryptConnectionSecret({
+      orgId,
+      provider,
+      kind: 'refresh_token',
+      ciphertext: row.refreshToken,
+    }),
+    expiresAt: row.expiresAt,
+    version: connectionVersion(row),
+  };
+}
+
+export async function saveRefreshedProviderTokens(input: {
+  context: ProviderRefreshContext;
+  tokens: OAuthTokens;
+  now?: Date;
+}): Promise<boolean> {
+  const current = await getVersionedProviderRow(input.context.orgId, input.context.provider);
+  if (!current || connectionVersion(current) !== input.context.version) return false;
+  const now = input.now ?? new Date();
+  const updated = await db
+    .update(connections)
+    .set({
+      access_token: encryptConnectionSecret({
+        orgId: input.context.orgId,
+        provider: input.context.provider,
+        kind: 'access_token',
+        value: input.tokens.accessToken,
+      }),
+      refresh_token: encryptConnectionSecret({
+        orgId: input.context.orgId,
+        provider: input.context.provider,
+        kind: 'refresh_token',
+        value: input.tokens.refreshToken,
+      }),
+      expira_em: new Date(now.getTime() + input.tokens.expiresInSeconds * 1000),
+      refresh_expira_em: new Date(
+        now.getTime() + (input.tokens.refreshExpiresInSeconds ?? 86_400) * 1000,
+      ),
+      last_refresh_at: now,
+      last_error_code: null,
+      last_error_at: null,
+      status: 'configurado',
+    })
+    .where(versionWhere(current, input.context.orgId, input.context.provider))
+    .returning({ id: connections.id });
+  return updated.length === 1;
+}
+
 export async function disconnectProvider(input: {
   orgId: string;
   provider: ErpProviderId;
@@ -314,16 +411,21 @@ export async function markProviderConnectionError(input: {
   provider: ErpProviderId;
   code: string;
   permanent: boolean;
+  expectedVersion: string;
   now?: Date;
-}): Promise<void> {
-  await db
+}): Promise<boolean> {
+  const current = await getVersionedProviderRow(input.orgId, input.provider);
+  if (!current || connectionVersion(current) !== input.expectedVersion) return false;
+  const updated = await db
     .update(connections)
     .set({
       last_error_code: input.code,
       last_error_at: input.now ?? new Date(),
       ...(input.permanent ? { status: 'expirado' } : {}),
     })
-    .where(and(eq(connections.org_id, input.orgId), eq(connections.provider, input.provider)));
+    .where(versionWhere(current, input.orgId, input.provider))
+    .returning({ id: connections.id });
+  return updated.length === 1;
 }
 
 export function credentialVersion(clientIdCiphertext: string, clientSecretCiphertext: string): string {
@@ -332,4 +434,57 @@ export function credentialVersion(clientIdCiphertext: string, clientSecretCipher
     .update('\0')
     .update(clientSecretCiphertext)
     .digest('hex');
+}
+
+type VersionedProviderRow = {
+  id: string;
+  oauthClientId: string | null;
+  oauthClientSecret: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+};
+
+async function getVersionedProviderRow(
+  orgId: string,
+  provider: ErpProviderId,
+): Promise<VersionedProviderRow | null> {
+  const [row] = await db
+    .select({
+      id: connections.id,
+      oauthClientId: connections.oauth_client_id,
+      oauthClientSecret: connections.oauth_client_secret,
+      accessToken: connections.access_token,
+      refreshToken: connections.refresh_token,
+    })
+    .from(connections)
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, provider)))
+    .limit(1);
+  return row ?? null;
+}
+
+function connectionVersion(row: Omit<VersionedProviderRow, 'id'>): string {
+  return createHash('sha256')
+    .update(row.oauthClientId ?? '')
+    .update('\0')
+    .update(row.oauthClientSecret ?? '')
+    .update('\0')
+    .update(row.accessToken ?? '')
+    .update('\0')
+    .update(row.refreshToken ?? '')
+    .digest('hex');
+}
+
+function versionWhere(row: VersionedProviderRow, orgId: string, provider: ErpProviderId) {
+  if (!row.oauthClientId || !row.oauthClientSecret || !row.accessToken || !row.refreshToken) {
+    return and(eq(connections.id, row.id), eq(connections.org_id, orgId), eq(connections.provider, provider));
+  }
+  return and(
+    eq(connections.id, row.id),
+    eq(connections.org_id, orgId),
+    eq(connections.provider, provider),
+    eq(connections.oauth_client_id, row.oauthClientId),
+    eq(connections.oauth_client_secret, row.oauthClientSecret),
+    eq(connections.access_token, row.accessToken),
+    eq(connections.refresh_token, row.refreshToken),
+  );
 }

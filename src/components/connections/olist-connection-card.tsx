@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useState } from 'react';
 
 import {
   disconnectOlistAction,
@@ -24,7 +24,7 @@ export function OlistConnectionCard(props: {
 }) {
   const configured = props.summary?.credentialsConfigured ?? false;
   const authorized = props.summary?.authorized ?? false;
-  const [editing, setEditing] = useState(!configured);
+  const [editorMode, setEditorMode] = useState<'auto' | 'open' | 'closed'>('auto');
   const [saveState, saveAction, savePending] = useActionState(
     saveOlistCredentialsAction,
     INITIAL_STATE,
@@ -34,11 +34,9 @@ export function OlistConnectionCard(props: {
     INITIAL_STATE,
   );
 
-  useEffect(() => {
-    if (saveState.ok) setEditing(false);
-  }, [saveState.ok]);
-
   const authorizeHref = `/api/connections/olist?orgId=${encodeURIComponent(props.orgId)}&surface=${props.surface}`;
+  const editing =
+    editorMode === 'open' || (editorMode === 'auto' && !configured && !saveState.ok);
 
   return (
     <Card data-testid="olist-connection-card" lift={false}>
@@ -94,7 +92,7 @@ export function OlistConnectionCard(props: {
                 {savePending ? 'Salvando…' : 'Salvar credenciais'}
               </Button>
               {configured ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditorMode('closed')}>
                   Cancelar
                 </Button>
               ) : null}
@@ -105,7 +103,7 @@ export function OlistConnectionCard(props: {
             <Button as="a" href={authorizeHref} size="sm">
               {authorized ? 'Refazer autorização' : 'Autorizar no Olist'}
             </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(true)}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setEditorMode('open')}>
               Alterar credenciais
             </Button>
             <form action={disconnectAction}>

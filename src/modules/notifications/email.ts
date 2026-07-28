@@ -11,6 +11,7 @@ import {
   digestSemanalTemplate,
   type DigestEmailData,
   lembretePrazoTemplate,
+  olistConnectionFailedTemplate,
   passwordChangedTemplate,
   passwordResetTemplate,
   pipelineFailedTemplate,
@@ -111,6 +112,12 @@ export async function sendAutoGeracaoPausadaEmail(
  */
 export async function sendBlingConnectionFailedEmail(to: string): Promise<void> {
   const content = blingConnectionFailedTemplate(serverEnv.APP_URL);
+  await sendEmail({ to, ...content });
+}
+
+/** Notifica cliente ou analista de que a autorização Olist expirou. Nunca lança. */
+export async function sendOlistConnectionFailedEmail(to: string, href: string): Promise<void> {
+  const content = olistConnectionFailedTemplate(serverEnv.APP_URL, href);
   await sendEmail({ to, ...content });
 }
 
