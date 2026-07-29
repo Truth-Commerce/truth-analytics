@@ -45,6 +45,8 @@ export async function loadAndBindOlistAccount(orgId: string): Promise<OlistAccou
     `);
     const generation = (rows[0] as { data_generation?: number } | undefined)?.data_generation;
     if (!generation) throw new Error('olist_conta_nao_validada');
+    // Readiness is generation-bound; old data remains stored but cannot certify the new binding.
+    await tx.execute(sql`DELETE FROM connection_sync_state WHERE org_id=${orgId} AND provider='olist'`);
     return { fingerprint, sourceGeneration: generation };
   });
 }

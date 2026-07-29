@@ -15,7 +15,10 @@ export async function fetchOlistJson<T>(input: { orgId: string; priority: OlistR
     for (const [key, value] of Object.entries(input.query ?? {})) url.searchParams.set(key, value);
     for (let attempt = 0; attempt < 2; attempt++) {
       if (signal.aborted) throw new OlistDataError('olist_deadline_exceeded', 'transient');
-      if (input.accountFingerprint) await reserveOlistRequest({ accountFingerprint: input.accountFingerprint, priority: input.priority });
+      if (input.accountFingerprint) {
+        const reservation = await reserveOlistRequest({ accountFingerprint: input.accountFingerprint, priority: input.priority, signal });
+        await waitUntil(reservation.startAt, signal);
+      }
       const token = await getValidAccessTokenForProvider(input.orgId, 'olist');
       const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
       try {
@@ -24,7 +27,7 @@ export async function fetchOlistJson<T>(input: { orgId: string; priority: OlistR
         if (input.accountFingerprint) await observeOlistRateHeaders(input.accountFingerprint, response.headers);
         if (response.status === 401) throw new OlistDataError('olist_nao_autorizado', 'auth', 401);
         if (response.status === 429 || response.status >= 500) {
-          if (attempt === 0) continue;
+          if (attempt === 0) { await retryAfter(response.headers, signal); continue; }
           throw new OlistDataError('olist_indisponivel', 'transient', response.status);
         }
         if (!response.ok) throw new OlistDataError('olist_resposta_invalida', 'permanent', response.status);
@@ -38,4 +41,17 @@ export async function fetchOlistJson<T>(input: { orgId: string; priority: OlistR
     }
     throw new OlistDataError('olist_indisponivel', 'transient');
   } finally { clearTimeout(deadline); }
+}
+
+function waitUntil(at: Date, signal: AbortSignal): Promise<void> {
+  const ms = Math.max(0, at.getTime() - Date.now());
+  if (!ms) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => { clearTimeout(timer); reject(new OlistDataError('olist_deadline_exceeded', 'transient')); }, { once: true });
+  });
+}
+function retryAfter(headers: Headers, signal: AbortSignal): Promise<void> {
+  const raw = Number(headers.get('retry-after'));
+  return waitUntil(new Date(Date.now() + Math.min(30_000, Math.max(0, raw * 1000 || 0))), signal);
 }

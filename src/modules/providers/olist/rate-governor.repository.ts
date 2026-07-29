@@ -60,7 +60,7 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
   };
 }
 
-export async function reserveOlistRequest(input: { accountFingerprint: string; priority: OlistRequestPriority }): Promise<OlistReservation> {
+export async function reserveOlistRequest(input: { accountFingerprint: string; priority: OlistRequestPriority; signal?: AbortSignal }): Promise<OlistReservation> {
   return createOlistRateGovernor().reserve(input);
 }
 

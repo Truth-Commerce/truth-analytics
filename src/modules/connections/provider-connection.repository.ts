@@ -100,6 +100,9 @@ export async function configureProviderCredentials(input: {
         last_error_code: null,
         last_error_at: null,
         status: 'configurado',
+        // Any credential rotation fences old Olist data even if /info resolves to the same account.
+        data_generation: sql`${connections.data_generation} + 1`,
+        provider_account_fingerprint: null,
       },
     });
   await recordAudit({
