@@ -67,13 +67,7 @@ export async function GET(request: Request) {
     const deadlineAt = Date.now() + 30_000;
     deadlineTimer = setTimeout(() => controller.abort(), Math.max(0, deadlineAt - Date.now()));
     const lifecycle = { signal: controller.signal, deadlineAt };
-    const tokens = await (getOAuthProvider('olist').exchangeCode as (input: {
-      credentials: { clientId: string; clientSecret: string; redirectUri: string };
-      code: string;
-      codeVerifier: string;
-      signal: AbortSignal;
-      deadlineAt: number;
-    }) => Promise<import('@/modules/providers/types').OAuthTokens>)({
+    const tokens = await getOAuthProvider('olist').exchangeCode({
       credentials: {
         clientId: credentials.clientId,
         clientSecret: credentials.clientSecret,

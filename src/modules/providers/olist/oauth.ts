@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   OAuthProviderError,
   type OAuthClientCredentials,
+  type OAuthRequestLifecycle,
 } from '@/modules/providers/oauth.types';
 import type { OAuthTokens } from '@/modules/providers/types';
 
@@ -39,7 +40,7 @@ export async function exchangeCode(input: {
   credentials: OAuthClientCredentials;
   code: string;
   codeVerifier: string;
-}): Promise<OAuthTokens> {
+} & OAuthRequestLifecycle): Promise<OAuthTokens> {
   return requestTokens(
     new URLSearchParams({
       grant_type: 'authorization_code',
@@ -48,16 +49,14 @@ export async function exchangeCode(input: {
       redirect_uri: input.credentials.redirectUri,
       code: input.code,
       code_verifier: input.codeVerifier,
-    }),
+    }), input.signal, input.deadlineAt,
   );
 }
 
 export async function refresh(input: {
   credentials: OAuthClientCredentials;
   refreshToken: string;
-  signal?: AbortSignal;
-  deadlineAt?: number;
-}): Promise<OAuthTokens> {
+} & OAuthRequestLifecycle): Promise<OAuthTokens> {
   return requestTokens(
     new URLSearchParams({
       grant_type: 'refresh_token',

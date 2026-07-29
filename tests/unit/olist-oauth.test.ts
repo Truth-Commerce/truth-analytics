@@ -144,7 +144,63 @@ describe('Olist OAuth adapter', () => {
     expect(aborts).toBe(2);
   });
 
-  it('inclui a leitura do corpo no timeout de cada tentativa', async () => {
+  it('propaga o lifecycle de exchange para o fetch do token', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = olistOAuthProvider.exchangeCode({
+      credentials,
+      code: 'code-1',
+      codeVerifier: 'verifier-1',
+      signal: controller.signal,
+      deadlineAt: Date.now() + 30_000,
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.headers).toEqual({ 'content-type': 'application/x-www-form-urlencoded' });
+    expect(Object.fromEntries(new URLSearchParams(init.body as string))).toMatchObject({
+      grant_type: 'authorization_code',
+      code: 'code-1',
+      code_verifier: 'verifier-1',
+    });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'olist_token_erro_transiente',
+      kind: 'transient',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('limita Retry-After de exchange ao deadline absoluto sem uma nova tentativa', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(new Response('slow down', {
+      status: 429,
+      headers: { 'retry-after': '30' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = olistOAuthProvider.exchangeCode({
+      credentials,
+      code: 'code-1',
+      codeVerifier: 'verifier-1',
+      deadlineAt: Date.now() + 1_000,
+    });
+    const assertion = expect(pending).rejects.toMatchObject({
+      code: 'olist_token_erro_transiente',
+      kind: 'transient',
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('inclui a leitura do corpo de exchange no timeout de cada tentativa', async () => {
     vi.useFakeTimers();
     const response = {
       ok: true,
@@ -155,7 +211,11 @@ describe('Olist OAuth adapter', () => {
     const fetchMock = vi.fn().mockResolvedValue(response);
     vi.stubGlobal('fetch', fetchMock);
 
-    const promise = olistOAuthProvider.refresh({ credentials, refreshToken: 'refresh-1' });
+    const promise = olistOAuthProvider.exchangeCode({
+      credentials,
+      code: 'code-1',
+      codeVerifier: 'verifier-1',
+    });
     const assertion = expect(promise).rejects.toMatchObject({
       code: 'olist_token_erro_transiente',
       kind: 'transient',
