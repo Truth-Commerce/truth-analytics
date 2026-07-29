@@ -269,6 +269,7 @@ Expected after commit: no output from `git status --short`.
 - Create: `src/modules/providers/olist/account.ts`
 - Create: `src/modules/providers/olist/rate-governor.repository.ts`
 - Create: `src/modules/providers/olist/http.ts`
+- Create: `src/db/migrations/0023_olist_provider_rate_limit_waiters.sql`
 - Modify: `src/modules/connections/provider-connection.repository.ts`
 - Modify: `src/modules/connections/olist-token-renewal.ts`
 - Modify: `src/app/api/connections/olist/callback/route.ts`
@@ -497,12 +498,12 @@ npm run typecheck
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/db/schema/connection-sync-state.ts src/db/migrations/0023_olist_sync_state_shadow_enable.sql src/db/migrations/meta/0023_snapshot.json src/db/migrations/meta/_journal.json src/modules/connections/sync-state.repository.ts tests/integration/sync-state-lease.test.ts tests/unit/sync-state-cursor.test.ts
+git add src/db/schema/connection-sync-state.ts src/db/migrations/0024_olist_sync_state_shadow_enable.sql src/db/migrations/meta/0024_snapshot.json src/db/migrations/meta/_journal.json src/modules/connections/sync-state.repository.ts tests/integration/sync-state-lease.test.ts tests/unit/sync-state-cursor.test.ts
 git commit -m "feat(sync): adicionar cursor e lease com fencing"
 git status --short
 ```
 
-Expected after commit: no output from `git status --short`. Apply `0023` to production only in Task 10 after the provider-aware query gate, although isolated test databases apply it here.
+Expected after commit: no output from `git status --short`. Apply `0024` to production only in Task 10 after the provider-aware query gate, although isolated test databases apply it here.
 
 ---
 
@@ -835,7 +836,7 @@ npm test -- tests/integration/olist-order-reconciliation.test.ts tests/integrati
 
 - [ ] **Step 3: Implement bounded preparation and deterministic readiness**
 
-Apply the already committed `0023_olist_sync_state_shadow_enable` only after Task 8 static/read isolation is green; it drops only obsolete `orders_org_provider_order_uq`, retains every Bling legacy object and relies on the generation-aware unique from `0022`. After production applies it, the minimum rollback binary is the provider-aware release.
+Apply the already committed `0024_olist_sync_state_shadow_enable` only after Task 8 static/read isolation is green; it drops only obsolete `orders_org_provider_order_uq`, retains every Bling legacy object and relies on the generation-aware unique from `0022`. After production applies it, the minimum rollback binary is the provider-aware release.
 
 `prepareOlistOrders` owns a two-pass cursor for the current generation. It completes creation pages, switches cursor pass to `updated` without declaring readiness, completes all `dataAtualizacao` pages from the captured DB timestamp, then enriches at most 100 details and reconciles. Store counts/backlog/error by generation. The cron is the durable trigger; UI may request an early run but is not the scheduler. Comparison uses cents and explicit provider-order/channel samples, never remote customer data.
 
@@ -1008,8 +1009,8 @@ Expected: uma organização sem Bling conclui backfill/readiness, torna Olist `o
 
 **Files:**
 - Modify: `src/db/schema/product-stock.ts`
-- Create: `src/db/migrations/0024_olist_stock_expand.sql`
-- Create: `src/db/migrations/meta/0024_snapshot.json`
+- Create: `src/db/migrations/0025_olist_stock_expand.sql`
+- Create: `src/db/migrations/meta/0025_snapshot.json`
 - Modify: `src/db/migrations/meta/_journal.json`
 - Create: `tests/integration/olist-stock-schema.test.ts`
 
@@ -1019,7 +1020,7 @@ Expected: uma organização sem Bling conclui backfill/readiness, torna Olist `o
 
 - [ ] **Step 1: Write failing PostgreSQL identity and Bling compatibility tests**
 
-Insert legacy stock without the new fields and assert backfill/default generation 1 and fencing 0. Assert the new generation unique rejects duplicates within a generation. Assert both `product_stock_org_sku_uq` and `product_stock_org_provider_sku_uq` still exist after `0024`; cross-provider/generation coexistence is deliberately not enabled yet.
+Insert legacy stock without the new fields and assert backfill/default generation 1 and fencing 0. Assert the new generation unique rejects duplicates within a generation. Assert both `product_stock_org_sku_uq` and `product_stock_org_provider_sku_uq` still exist after `0025`; cross-provider/generation coexistence is deliberately not enabled yet.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -1030,7 +1031,7 @@ npm test -- tests/integration/olist-stock-schema.test.ts
 
 - [ ] **Step 3: Implement additive schema and migration only**
 
-Migration `0024` adds/backfills generation 1 and fencing 0, creates the generation unique and an index `(org_id,provider,source_generation,updated_at)`. It does not alter either old unique and does not delete/rewrite business values. This is a standalone production release before any stock writer change.
+Migration `0025` adds/backfills generation 1 and fencing 0, creates the generation unique and an index `(org_id,provider,source_generation,updated_at)`. It does not alter either old unique and does not delete/rewrite business values. This is a standalone production release before any stock writer change.
 
 - [ ] **Step 4: Verify GREEN on PostgreSQL**
 
@@ -1043,12 +1044,12 @@ npm run typecheck
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/db/schema/product-stock.ts src/db/migrations/0024_olist_stock_expand.sql src/db/migrations/meta/0024_snapshot.json src/db/migrations/meta/_journal.json tests/integration/olist-stock-schema.test.ts
+git add src/db/schema/product-stock.ts src/db/migrations/0025_olist_stock_expand.sql src/db/migrations/meta/0025_snapshot.json src/db/migrations/meta/_journal.json tests/integration/olist-stock-schema.test.ts
 git commit -m "feat(estoque): expandir schema para geração e fencing"
 git status --short
 ```
 
-Expected after commit: no output from `git status --short`. Apply and smoke-test `0024` in production before Task 14 deploy.
+Expected after commit: no output from `git status --short`. Apply and smoke-test `0025` in production before Task 14 deploy.
 
 ---
 
@@ -1113,8 +1114,8 @@ Expected after commit: no output from `git status --short`. Deploy this writer a
 
 **Files:**
 - Modify: `src/db/schema/product-stock.ts`
-- Create: `src/db/migrations/0025_olist_stock_shadow_enable.sql`
-- Create: `src/db/migrations/meta/0025_snapshot.json`
+- Create: `src/db/migrations/0026_olist_stock_shadow_enable.sql`
+- Create: `src/db/migrations/meta/0026_snapshot.json`
 - Modify: `src/db/migrations/meta/_journal.json`
 - Modify: `tests/integration/olist-stock-schema.test.ts`
 
@@ -1124,7 +1125,7 @@ Expected after commit: no output from `git status --short`. Deploy this writer a
 
 - [ ] **Step 1: Extend the failing migration test**
 
-Assert `0025` removes exactly `product_stock_org_sku_uq` and `product_stock_org_provider_sku_uq`; same SKU can coexist across providers/generations; same source tuple still raises `23505`; existing Bling rows remain byte-for-byte equivalent in business columns.
+Assert `0026` removes exactly `product_stock_org_sku_uq` and `product_stock_org_provider_sku_uq`; same SKU can coexist across providers/generations; same source tuple still raises `23505`; existing Bling rows remain byte-for-byte equivalent in business columns.
 
 - [ ] **Step 2: Run test and verify RED**
 
@@ -1148,12 +1149,12 @@ npm run typecheck
 - [ ] **Step 5: Commit the contract release**
 
 ```powershell
-git add src/db/schema/product-stock.ts src/db/migrations/0025_olist_stock_shadow_enable.sql src/db/migrations/meta/0025_snapshot.json src/db/migrations/meta/_journal.json tests/integration/olist-stock-schema.test.ts
+git add src/db/schema/product-stock.ts src/db/migrations/0026_olist_stock_shadow_enable.sql src/db/migrations/meta/0026_snapshot.json src/db/migrations/meta/_journal.json tests/integration/olist-stock-schema.test.ts
 git commit -m "refactor(estoque): habilitar coexistência por geração"
 git status --short
 ```
 
-Expected after commit: no output from `git status --short`. Apply `0025` only after Task 14 writer is deployed and green; rollback floor is that writer release.
+Expected after commit: no output from `git status --short`. Apply `0026` only after Task 14 writer is deployed and green; rollback floor is that writer release.
 
 ---
 
@@ -1295,17 +1296,17 @@ Expected after commit: no output from `git status --short`.
 
 **Interfaces:**
 - Documents: permissões read-only, backfill/readiness, cutover/rollback, kill switch, rate limit, cursor/lease, reconciliação e recuperação de 401/429.
-- Requires: `0022` expand; provider-aware binary with Olist disabled; `0023` shadow enable; `0024` stock expand; stock writer release; `0025` stock contract; only then Olist stock adapter.
+- Requires: `0022` expand; `0023` governor waiters; provider-aware binary with Olist disabled; `0024` sync shadow enable; `0025` stock expand; stock writer release; `0026` stock contract; only then Olist stock adapter.
 
 - [ ] **Step 1: Write exact operator runbook**
 
 Document this rollout sequence:
 
 1. Apply additive `0022` with Olist disabled; deploy Tasks 1–8 provider-aware code and verify Bling report/query inventory smoke.
-2. Apply `0023` only after that gate; deploy preparation cron, complete two-pass 90-day readiness for a no-active-ERP organization and generate one Olist report.
+2. Apply `0024` only after that gate (with `0023` governor waiters already applied); deploy preparation cron, complete two-pass 90-day readiness for a no-active-ERP organization and generate one Olist report.
 3. Prepare a Bling organization in shadow, reconcile, explicit-cutover, generate report, rollback and verify Bling metrics; never roll binary below the provider-aware release.
-4. Apply additive `0024`; verify legacy Bling stock, deploy Task 14 writer, and complete one production Bling stock smoke.
-5. Apply contract `0025` only after writer smoke; deploy Olist stock adapter, run `*/5` cron until completion and verify 5k/6h, 20k/24h plus `>20k` refusal.
+4. Apply additive `0025`; verify legacy Bling stock, deploy Task 14 writer, and complete one production Bling stock smoke.
+5. Apply contract `0026` only after writer smoke; deploy Olist stock adapter, run `*/5` cron until completion and verify 5k/6h, 20k/24h plus `>20k` refusal.
 6. Expand rollout; on incident set `OLIST_DATA_SYNC_ENABLED=false`, preserve both datasets/tokens and roll only to the documented compatible binary floor.
 
 Include SQL read-only checks for active connection uniqueness, sync-state backlog/error, report source provider, order duplicates and stock duplicates. Include commands for protected cron smoke with `CRON_SECRET` supplied through environment, never pasted into shell history or documentation.
@@ -1334,7 +1335,7 @@ npm run test:e2e
 git diff --check
 ```
 
-Expected: migrations `0022`–`0025` apply in order to fresh and production-shaped PostgreSQL databases; no integration suite is skipped in CI; lint/typecheck/build pass; all unit/integration tests and 25+ Playwright scenarios pass.
+Expected: migrations `0022`–`0026` apply in order to fresh and production-shaped PostgreSQL databases; no integration suite is skipped in CI; lint/typecheck/build pass; all unit/integration tests and 25+ Playwright scenarios pass.
 
 - [ ] **Step 4: Execute production smoke and rollback rehearsal**
 
@@ -1352,4 +1353,4 @@ Expected after commit: no output from `git status --short`.
 
 ## Execution Handoff
 
-Execute with `superpowers:subagent-driven-development`, one task and one review gate at a time, in an isolated worktree created through `superpowers:using-git-worktrees`. Tasks 1–12 form the independently deployable Incremento A and must pass its value gate before the three stock releases in Tasks 13–15. Do not start the Olist stock adapter before `0025` is safely applied. Do not merge, enable `OLIST_DATA_SYNC_ENABLED` or finish rollout until PostgreSQL integration tests, the complete Playwright suite and Task 18 gates are green.
+Execute with `superpowers:subagent-driven-development`, one task and one review gate at a time, in an isolated worktree created through `superpowers:using-git-worktrees`. Tasks 1–12 form the independently deployable Incremento A and must pass its value gate before the three stock releases in Tasks 13–15. Do not start the Olist stock adapter before `0026` is safely applied. Do not merge, enable `OLIST_DATA_SYNC_ENABLED` or finish rollout until PostgreSQL integration tests, the complete Playwright suite and Task 18 gates are green.

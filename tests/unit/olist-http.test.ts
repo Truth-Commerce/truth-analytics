@@ -78,8 +78,8 @@ describe('Olist HTTP deadline', () => {
   });
 
   it.each([
-    [new TypeError('network'), undefined],
-    [new Response(null, { status: 429, headers: { 'retry-after': '0' } }), 429],
+    new TypeError('network'),
+    new Response(null, { status: 429, headers: { 'retry-after': '0' } }),
   ])('repete uma falha transitória com uma nova reserva: %s', async (failure) => {
     getFingerprint.mockResolvedValue('f'.repeat(64));
     getToken.mockResolvedValue('token-a');
