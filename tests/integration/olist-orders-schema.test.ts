@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -73,10 +73,22 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
           await copyFile(join(migrationRoot, file), join(migrationDir, file));
         }
       }
+      const journal = JSON.parse(
+        await readFile(join(migrationRoot, 'meta/_journal.json'), 'utf8'),
+      ) as { version: string; dialect: string; entries: Array<{ idx: number }> };
+      await mkdir(join(migrationDir, 'meta'));
+      await writeFile(
+        join(migrationDir, 'meta/_journal.json'),
+        `${JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx <= 21) }, null, 2)}\n`,
+      );
 
       await isolatedSql.unsafe(`CREATE SCHEMA "${schema}"`);
       await isolatedSql.unsafe(`SET search_path TO "${schema}"`);
-      await migrate(isolatedDb, { migrationsFolder: migrationDir });
+      await migrate(isolatedDb, { migrationsFolder: migrationDir, migrationsSchema: schema });
+      const [applied] = await isolatedSql.unsafe<{ count: number }[]>(
+        `SELECT count(*)::int AS count FROM "${schema}"."__drizzle_migrations"`,
+      );
+      expect(applied?.count).toBe(22);
 
       const [legacyOrg] = await isolatedDb
         .insert(organizations)
