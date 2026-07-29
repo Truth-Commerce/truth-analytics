@@ -80,4 +80,16 @@ describe('renewOlistConnection — códigos seguros', () => {
     expect(saveRefreshedProviderTokens).not.toHaveBeenCalled();
     expect(markProviderConnectionError).not.toHaveBeenCalled();
   });
+
+  it('entrega o lifecycle ao CAS de refresh, sem uma race que deixe save em segundo plano', async () => {
+    const controller = new AbortController();
+    adapter.refresh.mockResolvedValueOnce({ accessToken: 'new', refreshToken: 'new-refresh', expiresInSeconds: 3600 });
+    vi.mocked(saveRefreshedProviderTokens).mockResolvedValueOnce(true);
+
+    await expect(renewOlistConnection('org-a', new Date(), { signal: controller.signal, deadlineAt: Date.now() + 5_000 })).resolves.toBe('renewed');
+
+    expect(saveRefreshedProviderTokens).toHaveBeenCalledWith(expect.objectContaining({
+      lifecycle: expect.objectContaining({ signal: controller.signal, deadlineAt: expect.any(Number) }),
+    }));
+  });
 });

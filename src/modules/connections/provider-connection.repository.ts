@@ -58,6 +58,10 @@ export type OlistPublicationContext = {
   dataGeneration: number;
 };
 
+/** Lifecycle carried from the HTTP/request owner into every Olist DB mutation. */
+export type ProviderConnectionLifecycle = { signal?: AbortSignal; deadlineAt?: number };
+const OLIST_DB_MAX_WAIT_MS = 10_000;
+
 export async function configureProviderCredentials(input: {
   orgId: string;
   provider: ErpProviderId;
@@ -355,17 +359,14 @@ export async function saveRefreshedProviderTokens(input: {
   context: ProviderRefreshContext;
   tokens: OAuthTokens;
   now?: Date;
+  lifecycle?: ProviderConnectionLifecycle;
 }): Promise<boolean> {
-  const current = await getVersionedProviderRow(input.context.orgId, input.context.provider);
-  if (
-    !current ||
-    !hasVersionedSecrets(current) ||
-    connectionVersion(current) !== input.context.version
-  ) return false;
-  const now = input.now ?? new Date();
-  const updated = await db
-    .update(connections)
-    .set({
+  return withOlistMutationTransaction(input.lifecycle, async (tx) => {
+    const current = await getLockedVersionedProviderRow(tx, input.context.orgId, input.context.provider);
+    if (!current || !hasVersionedSecrets(current) || connectionVersion(current) !== input.context.version) return false;
+    assertLifecycleActive(input.lifecycle);
+    const now = input.now ?? new Date();
+    const updated = await tx.update(connections).set({
       access_token: encryptConnectionSecret({
         orgId: input.context.orgId,
         provider: input.context.provider,
@@ -386,10 +387,9 @@ export async function saveRefreshedProviderTokens(input: {
       last_error_code: null,
       last_error_at: null,
       status: current.status,
-    })
-    .where(versionWhere(current, input.context.orgId, input.context.provider))
-    .returning({ id: connections.id });
-  return updated.length === 1;
+    }).where(versionWhere(current, input.context.orgId, input.context.provider)).returning({ id: connections.id });
+    return updated.length === 1;
+  });
 }
 
 export async function disconnectProvider(input: {
@@ -459,24 +459,49 @@ export async function markProviderConnectionError(input: {
   permanent: boolean;
   expectedVersion: string;
   now?: Date;
+  lifecycle?: ProviderConnectionLifecycle;
 }): Promise<boolean> {
-  const current = await getVersionedProviderRow(input.orgId, input.provider);
-  if (
-    !current ||
-    !hasVersionedSecrets(current) ||
-    (current.status !== 'configurado' && current.status !== 'ok') ||
-    connectionVersion(current) !== input.expectedVersion
-  ) return false;
-  const updated = await db
-    .update(connections)
-    .set({
+  return withOlistMutationTransaction(input.lifecycle, async (tx) => {
+    const current = await getLockedVersionedProviderRow(tx, input.orgId, input.provider);
+    if (!current || !hasVersionedSecrets(current) || (current.status !== 'configurado' && current.status !== 'ok') || connectionVersion(current) !== input.expectedVersion) return false;
+    assertLifecycleActive(input.lifecycle);
+    const updated = await tx.update(connections).set({
       last_error_code: input.code,
       last_error_at: input.now ?? new Date(),
       ...(input.permanent ? { status: 'expirado' } : {}),
-    })
-    .where(configuredVersionWhere(current, input.orgId, input.provider))
-    .returning({ id: connections.id });
-  return updated.length === 1;
+    }).where(configuredVersionWhere(current, input.orgId, input.provider)).returning({ id: connections.id });
+    return updated.length === 1;
+  });
+}
+
+function assertLifecycleActive(lifecycle?: ProviderConnectionLifecycle): void {
+  if (lifecycle?.signal?.aborted || (lifecycle?.deadlineAt !== undefined && lifecycle.deadlineAt <= Date.now())) {
+    throw new Error('olist_db_lifecycle_inactive');
+  }
+}
+
+function lifecycleTimeoutMs(lifecycle?: ProviderConnectionLifecycle): number {
+  const remaining = lifecycle?.deadlineAt === undefined ? OLIST_DB_MAX_WAIT_MS : lifecycle.deadlineAt - Date.now();
+  return Math.max(1, Math.min(OLIST_DB_MAX_WAIT_MS, remaining));
+}
+
+type MutationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function withOlistMutationTransaction<T>(lifecycle: ProviderConnectionLifecycle | undefined, work: (tx: MutationTransaction) => Promise<T>): Promise<T> {
+  assertLifecycleActive(lifecycle);
+  const timeout = lifecycleTimeoutMs(lifecycle);
+  return db.transaction(async (tx) => {
+    // These are server-side limits: unlike Promise.race they stop lock/query work.
+    await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${timeout}ms'`));
+    await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${timeout}ms'`));
+    assertLifecycleActive(lifecycle);
+    return work(tx);
+  });
+}
+
+async function getLockedVersionedProviderRow(tx: MutationTransaction, orgId: string, provider: ErpProviderId): Promise<VersionedProviderRow | null> {
+  const rows = await tx.execute(sql`SELECT id, status, oauth_client_id AS "oauthClientId", oauth_client_secret AS "oauthClientSecret", access_token AS "accessToken", refresh_token AS "refreshToken" FROM connections WHERE org_id=${orgId} AND provider=${provider} FOR UPDATE`);
+  return (rows[0] as VersionedProviderRow | undefined) ?? null;
 }
 
 export function credentialVersion(clientIdCiphertext: string, clientSecretCiphertext: string): string {

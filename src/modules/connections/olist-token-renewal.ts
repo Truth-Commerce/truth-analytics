@@ -42,7 +42,9 @@ export async function renewOlistConnection(
       deadlineAt: options.deadlineAt,
     }), options);
     ensureActive(options);
-    const saved = await abortable(saveRefreshedProviderTokens({ context, tokens, now }), options);
+    // Persistence owns cancellation itself: racing this promise would let a
+    // queued DB update continue after the caller has already timed out.
+    const saved = await saveRefreshedProviderTokens({ context, tokens, now, lifecycle: options });
     if (!saved) {
       await confirmPeerUpdate(orgId);
       return 'won-by-peer';
@@ -53,14 +55,15 @@ export async function renewOlistConnection(
     const permanent = error instanceof OAuthProviderError && error.kind === 'permanent';
     const code = permanent ? 'olist_refresh_invalido' : 'olist_refresh_transiente';
     ensureActive(options);
-    const marked = await abortable(markProviderConnectionError({
+    const marked = await markProviderConnectionError({
       orgId,
       provider: 'olist',
       code,
       permanent,
       expectedVersion: context.version,
       now,
-    }), options);
+      lifecycle: options,
+    });
     if (!marked) {
       await confirmPeerUpdate(orgId);
       return 'won-by-peer';
