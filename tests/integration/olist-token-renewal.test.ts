@@ -25,7 +25,7 @@ const RUN = Date.now();
 
 describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => {
   let orgId = '';
-  let inactiveOrgId = '';
+  let suspendedOrgId = '';
   let urgentOrgId = '';
   let clientId = '';
   let analystId = '';
@@ -35,12 +35,12 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
       .insert(organizations)
       .values([
         { name: `ta-olist-renew-${RUN}`, status: 'active' },
-        { name: `ta-olist-renew-inactive-${RUN}`, status: 'inactive' },
+        { name: `ta-olist-renew-suspended-${RUN}`, status: 'suspended' },
         { name: `ta-olist-renew-urgent-${RUN}`, status: 'active' },
       ])
       .returning({ id: organizations.id });
     orgId = insertedOrgs[0]!.id;
-    inactiveOrgId = insertedOrgs[1]!.id;
+    suspendedOrgId = insertedOrgs[1]!.id;
     urgentOrgId = insertedOrgs[2]!.id;
     const insertedUsers = await db
       .insert(users)
@@ -53,8 +53,8 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
     analystId = insertedUsers.find((user) => user.role === 'analista')!.id;
     await db.update(organizations).set({ analista_id: analystId }).where(eq(organizations.id, orgId));
     await db.insert(users).values({
-      org_id: inactiveOrgId,
-      email: `olist-renew-inactive-${RUN}@example.com`,
+      org_id: suspendedOrgId,
+      email: `olist-renew-suspended-${RUN}@example.com`,
       senha_hash: 'h',
       role: 'client',
     });
@@ -70,7 +70,7 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
     vi.restoreAllMocks();
     await db.delete(notifications).where(inArray(notifications.user_id, [clientId, analystId]));
     await db.delete(auditLog).where(eq(auditLog.org_id, orgId));
-    await db.delete(connections).where(inArray(connections.org_id, [orgId, inactiveOrgId, urgentOrgId]));
+    await db.delete(connections).where(inArray(connections.org_id, [orgId, suspendedOrgId, urgentOrgId]));
     await seedAuthorized(orgId, clientId, 3600);
   });
 
@@ -78,10 +78,10 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
     vi.restoreAllMocks();
     await db.update(organizations).set({ analista_id: null }).where(eq(organizations.id, orgId));
     await db.delete(notifications).where(inArray(notifications.user_id, [clientId, analystId]));
-    await db.delete(auditLog).where(inArray(auditLog.org_id, [orgId, inactiveOrgId, urgentOrgId]));
-    await db.delete(connections).where(inArray(connections.org_id, [orgId, inactiveOrgId, urgentOrgId]));
-    await db.delete(users).where(inArray(users.org_id, [orgId, inactiveOrgId, urgentOrgId]));
-    await db.delete(organizations).where(inArray(organizations.id, [orgId, inactiveOrgId, urgentOrgId]));
+    await db.delete(auditLog).where(inArray(auditLog.org_id, [orgId, suspendedOrgId, urgentOrgId]));
+    await db.delete(connections).where(inArray(connections.org_id, [orgId, suspendedOrgId, urgentOrgId]));
+    await db.delete(users).where(inArray(users.org_id, [orgId, suspendedOrgId, urgentOrgId]));
+    await db.delete(organizations).where(inArray(organizations.id, [orgId, suspendedOrgId, urgentOrgId]));
   });
 
   async function seedAuthorized(targetOrgId: string, actorUserId: string, expiresInSeconds: number) {
@@ -218,11 +218,11 @@ describe.skipIf(!DATABASE_URL_TEST)('renovação Olist — integração', () => 
   });
 
   it('lista somente candidatas Olist ativas, mais urgentes primeiro e no limite', async () => {
-    const [inactiveActor] = await db
+    const [suspendedActor] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.org_id, inactiveOrgId));
-    await seedAuthorized(inactiveOrgId, inactiveActor!.id, 60);
+      .where(eq(users.org_id, suspendedOrgId));
+    await seedAuthorized(suspendedOrgId, suspendedActor!.id, 60);
     const [urgentActor] = await db
       .select({ id: users.id })
       .from(users)
