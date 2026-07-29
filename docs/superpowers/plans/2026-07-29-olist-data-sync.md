@@ -26,7 +26,7 @@
 - O incremento A precisa entregar relatório Olist completo antes de começar o incremento B; o incremento B precisa entregar cobertura/alertas de estoque antes de ser considerado concluído.
 - Olist ativo precisa renovar tokens tanto em `configurado` quanto em `ok`, preservando o status que possuía antes do refresh.
 - Depois que a primeira linha shadow Olist existir, o rollback mínimo de binário é a release provider-aware completa; deploy de binário anterior é proibido porque ele lê por org apenas e depende da unique Bling legada.
-- SLOs operacionais: pedidos incrementais p95 até 30 minutos e hard limit 2 horas; backfill/readiness de até 90 dias em 24 horas; estoque de catálogos até 10.000 SKUs em 24 horas; catálogos acima de 50.000 produtos param com `olist_catalogo_acima_do_limite`.
+- SLOs operacionais: pedidos incrementais p95 até 30 minutos e hard limit 2 horas; backfill/readiness de até 90 dias em 24 horas; estoque até 5.000 produtos em 6 horas e até 20.000 em 24 horas; total remoto acima de 20.000 para com `olist_catalogo_acima_do_limite` antes do fan-out.
 
 ---
 
@@ -156,9 +156,12 @@ npm run typecheck
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/modules/pipeline/steps/collect-bling.ts src/db/schema/orders.ts src/db/schema/reports.ts src/db/migrations tests/integration/collect-bling.test.ts tests/integration/olist-orders-schema.test.ts tests/unit/schema-pipeline.test.ts
+git add src/modules/pipeline/steps/collect-bling.ts src/db/schema/orders.ts src/db/schema/reports.ts src/db/schema/connections.ts src/db/schema/provider-rate-limit-state.ts src/db/schema/index.ts src/db/migrations/0022_olist_orders_reports_expand.sql src/db/migrations/meta/0022_snapshot.json src/db/migrations/meta/_journal.json tests/integration/collect-bling.test.ts tests/integration/olist-orders-schema.test.ts tests/unit/schema-pipeline.test.ts
 git commit -m "refactor(erp): compatibilizar pedidos e relatórios por provider"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -253,7 +256,10 @@ npm run typecheck
 ```powershell
 git add src/modules/providers tests/unit/provider-registry.test.ts tests/unit/bling-orders-retry.test.ts tests/unit/bling-order-detail.test.ts
 git commit -m "refactor(erp): extrair contrato operacional de pedidos"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -330,9 +336,12 @@ Expected: secrets/document appear only in protocol parsing/HMAC/request construc
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/modules/providers/olist src/modules/connections src/db/schema src/db/migrations tests/unit/olist-account.test.ts tests/integration/olist-rate-governor.test.ts tests/unit/olist-http.test.ts tests/integration/olist-token-renewal.test.ts
+git add src/modules/providers/olist src/modules/connections/provider-connection.repository.ts src/modules/connections/olist-token-renewal.ts src/app/api/connections/olist/callback/route.ts tests/unit/olist-account.test.ts tests/integration/olist-rate-governor.test.ts tests/unit/olist-http.test.ts tests/unit/olist-oauth-routes.test.ts tests/integration/olist-token-renewal.test.ts
 git commit -m "feat(olist): governar API por conta e geração"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -414,36 +423,47 @@ npm run typecheck
 ```powershell
 git add src/modules/providers/olist src/modules/providers/registry.ts tests/fixtures/olist tests/unit/olist-channel.test.ts tests/unit/olist-orders.test.ts tests/unit/olist-order-detail.test.ts tests/unit/provider-registry.test.ts
 git commit -m "feat(olist): mapear pedidos e detalhes v3"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
 ### Task 5: Implementar lease, fencing e cursor durável
 
 **Files:**
+- Modify: `src/db/schema/connection-sync-state.ts`
+- Create: `src/db/migrations/0023_olist_sync_state_shadow_enable.sql`
+- Create: `src/db/migrations/meta/0023_snapshot.json`
+- Modify: `src/db/migrations/meta/_journal.json`
 - Create: `src/modules/connections/sync-state.repository.ts`
 - Create: `tests/integration/sync-state-lease.test.ts`
 - Create: `tests/unit/sync-state-cursor.test.ts`
 
 **Interfaces:**
 - Produces: `SyncResource = 'orders_list' | 'order_details' | 'stock'`.
-- Produces: `acquireSyncLease(input): Promise<SyncLease | null>`, `advanceSyncCursor(input): Promise<boolean>`, `completeSyncLease(input): Promise<boolean>`, `failSyncLease(input): Promise<boolean>`.
+- Produces: `acquireSyncLease(input): Promise<SyncLease | null>`, `renewSyncLease(lease, ttlMs): Promise<SyncLease | null>`, `advanceSyncCursor(input): Promise<boolean>`, `completeSyncLease(input): Promise<boolean>`, `failSyncLease(input): Promise<boolean>`.
 - Produces: `parseOrdersCursor(value): OlistOrdersCursor` where `{ pass: 'created' | 'updated'; from: string; to: string; updatedAfter: string; offset: number; total: number | null; sourceGeneration: number }`.
+- Produces schema fields `source_generation`, `account_fingerprint`, monotonic `fencing_version bigint`; unique lease key is `(org_id,provider,source_generation,resource)`.
 
 - [ ] **Step 1: Write failing concurrent PostgreSQL tests**
 
 ```ts
-const first = await acquireSyncLease({ orgId, provider: 'olist', resource: 'orders_list', ttlMs: 270_000, now });
+const source = { orgId, provider: 'olist', sourceGeneration: 3, accountFingerprint: 'a'.repeat(64) } as const;
+const first = await acquireSyncLease({ source, resource: 'orders_list', ttlMs: 270_000 });
 expect(first).not.toBeNull();
-expect(await acquireSyncLease({ orgId, provider: 'olist', resource: 'orders_list', ttlMs: 270_000, now })).toBeNull();
+expect(await acquireSyncLease({ source, resource: 'orders_list', ttlMs: 270_000 })).toBeNull();
 
-const successor = await acquireSyncLease({ orgId, provider: 'olist', resource: 'orders_list', ttlMs: 270_000, now: afterExpiry });
+await expireLeaseInDatabase(first!.token);
+const successor = await acquireSyncLease({ source, resource: 'orders_list', ttlMs: 270_000 });
 expect(successor?.token).not.toBe(first?.token);
+expect(successor!.fencingVersion).toBeGreaterThan(first!.fencingVersion);
 expect(await advanceSyncCursor({ ...first!, cursor: { from, to, offset: 100, total: 200 }, processedDelta: 100 })).toBe(false);
 expect(await advanceSyncCursor({ ...successor!, cursor: { from, to, offset: 100, total: 200 }, processedDelta: 100 })).toBe(true);
 ```
 
-Assert separate resources can lease concurrently; separate providers/orgs do not collide; completion sets `succeeded_at`, clears lease and error; failure preserves cursor, sets allowlisted error, clears lease only for current owner; malformed cursors reset to the explicit initial cursor supplied by caller.
+Assert separate resources/generations can lease concurrently; same source/resource cannot; fingerprint mismatch cannot renew/write; `renewSyncLease` extends from `clock_timestamp()` only for the current token+fencingVersion; fencingVersion never decreases across expiry/reacquisition; completion/failure are owner-only; malformed or wrong-generation cursors reset to the explicit initial cursor.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -457,12 +477,13 @@ Define:
 
 ```ts
 export type SyncLease = {
-  orgId: string; provider: ErpProviderId; resource: SyncResource;
-  token: string; runId: string; expiresAt: Date; cursor: unknown;
+  orgId: string; provider: ErpProviderId; sourceGeneration: number;
+  accountFingerprint: string | null; resource: SyncResource;
+  token: string; fencingVersion: bigint; runId: string; expiresAt: Date; cursor: unknown;
 };
 ```
 
-Acquisition performs one `INSERT ... ON CONFLICT ... DO UPDATE ... WHERE lease_token IS NULL OR lease_expires_at <= now RETURNING`, with `randomUUID()` for run/token. Every advance/complete/fail predicate includes org, provider, resource and the exact token. Do not hold a transaction or row lock while calling an ERP.
+Migration `0023` adds/backfills generation 1, fingerprint and fencing version, replaces `connection_sync_state_org_provider_resource_uq` with the generation-aware unique, and drops only `orders_org_provider_order_uq` to enable shadow after the Task 8 gate; it retains every Bling legacy object. Acquisition uses `clock_timestamp()`, increments `fencing_version = fencing_version + 1` atomically on every ownership grant, and never accepts caller time. Every renew/advance/complete/fail predicate includes org, provider, generation, fingerprint, token, fencingVersion and `lease_expires_at > clock_timestamp()`. Do not hold DB locks across ERP HTTP.
 
 - [ ] **Step 4: Verify GREEN on PostgreSQL**
 
@@ -475,9 +496,12 @@ npm run typecheck
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/modules/connections/sync-state.repository.ts tests/integration/sync-state-lease.test.ts tests/unit/sync-state-cursor.test.ts
+git add src/db/schema/connection-sync-state.ts src/db/migrations/0023_olist_sync_state_shadow_enable.sql src/db/migrations/meta/0023_snapshot.json src/db/migrations/meta/_journal.json src/modules/connections/sync-state.repository.ts tests/integration/sync-state-lease.test.ts tests/unit/sync-state-cursor.test.ts
 git commit -m "feat(sync): adicionar cursor e lease com fencing"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`. Apply `0023` to production only in Task 10 after the provider-aware query gate, although isolated test databases apply it here.
 
 ---
 
@@ -499,11 +523,13 @@ git commit -m "feat(sync): adicionar cursor e lease com fencing"
 Mock registry pages and assert:
 
 ```ts
-await collectOrders(orgA, 'olist', periodo);
-await collectOrders(orgA, 'olist', periodo);
-await collectOrders(orgB, 'olist', periodo);
-expect(await countOrders(orgA, 'olist', '6201')).toBe(1);
-expect(await countOrders(orgB, 'olist', '6201')).toBe(1);
+const sourceA = { orgId: orgA, provider: 'olist', sourceGeneration: 3 } as const;
+const sourceB = { orgId: orgB, provider: 'olist', sourceGeneration: 1 } as const;
+await collectOrders(sourceA, periodo);
+await collectOrders(sourceA, periodo);
+await collectOrders(sourceB, periodo);
+expect(await countOrders(sourceA, '6201')).toBe(1);
+expect(await countOrders(sourceB, '6201')).toBe(1);
 ```
 
 Seed an enriched row and assert list replay updates date/total/status/channel but preserves `itens`, `frete`, `comissao`, `enriquecido_em`. Make page 2 persistence fail and assert cursor remains at page 2 start; rerun and assert it resumes there. Expire/replace the lease after HTTP returns and assert the stale worker writes neither orders nor cursor. Increment connection generation and assert the old worker is fenced out. Assert an Olist order writes `bling_order_id=null` and current generation, while a Bling order continues mirroring both IDs.
@@ -519,7 +545,7 @@ npm test -- tests/integration/collect-orders-provider.test.ts tests/integration/
 Use conflict target:
 
 ```ts
-target: [orders.org_id, orders.provider, orders.provider_order_id]
+target: [orders.org_id, orders.provider, orders.source_generation, orders.provider_order_id]
 ```
 
 Values include provider, provider order ID, nullable mirrored Bling ID, provider status, `source_generation`, channel/date/total. Conflict target is `(org_id,provider,source_generation,provider_order_id)`. The update set excludes detail-owned fields and preserves a good channel when the incoming value is `Bling`, `Canal não identificado` or `Olist ERP`. For Olist acquire `orders_list`, use the saved offset when cursor window/generation matches, persist each page and advance cursor in one transaction whose first predicate checks `lease_token`, `lease_expires_at > clock_timestamp()` and current connection generation. Complete the lease only after `done=true`; if the deadline arrives first, fenced-release with cursor preserved and return `incompleto=true`. For Bling keep the existing non-leased report collection behavior but use the same neutral upsert.
@@ -536,7 +562,10 @@ npm run typecheck
 ```powershell
 git add src/modules/pipeline/steps/collect-orders.ts src/modules/pipeline/steps/collect-bling.ts tests/integration/collect-orders-provider.test.ts tests/integration/collect-bling.test.ts
 git commit -m "feat(pipeline): coletar pedidos por provider"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -585,7 +614,10 @@ npm run typecheck
 ```powershell
 git add src/modules/pipeline/steps/enrich-orders.ts tests/unit/enrich-orders.test.ts tests/integration/enrich-orders-provider.test.ts
 git commit -m "feat(pipeline): enriquecer pedidos por provider"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -677,7 +709,10 @@ The static test recursively scans `src/**/*.ts` and `src/**/*.tsx`, inventories 
 ```powershell
 git add src/modules/connections/active-provider.repository.ts src/modules/orders src/modules/pipeline/steps/compute-metrics.ts src/modules/alerts src/modules/analista/carteira-data.repository.ts src/modules/calendario/gerar-calendario.ts src/modules/kits/gerar-kits.ts src/modules/organizations/organization-settings.repository.ts src/modules/estoque/stock.repository.ts tests/integration tests/unit/order-query-scope-static.test.ts
 git commit -m "refactor(erp): isolar leituras pelo provider ativo"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -747,9 +782,12 @@ npm run typecheck
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/modules/reports src/modules/pipeline tests/integration/report-repository.test.ts tests/integration/orchestrator.test.ts tests/integration/sync-pedidos.test.ts tests/integration/pipeline-olist.test.ts
+git add src/modules/reports src/modules/pipeline src/app/\(client\)/dashboard/relatorios/comparar/page.tsx src/app/\(client\)/dashboard/relatorios/comparar/comparar-form.tsx tests/integration/report-repository.test.ts tests/integration/report-source-generation.test.ts tests/integration/orchestrator.test.ts tests/integration/sync-pedidos.test.ts tests/integration/pipeline-olist.test.ts tests/unit/compare-reports.test.ts
 git commit -m "feat(pipeline): gerar relatório pelo ERP ativo"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -763,9 +801,6 @@ git commit -m "feat(pipeline): gerar relatório pelo ERP ativo"
 - Create: `src/app/api/cron/preparar-olist/route.ts`
 - Modify: `src/modules/admin/operacoes-view.ts`
 - Modify: `.github/workflows/crons.yml`
-- Create: `src/db/migrations/0023_olist_shadow_enable.sql`
-- Create: `src/db/migrations/meta/0023_snapshot.json`
-- Modify: `src/db/migrations/meta/_journal.json`
 - Create: `tests/integration/olist-order-reconciliation.test.ts`
 - Create: `tests/integration/prepare-olist.test.ts`
 - Create: `tests/unit/preparar-olist-route.test.ts`
@@ -799,7 +834,7 @@ npm test -- tests/integration/olist-order-reconciliation.test.ts tests/integrati
 
 - [ ] **Step 3: Implement bounded preparation and deterministic readiness**
 
-Migration `0023_olist_shadow_enable` drops only the obsolete `orders_org_provider_order_uq`; it retains `orders_org_bling_uq`, trigger/default and relies on the generation-aware unique created in `0022`. Deploy it only after Task 8 static/read isolation gate is green; after this migration the minimum rollback binary is the provider-aware release.
+Apply the already committed `0023_olist_sync_state_shadow_enable` only after Task 8 static/read isolation is green; it drops only obsolete `orders_org_provider_order_uq`, retains every Bling legacy object and relies on the generation-aware unique from `0022`. After production applies it, the minimum rollback binary is the provider-aware release.
 
 `prepareOlistOrders` owns a two-pass cursor for the current generation. It completes creation pages, switches cursor pass to `updated` without declaring readiness, completes all `dataAtualizacao` pages from the captured DB timestamp, then enriches at most 100 details and reconciles. Store counts/backlog/error by generation. The cron is the durable trigger; UI may request an early run but is not the scheduler. Comparison uses cents and explicit provider-order/channel samples, never remote customer data.
 
@@ -814,9 +849,12 @@ npm run typecheck
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/modules/pipeline/order-reconciliation.ts src/modules/pipeline/prepare-olist.ts src/modules/connections src/app/api/cron/preparar-olist src/modules/admin/operacoes-view.ts .github/workflows/crons.yml src/db/migrations tests/integration/olist-order-reconciliation.test.ts tests/integration/prepare-olist.test.ts tests/unit/preparar-olist-route.test.ts tests/unit/operacoes-view.test.ts
+git add src/modules/pipeline/order-reconciliation.ts src/modules/pipeline/prepare-olist.ts src/modules/connections/sync-state.repository.ts src/modules/connections/provider-connection.repository.ts src/app/api/cron/preparar-olist/route.ts src/modules/admin/operacoes-view.ts .github/workflows/crons.yml tests/integration/olist-order-reconciliation.test.ts tests/integration/prepare-olist.test.ts tests/unit/preparar-olist-route.test.ts tests/unit/operacoes-view.test.ts
 git commit -m "feat(olist): preparar e reconciliar backfill de pedidos"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -883,7 +921,10 @@ npm run typecheck
 ```powershell
 git add src/modules/connections src/actions/erp-activation.actions.ts src/actions/olist-connections.actions.ts src/components/connections/olist-connection-card.tsx src/app/\(client\)/conexoes/page.tsx src/app/analista src/lib/env.ts tests/integration/erp-activation.test.ts tests/unit/erp-activation-actions.test.ts tests/unit/olist-connection-card.test.ts tests/e2e/olist-activation.spec.ts
 git commit -m "feat(olist): ativar e reverter ERP com segurança"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
@@ -937,9 +978,12 @@ npm run typecheck
 - [ ] **Step 5: Commit increment A**
 
 ```powershell
-git add src/app/api/cron/sincronizar-pedidos src/modules/scheduler src/modules/reports src/app/\(client\)/dashboard src/actions/reports.actions.ts tests/unit tests/integration
+git add src/app/api/cron/sincronizar-pedidos/route.ts src/modules/scheduler src/modules/reports/dashboard-data.ts src/modules/reports/onboarding-model.ts src/modules/reports/report-errors.ts src/app/\(client\)/dashboard/page.tsx src/app/\(client\)/dashboard/onboarding-checklist.tsx src/app/\(client\)/dashboard/generate-report.tsx src/actions/reports.actions.ts .github/workflows/crons.yml tests/unit/sincronizar-pedidos-route.test.ts tests/integration/scheduler-backoff.test.ts tests/unit/scheduler-service.test.ts tests/integration/dashboard-data.test.ts tests/unit/onboarding-model.test.ts tests/unit/report-errors.test.ts tests/integration/cron-gerar-relatorios.test.ts
 git commit -m "feat(erp): operar pedidos e relatórios pelo provider ativo"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 - [ ] **Step 6: Run the Increment A value gate before starting stock**
 
@@ -959,72 +1003,160 @@ Expected: uma organização sem Bling conclui backfill/readiness, torna Olist `o
 
 ## Incremento B — estoque Olist retomável
 
-### Task 13: Migrar identidade de estoque e criar capability provider-aware
+### Task 13: Release stock expand — adicionar geração e fencing sem remover uniques
 
 **Files:**
 - Modify: `src/db/schema/product-stock.ts`
 - Create: `src/db/migrations/0024_olist_stock_expand.sql`
-- Create: `src/db/migrations/0025_olist_stock_shadow_enable.sql`
 - Create: `src/db/migrations/meta/0024_snapshot.json`
-- Create: `src/db/migrations/meta/0025_snapshot.json`
 - Modify: `src/db/migrations/meta/_journal.json`
-- Create: `src/modules/providers/stock.types.ts`
-- Create: `src/modules/providers/stock-registry.ts`
-- Modify: `src/modules/providers/bling/stock.ts`
-- Modify: `src/modules/providers/bling/provider.ts`
-- Modify: `src/modules/estoque/stock.repository.ts`
 - Create: `tests/integration/olist-stock-schema.test.ts`
-- Create: `tests/unit/stock-provider-registry.test.ts`
-- Modify: `tests/integration/stock-repository.test.ts`
-- Modify: `tests/unit/bling-stock.test.ts`
 
 **Interfaces:**
-- Produces: `RawStockItem = { providerProductId?: string; sku?: string; nome: string; saldo: number }`.
-- Produces: `StockDataProvider` with `fetchStockPage(orgId, cursor: StockCursor, onItem: StockItemHandler): Promise<StockPageResult>`.
-- Produces: `getStockDataProvider(provider)` with registry `['bling']`; Task 14 registers `olist` after its adapter is green.
-- Produces: `product_stock.source_generation` and unique `(org_id,provider,source_generation,sku)`.
-- Changes: `upsertStock(source: ErpDataSource, itens)` and all stock reads to require the frozen source.
+- Produces: `product_stock.source_generation integer NOT NULL DEFAULT 1` and `fencing_version bigint NOT NULL DEFAULT 0`.
+- Produces: `product_stock_org_provider_generation_sku_uq(org_id,provider,source_generation,sku)` while retaining both existing uniques for rolling compatibility.
 
 - [ ] **Step 1: Write failing PostgreSQL identity and Bling compatibility tests**
 
-```ts
-await upsertStock({ orgId, provider: 'bling', sourceGeneration: 1 }, [{ providerProductId: 'b-1', sku: 'SKU', nome: 'Bling', saldo: 3 }]);
-await upsertStock({ orgId, provider: 'olist', sourceGeneration: 3 }, [{ providerProductId: 'o-1', sku: 'SKU', nome: 'Olist', saldo: 7 }]);
-await upsertStock({ orgId, provider: 'olist', sourceGeneration: 2 }, [{ providerProductId: 'old', sku: 'SKU', nome: 'Old', saldo: 99 }]);
-expect(await getStockRows({ orgId, provider: 'olist', sourceGeneration: 3 })).toEqual([{ sku: 'SKU', nome: 'Olist', saldo: 7 }]);
-```
-
-Assert unique `(org,provider,source_generation,sku)`, same SKU across providers/generations, generation-1 backfill, provider product ID persistence and unchanged Bling mapping.
+Insert legacy stock without the new fields and assert backfill/default generation 1 and fencing 0. Assert the new generation unique rejects duplicates within a generation. Assert both `product_stock_org_sku_uq` and `product_stock_org_provider_sku_uq` still exist after `0024`; cross-provider/generation coexistence is deliberately not enabled yet.
 
 - [ ] **Step 2: Run tests and verify RED**
 
 ```powershell
 npm run db:migrate:test
-npm test -- tests/integration/olist-stock-schema.test.ts tests/integration/stock-repository.test.ts tests/unit/stock-provider-registry.test.ts tests/unit/bling-stock.test.ts
+npm test -- tests/integration/olist-stock-schema.test.ts
 ```
 
-- [ ] **Step 3: Implement compatibility writer then migration**
+- [ ] **Step 3: Implement additive schema and migration only**
 
-Release 1 applies `0024`: add/backfill `source_generation=1`, create `product_stock_org_provider_generation_sku_uq`, keep both old uniques. Release 2 deploys the Bling writer with values `{ org_id, provider:'bling', source_generation:1, provider_product_id, sku, nome, saldo }` and conflict target `(org_id,provider,source_generation,sku)`. Only after that code is live, release 3 applies `0025`, dropping `product_stock_org_sku_uq` and `product_stock_org_provider_sku_uq` so Olist/generations can coexist. Neither migration deletes a row; rollback floor remains the provider-aware binary.
+Migration `0024` adds/backfills generation 1 and fencing 0, creates the generation unique and an index `(org_id,provider,source_generation,updated_at)`. It does not alter either old unique and does not delete/rewrite business values. This is a standalone production release before any stock writer change.
 
 - [ ] **Step 4: Verify GREEN on PostgreSQL**
 
 ```powershell
 npm run db:migrate:test
-npm test -- tests/integration/olist-stock-schema.test.ts tests/integration/stock-repository.test.ts tests/unit/stock-provider-registry.test.ts tests/unit/bling-stock.test.ts tests/integration/schema-h1.test.ts
+npm test -- tests/integration/olist-stock-schema.test.ts tests/integration/schema-h1.test.ts
 npm run typecheck
 ```
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/db/schema/product-stock.ts src/db/migrations src/modules/providers/stock.types.ts src/modules/providers/stock-registry.ts src/modules/providers/bling src/modules/estoque/stock.repository.ts tests/integration/olist-stock-schema.test.ts tests/integration/stock-repository.test.ts tests/unit/stock-provider-registry.test.ts tests/unit/bling-stock.test.ts
-git commit -m "refactor(estoque): concluir identidade por provider"
+git add src/db/schema/product-stock.ts src/db/migrations/0024_olist_stock_expand.sql src/db/migrations/meta/0024_snapshot.json src/db/migrations/meta/_journal.json tests/integration/olist-stock-schema.test.ts
+git commit -m "feat(estoque): expandir schema para geração e fencing"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`. Apply and smoke-test `0024` in production before Task 14 deploy.
 
 ---
 
-### Task 14: Implementar catálogo e saldo Olist com cursor retomável
+### Task 14: Release writer — tornar estoque Bling provider/generation-aware
+
+**Files:**
+- Create: `src/modules/providers/stock.types.ts`
+- Create: `src/modules/providers/stock-registry.ts`
+- Modify: `src/modules/providers/bling/stock.ts`
+- Modify: `src/modules/providers/bling/provider.ts`
+- Modify: `src/modules/estoque/stock.repository.ts`
+- Create: `tests/unit/stock-provider-registry.test.ts`
+- Modify: `tests/integration/stock-repository.test.ts`
+- Modify: `tests/unit/bling-stock.test.ts`
+
+**Interfaces:**
+- Produces: `RawStockItem = { providerProductId?: string; sku?: string; nome: string; saldo: number }`.
+- Produces: `StockDataProvider`, `getStockDataProvider(provider)` with registry `['bling']`.
+- Changes: `upsertStock(source: ErpDataSource, itens, fencingVersion?: bigint): Promise<number>` and `getStockRows(source)`.
+
+- [ ] **Step 1: Write failing writer compatibility and conditional stale-write tests**
+
+```ts
+const source = { orgId, provider: 'bling', sourceGeneration: 1 } as const;
+await upsertStock(source, [{ providerProductId: 'b-1', sku: 'SKU', nome: 'Atual', saldo: 7 }], 7n);
+await upsertStock(source, [{ providerProductId: 'b-1', sku: 'SKU', nome: 'Stale', saldo: 1 }], 6n);
+expect(await getStockRows(source)).toEqual([{ sku: 'SKU', nome: 'Atual', saldo: 7 }]);
+```
+
+Assert conflict target includes source generation; incoming fencing lower than stored cannot update; equal/newer fencing is idempotent; Bling maps exactly as before; registry still rejects Olist.
+
+- [ ] **Step 2: Run tests and verify RED**
+
+```powershell
+npm test -- tests/integration/stock-repository.test.ts tests/unit/stock-provider-registry.test.ts tests/unit/bling-stock.test.ts
+```
+
+- [ ] **Step 3: Implement provider-aware writer while old uniques remain**
+
+Write `{ org_id, provider, source_generation, provider_product_id, sku, nome, saldo, fencing_version }`, conflict on `(org_id,provider,source_generation,sku)` and update only where `product_stock.fencing_version <= excluded.fencing_version`. Bling uses source generation 1 and fencing 0 outside leased flows. Do not register Olist or remove old constraints in this release.
+
+- [ ] **Step 4: Verify GREEN and deploy gate**
+
+```powershell
+npm test -- tests/integration/stock-repository.test.ts tests/unit/stock-provider-registry.test.ts tests/unit/bling-stock.test.ts tests/integration/cron-sincronizar-estoque.test.ts
+npm run typecheck
+```
+
+- [ ] **Step 5: Commit the writer release**
+
+```powershell
+git add src/modules/providers/stock.types.ts src/modules/providers/stock-registry.ts src/modules/providers/bling/stock.ts src/modules/providers/bling/provider.ts src/modules/estoque/stock.repository.ts tests/unit/stock-provider-registry.test.ts tests/integration/stock-repository.test.ts tests/unit/bling-stock.test.ts
+git commit -m "refactor(estoque): gravar saldo por geração"
+git status --short
+```
+
+Expected after commit: no output from `git status --short`. Deploy this writer and complete one Bling stock smoke before Task 15 migration.
+
+---
+
+### Task 15: Release stock contract — remover uniques antigas depois do writer gate
+
+**Files:**
+- Modify: `src/db/schema/product-stock.ts`
+- Create: `src/db/migrations/0025_olist_stock_shadow_enable.sql`
+- Create: `src/db/migrations/meta/0025_snapshot.json`
+- Modify: `src/db/migrations/meta/_journal.json`
+- Modify: `tests/integration/olist-stock-schema.test.ts`
+
+**Interfaces:**
+- Makes: `product_stock_org_provider_generation_sku_uq` the only stock identity unique.
+- Preserves: all rows, provider IDs, balances, source generation and fencing version.
+
+- [ ] **Step 1: Extend the failing migration test**
+
+Assert `0025` removes exactly `product_stock_org_sku_uq` and `product_stock_org_provider_sku_uq`; same SKU can coexist across providers/generations; same source tuple still raises `23505`; existing Bling rows remain byte-for-byte equivalent in business columns.
+
+- [ ] **Step 2: Run test and verify RED**
+
+```powershell
+npm run db:migrate:test
+npm test -- tests/integration/olist-stock-schema.test.ts tests/integration/stock-repository.test.ts
+```
+
+- [ ] **Step 3: Implement the isolated contract migration**
+
+Before each drop, abort if the writer deployment marker/smoke is not recorded in the release checklist. SQL drops only the two old uniques and validates the generation unique. No column, trigger or business row changes.
+
+- [ ] **Step 4: Verify GREEN on a production-shaped PostgreSQL clone**
+
+```powershell
+npm run db:migrate:test
+npm test -- tests/integration/olist-stock-schema.test.ts tests/integration/stock-repository.test.ts tests/integration/schema-h1.test.ts
+npm run typecheck
+```
+
+- [ ] **Step 5: Commit the contract release**
+
+```powershell
+git add src/db/schema/product-stock.ts src/db/migrations/0025_olist_stock_shadow_enable.sql src/db/migrations/meta/0025_snapshot.json src/db/migrations/meta/_journal.json tests/integration/olist-stock-schema.test.ts
+git commit -m "refactor(estoque): habilitar coexistência por geração"
+git status --short
+```
+
+Expected after commit: no output from `git status --short`. Apply `0025` only after Task 14 writer is deployed and green; rollback floor is that writer release.
+
+---
+
+### Task 16: Implementar catálogo e saldo Olist com cursor retomável
 
 **Files:**
 - Create: `src/modules/providers/olist/products.ts`
@@ -1057,7 +1189,7 @@ await sincronizarEstoqueDaOrg({ orgId, provider: 'olist', sourceGeneration: 3 },
 expect(await readStockCursor(orgId)).toEqual({ offset: 100, index: 8, sourceGeneration: 3 });
 ```
 
-Inject failure after item 7 and assert item 7/cursor commit atomically. Steal/expire the lease after HTTP returns and assert stale worker changes neither stock row nor cursor; increment connection generation and assert old worker is fenced out. Rerun resumes without duplicate effects, product without SKU increments ignored counter, and no absent product is deleted. A page reporting total above 50.000 stops before detail fan-out with `olist_catalogo_acima_do_limite`.
+Inject failure after item 7 and assert item 7/cursor commit atomically. Steal/expire the lease after HTTP returns and assert stale worker changes neither stock row nor cursor/fencing version; increment connection generation and assert old worker is fenced out. Rerun resumes without duplicate effects, product without SKU increments ignored counter, and no absent product is deleted. A page reporting total 20.001 stops before detail fan-out with `olist_catalogo_acima_do_limite`; fixtures of 5.000 and 20.000 remain eligible.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -1083,11 +1215,14 @@ Assert a mixed sequence `pedidos → detail → produtos → estoque` for one or
 ```powershell
 git add src/modules/providers/olist src/modules/providers/stock-registry.ts src/modules/estoque src/modules/connections/sync-state.repository.ts tests/fixtures/olist tests/unit/olist-products.test.ts tests/unit/olist-stock.test.ts tests/integration/sync-stock-provider.test.ts tests/integration/stock-resume-lease.test.ts
 git commit -m "feat(olist): sincronizar estoque com cursor retomável"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
-### Task 15: Ligar estoque ativo a queries, cron, dashboard e alertas
+### Task 17: Ligar estoque ativo a queries, cron, dashboard e alertas
 
 **Files:**
 - Modify: `src/app/api/cron/sincronizar-estoque/route.ts`
@@ -1098,6 +1233,7 @@ git commit -m "feat(olist): sincronizar estoque com cursor retomável"
 - Modify: `src/modules/reports/dashboard-data.ts`
 - Modify: `src/app/(client)/dashboard/estoque/page.tsx`
 - Modify: `src/app/(client)/dashboard/estoque-resumo.tsx`
+- Modify: `.github/workflows/crons.yml`
 - Modify: `tests/integration/cron-sincronizar-estoque.test.ts`
 - Modify: `tests/integration/stock-repository.test.ts`
 - Modify: `tests/integration/alert-repository.test.ts`
@@ -1112,7 +1248,7 @@ git commit -m "feat(olist): sincronizar estoque com cursor retomável"
 
 - [ ] **Step 1: Write failing active-stock isolation and E2E tests**
 
-Seed different Bling/current-Olist/old-generation-Olist balances for the same SKU and assert coverage, stock alerts, analyst carteira and dashboard use only the active provider+generation for numerator and velocity. Flip active source and assert all four switch together. Cron test includes Bling and Olist refs with generation, isolates one failing org and records incomplete Olist progress without reporting success. E2E activates Olist, runs at least two stock batches, displays progress/freshness while incomplete and final available balance/coverage when complete.
+Seed different Bling/current-Olist/old-generation-Olist balances for the same SKU and assert coverage, stock alerts, analyst carteira and dashboard use only the active provider+generation for numerator and velocity. Flip active source and assert all four switch together. Cron test includes Bling and Olist refs with generation, isolates one failing org and records incomplete progress. Workflow must call stock `*/5 * * * *`; fake-clock capacity tests demonstrate 5.000 items can progress within 6h and 20.000 within 24h under 27/min across repeated invocations. E2E displays progress/freshness and final coverage.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -1123,7 +1259,7 @@ npm run test:e2e -- tests/e2e/olist-stock.spec.ts
 
 - [ ] **Step 3: Thread active provider through every stock consumer**
 
-Cron iterates bounded `ActiveErpRef[]`, calls `sincronizarEstoqueDaOrg(ref)`, and records one organization failure without aborting others. Batch repository functions accept refs rather than bare org IDs and build bounded provider+generation predicates. UI reads `connection_sync_state(resource='stock')` for the active generation to show last success, processed/backlog and “Sincronização em andamento”; it never promises a complete snapshot while `incompleto=true`.
+Cron runs every five minutes, iterates fair bounded `ActiveErpRef[]`, calls `sincronizarEstoqueDaOrg(ref)`, and records one organization failure without aborting others. Candidate order rotates by oldest `updated_at` so a large account cannot starve smaller accounts. Batch repositories build provider+generation predicates. UI reads stock state for the active generation and never promises completeness while `incompleto=true`.
 
 - [ ] **Step 4: Prove no unscoped stock query remains**
 
@@ -1139,13 +1275,16 @@ Expected: every production match includes a provider predicate derived from the 
 - [ ] **Step 5: Commit increment B**
 
 ```powershell
-git add src/app/api/cron/sincronizar-estoque src/modules/estoque src/modules/alerts/alert-data.repository.ts src/modules/analista/carteira-data.repository.ts src/modules/reports/dashboard-data.ts src/app/\(client\)/dashboard/estoque src/app/\(client\)/dashboard/estoque-resumo.tsx tests/integration tests/unit/estoque-view-model.test.ts tests/e2e/olist-stock.spec.ts
+git add src/app/api/cron/sincronizar-estoque src/modules/estoque src/modules/alerts/alert-data.repository.ts src/modules/analista/carteira-data.repository.ts src/modules/reports/dashboard-data.ts src/app/\(client\)/dashboard/estoque src/app/\(client\)/dashboard/estoque-resumo.tsx .github/workflows/crons.yml tests/integration tests/unit/estoque-view-model.test.ts tests/e2e/olist-stock.spec.ts
 git commit -m "feat(estoque): operar cobertura pelo ERP ativo"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ---
 
-### Task 16: Documentar operação, validar segurança e executar gate de produção
+### Task 18: Documentar operação, validar segurança e executar gate de produção
 
 **Files:**
 - Modify: `README.md`
@@ -1155,25 +1294,26 @@ git commit -m "feat(estoque): operar cobertura pelo ERP ativo"
 
 **Interfaces:**
 - Documents: permissões read-only, backfill/readiness, cutover/rollback, kill switch, rate limit, cursor/lease, reconciliação e recuperação de 401/429.
-- Requires: migration `0022` before Olist orders writer and `0023` before Olist stock writer.
+- Requires: `0022` expand; provider-aware binary with Olist disabled; `0023` shadow enable; `0024` stock expand; stock writer release; `0025` stock contract; only then Olist stock adapter.
 
 - [ ] **Step 1: Write exact operator runbook**
 
 Document this rollout sequence:
 
-1. Deploy compatibility code with Olist sync disabled.
-2. Apply `0022`, run PostgreSQL schema/isolation tests and verify Bling report smoke.
-3. Enable Olist sync for one authorized no-active-ERP organization, complete 90-day readiness and generate one report.
-4. Prepare one Bling organization in shadow, compare totals/channels, explicit-cutover, generate report, rollback, and verify old Bling metrics.
-5. Apply `0023`, enable stock pilot, run repeated cron until cursor completes and compare available balance.
-6. Expand rollout; on incident set `OLIST_DATA_SYNC_ENABLED=false`, keep Bling active and preserve Olist rows/tokens.
+1. Apply additive `0022` with Olist disabled; deploy Tasks 1–8 provider-aware code and verify Bling report/query inventory smoke.
+2. Apply `0023` only after that gate; deploy preparation cron, complete two-pass 90-day readiness for a no-active-ERP organization and generate one Olist report.
+3. Prepare a Bling organization in shadow, reconcile, explicit-cutover, generate report, rollback and verify Bling metrics; never roll binary below the provider-aware release.
+4. Apply additive `0024`; verify legacy Bling stock, deploy Task 14 writer, and complete one production Bling stock smoke.
+5. Apply contract `0025` only after writer smoke; deploy Olist stock adapter, run `*/5` cron until completion and verify 5k/6h, 20k/24h plus `>20k` refusal.
+6. Expand rollout; on incident set `OLIST_DATA_SYNC_ENABLED=false`, preserve both datasets/tokens and roll only to the documented compatible binary floor.
 
 Include SQL read-only checks for active connection uniqueness, sync-state backlog/error, report source provider, order duplicates and stock duplicates. Include commands for protected cron smoke with `CRON_SECRET` supplied through environment, never pasted into shell history or documentation.
 
 - [ ] **Step 2: Run scope, placeholder and secret scans**
 
 ```powershell
-rg -n "TBD|TODO|implement later|fill in details|Add appropriate|handle edge cases|Write tests for the above|Similar to Task" docs/superpowers/plans/2026-07-29-olist-data-sync.md
+$redFlags = @('T' + 'BD', 'T' + 'ODO', 'implement ' + 'later', 'fill in ' + 'details', 'Add ' + 'appropriate', 'handle edge ' + 'cases', 'Write tests for the ' + 'above', 'Similar to ' + 'Task')
+Select-String -Path docs/superpowers/plans/2026-07-29-olist-data-sync.md -Pattern $redFlags
 rg -n "from\(orders\)|FROM orders|JOIN orders|from\(productStock\)|FROM product_stock|JOIN product_stock" src
 rg -n "client_secret|access_token|refresh_token|Authorization" src tests README.md docs/runbooks/olist-data-sync.md
 git diff --check
@@ -1193,7 +1333,7 @@ npm run test:e2e
 git diff --check
 ```
 
-Expected: both migrations apply to a fresh PostgreSQL database; no integration suite is skipped in CI; lint/typecheck/build pass; all unit/integration tests and 25+ Playwright scenarios pass.
+Expected: migrations `0022`–`0025` apply in order to fresh and production-shaped PostgreSQL databases; no integration suite is skipped in CI; lint/typecheck/build pass; all unit/integration tests and 25+ Playwright scenarios pass.
 
 - [ ] **Step 4: Execute production smoke and rollback rehearsal**
 
@@ -1204,8 +1344,11 @@ With deployment credentials configured outside the repository: authorize a test 
 ```powershell
 git add README.md docs/runbooks/olist-data-sync.md .github/workflows/crons.yml docs/superpowers/plans/2026-07-29-olist-data-sync.md
 git commit -m "docs(olist): documentar sincronização e operação v3"
+git status --short
 ```
+
+Expected after commit: no output from `git status --short`.
 
 ## Execution Handoff
 
-Execute with `superpowers:subagent-driven-development`, one task and one review gate at a time, in an isolated worktree created through `superpowers:using-git-worktrees`. Tasks 1–12 form the independently deployable Incremento A and must pass its value gate before Tasks 13–15 begin. Do not merge, migrate production or enable `OLIST_DATA_SYNC_ENABLED` until PostgreSQL integration tests, the complete Playwright suite and the rollout checks in Task 16 are green.
+Execute with `superpowers:subagent-driven-development`, one task and one review gate at a time, in an isolated worktree created through `superpowers:using-git-worktrees`. Tasks 1–12 form the independently deployable Incremento A and must pass its value gate before the three stock releases in Tasks 13–15. Do not start the Olist stock adapter before `0025` is safely applied. Do not merge, enable `OLIST_DATA_SYNC_ENABLED` or finish rollout until PostgreSQL integration tests, the complete Playwright suite and Task 18 gates are green.
