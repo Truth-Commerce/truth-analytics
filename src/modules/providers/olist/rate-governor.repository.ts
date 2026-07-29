@@ -1,60 +1,119 @@
 import { sql } from 'drizzle-orm';
+
 import { db } from '@/db/client';
 
 export type OlistRequestPriority = 'orders' | 'details' | 'stock';
-export type OlistReservation = { startAt: Date };
+export type OlistReservation = { waiterId: string; startAt: Date };
 
 type SqlExecutor = { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> };
+type QueryResult = { rows?: unknown[] } | unknown[];
 
-/** Factory keeps scheduling authority in PostgreSQL and makes integration clients injectable. */
+function rows(result: unknown): unknown[] {
+  if (Array.isArray(result)) return result;
+  return (result as Exclude<QueryResult, unknown[]>).rows ?? [];
+}
+
+function deadlineError(): Error { return new Error('olist_deadline_exceeded'); }
+
+/** PostgreSQL is the only queue, clock and fairness authority. */
 export function createOlistRateGovernor(client: SqlExecutor = db) {
+  async function cancel(waiterId: string): Promise<void> {
+    await client.execute(sql`
+      UPDATE provider_rate_limit_waiters
+      SET cancelled_at = clock_timestamp()
+      WHERE id = ${waiterId} AND granted_at IS NULL AND cancelled_at IS NULL
+    `);
+  }
+
   return {
     async reserve(input: { accountFingerprint: string; priority: OlistRequestPriority; signal?: AbortSignal }): Promise<OlistReservation> {
-      if (input.signal?.aborted) throw new Error('olist_deadline_exceeded');
-      const slot = await client.execute(sql`
-        WITH state AS (
-          INSERT INTO provider_rate_limit_state (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
-          VALUES ('olist', ${input.accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0)
+      if (input.signal?.aborted) throw deadlineError();
+
+      // The insert is deliberately before the advisory-lock statement: queue order is
+      // PostgreSQL's enqueued_at + UUID order, rather than process scheduling order.
+      const inserted = rows(await client.execute(sql`
+        INSERT INTO provider_rate_limit_waiters (provider, account_fingerprint, priority, expires_at)
+        VALUES ('olist', ${input.accountFingerprint}, ${input.priority}, clock_timestamp() + interval '60 seconds')
+        RETURNING id
+      `))[0] as { id: string } | undefined;
+      if (!inserted) throw new Error('olist_rate_governor_unavailable');
+      if (input.signal?.aborted) { await cancel(inserted.id); throw deadlineError(); }
+
+      const result = rows(await client.execute(sql`
+        WITH locked AS (
+          SELECT pg_advisory_xact_lock(hashtextextended('olist:' || ${input.accountFingerprint}, 0))
+        ), purged AS (
+          DELETE FROM provider_rate_limit_waiters USING locked
+          WHERE provider = 'olist' AND account_fingerprint = ${input.accountFingerprint}
+            AND (expires_at <= clock_timestamp() OR cancelled_at IS NOT NULL)
+        ), current_state AS (
+          INSERT INTO provider_rate_limit_state
+            (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
+          SELECT 'olist', ${input.accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0 FROM locked
           ON CONFLICT (provider, account_fingerprint) DO UPDATE SET updated_at = clock_timestamp()
           RETURNING *
-        ), expired AS (
-          DELETE FROM provider_rate_limit_waiters WHERE provider='olist' AND account_fingerprint=${input.accountFingerprint} AND expires_at <= clock_timestamp()
-        ), mine AS (
-          INSERT INTO provider_rate_limit_waiters (provider, account_fingerprint, priority, expires_at)
-          VALUES ('olist', ${input.accountFingerprint}, ${input.priority}, clock_timestamp() + interval '60 seconds') RETURNING id
+        ), normalized AS (
+          SELECT s.*, CASE WHEN s.window_started_at <= clock_timestamp() - interval '60 seconds' THEN 0 ELSE s.requests_in_window END AS count_in_window,
+            CASE WHEN s.window_started_at <= clock_timestamp() - interval '60 seconds' THEN clock_timestamp() ELSE s.window_started_at END AS effective_window_started_at
+          FROM current_state s
+        ), orders_slo_violated AS (
+          SELECT EXISTS (
+            SELECT 1 FROM connections c
+            LEFT JOIN connection_sync_state css ON css.org_id = c.org_id AND css.provider = 'olist' AND css.resource = 'orders'
+            WHERE c.provider = 'olist' AND c.provider_account_fingerprint = ${input.accountFingerprint}
+              AND (css.backlog_count > 0 OR (css.backlog_count IS NULL AND css.succeeded_at IS NULL)
+                OR css.updated_at < clock_timestamp() - interval '15 minutes')
+          ) AS violated
         ), candidate AS (
-          SELECT w.id, w.priority FROM provider_rate_limit_waiters w, state s
-          WHERE w.provider='olist' AND w.account_fingerprint=${input.accountFingerprint} AND w.expires_at > clock_timestamp() AND w.granted_at IS NULL
-          ORDER BY CASE WHEN s.consecutive_high_priority >= 5 AND EXISTS (SELECT 1 FROM provider_rate_limit_waiters sw WHERE sw.provider=w.provider AND sw.account_fingerprint=w.account_fingerprint AND sw.priority='stock' AND sw.granted_at IS NULL AND sw.expires_at > clock_timestamp()) THEN CASE WHEN w.priority='stock' THEN 0 ELSE 1 END ELSE CASE WHEN w.priority='stock' THEN 1 ELSE 0 END END, w.enqueued_at, w.id
+          SELECT w.id, w.priority
+          FROM provider_rate_limit_waiters w CROSS JOIN normalized n CROSS JOIN orders_slo_violated slo
+          WHERE w.provider = 'olist' AND w.account_fingerprint = ${input.accountFingerprint}
+            AND w.expires_at > clock_timestamp() AND w.granted_at IS NULL AND w.cancelled_at IS NULL
+            AND NOT (w.priority = 'stock' AND slo.violated)
+          ORDER BY
+            CASE WHEN n.consecutive_high_priority >= 5
+                    AND EXISTS (SELECT 1 FROM provider_rate_limit_waiters sw WHERE sw.provider = w.provider AND sw.account_fingerprint = w.account_fingerprint AND sw.priority = 'stock' AND sw.expires_at > clock_timestamp() AND sw.granted_at IS NULL AND sw.cancelled_at IS NULL)
+                 THEN CASE WHEN w.priority = 'stock' THEN 0 ELSE 1 END
+                 ELSE CASE WHEN w.priority = 'stock' THEN 1 ELSE 0 END END,
+            w.enqueued_at, w.id
           LIMIT 1
         ), granted AS (
-          UPDATE provider_rate_limit_waiters w SET granted_at=clock_timestamp() FROM candidate c WHERE w.id=c.id RETURNING c.priority
+          UPDATE provider_rate_limit_waiters w SET granted_at = clock_timestamp()
+          FROM candidate c, normalized n
+          WHERE w.id = c.id AND w.id = ${inserted.id} AND n.count_in_window < 27
+          RETURNING c.priority
+        ), updated AS (
+          UPDATE provider_rate_limit_state s
+          SET next_request_at = GREATEST(s.next_request_at, clock_timestamp()) + interval '2223 milliseconds',
+              window_started_at = n.effective_window_started_at,
+              requests_in_window = n.count_in_window + 1,
+              consecutive_high_priority = CASE WHEN g.priority = 'stock' THEN 0 ELSE s.consecutive_high_priority + 1 END,
+              updated_at = clock_timestamp()
+          FROM normalized n, granted g
+          WHERE s.provider = 'olist' AND s.account_fingerprint = ${input.accountFingerprint}
+          RETURNING s.next_request_at - interval '2223 milliseconds' AS start_at
         )
-        UPDATE provider_rate_limit_state s SET
-          next_request_at = GREATEST(COALESCE(s.next_request_at, clock_timestamp()), clock_timestamp()) + interval '2223 milliseconds',
-          requests_in_window = s.requests_in_window + 1,
-          consecutive_high_priority = CASE WHEN (SELECT priority FROM granted)='stock' THEN 0 ELSE s.consecutive_high_priority+1 END,
-          updated_at=clock_timestamp()
-        WHERE s.provider='olist' AND s.account_fingerprint=${input.accountFingerprint}
-        RETURNING s.next_request_at - interval '2223 milliseconds' AS start_at
-      `) as { rows?: unknown[] } | unknown[];
-      const row = (Array.isArray(slot) ? slot : slot.rows ?? [])[0] as { start_at: Date } | undefined;
-      if (!row || input.signal?.aborted) throw new Error('olist_deadline_exceeded');
-      return { startAt: new Date(row.start_at) };
+        SELECT ${inserted.id}::text AS waiter_id, start_at FROM updated
+      `));
+      const reservation = result[0] as { waiter_id: string; start_at: Date } | undefined;
+      if (input.signal?.aborted) { await cancel(inserted.id); throw deadlineError(); }
+      if (!reservation) { await cancel(inserted.id); throw new Error('olist_rate_governor_queued'); }
+      return { waiterId: reservation.waiter_id, startAt: new Date(reservation.start_at) };
     },
+
     async observe(fingerprint: string, headers: Headers, signal?: AbortSignal): Promise<void> {
       if (signal?.aborted) return;
-      const limit = Number(headers.get('x-ratelimit-limit'));
-      const remaining = Number(headers.get('x-ratelimit-remaining'));
-      const reset = headers.get('x-ratelimit-reset');
-      if (!Number.isFinite(limit) && !Number.isFinite(remaining) && !reset) return;
+      const limitRaw = headers.get('x-ratelimit-limit');
+      const remainingRaw = headers.get('x-ratelimit-remaining');
+      const resetRaw = headers.get('x-ratelimit-reset');
+      if (limitRaw === null || remainingRaw === null || resetRaw === null) return;
+      const limit = Number(limitRaw); const remaining = Number(remainingRaw); const reset = Number(resetRaw);
+      if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(remaining) || remaining < 0 || remaining > limit || !Number.isFinite(reset) || reset <= 0) return;
+      if (signal?.aborted) return;
       await client.execute(sql`
-        UPDATE provider_rate_limit_state SET
-          observed_limit = CASE WHEN ${Number.isFinite(limit)} THEN ${limit} ELSE observed_limit END,
-          observed_remaining = CASE WHEN ${Number.isFinite(remaining)} THEN ${remaining} ELSE observed_remaining END,
-          observed_reset_at = CASE WHEN ${reset} <> '' THEN to_timestamp(${reset}::double precision) ELSE observed_reset_at END,
-          updated_at = clock_timestamp()
-        WHERE provider = 'olist' AND account_fingerprint = ${fingerprint}
+        UPDATE provider_rate_limit_state SET observed_limit=${limit}, observed_remaining=${remaining},
+          observed_reset_at=to_timestamp(${reset}), updated_at=clock_timestamp()
+        WHERE provider='olist' AND account_fingerprint=${fingerprint}
       `);
     },
   };
@@ -63,7 +122,6 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
 export async function reserveOlistRequest(input: { accountFingerprint: string; priority: OlistRequestPriority; signal?: AbortSignal }): Promise<OlistReservation> {
   return createOlistRateGovernor().reserve(input);
 }
-
-export async function observeOlistRateHeaders(fingerprint: string, headers: Headers): Promise<void> {
-  return createOlistRateGovernor().observe(fingerprint, headers);
+export async function observeOlistRateHeaders(fingerprint: string, headers: Headers, signal?: AbortSignal): Promise<void> {
+  return createOlistRateGovernor().observe(fingerprint, headers, signal);
 }

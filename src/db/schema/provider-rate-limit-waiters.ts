@@ -8,4 +8,5 @@ export const providerRateLimitWaiters = pgTable('provider_rate_limit_waiters', {
   enqueued_at: timestamp('enqueued_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   expires_at: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
   granted_at: timestamp('granted_at', { withTimezone: true, mode: 'date' }),
+  cancelled_at: timestamp('cancelled_at', { withTimezone: true, mode: 'date' }),
 }, (t) => ({ queue: index('provider_rate_limit_waiters_queue_idx').on(t.provider, t.account_fingerprint, t.priority, t.enqueued_at, t.id) }));
