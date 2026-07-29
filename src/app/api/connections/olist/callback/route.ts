@@ -14,12 +14,14 @@ import {
 } from '@/modules/connections/olist-oauth-attempt';
 import {
   getProviderOAuthCredentials,
+  getOlistPublicationContext,
 } from '@/modules/connections/provider-connection.repository';
 import { getOAuthProvider } from '@/modules/providers/oauth-registry';
 import { OAuthProviderError } from '@/modules/providers/oauth.types';
 import { loadAndBindOlistAccount } from '@/modules/providers/olist/account';
 
 export async function GET(request: Request) {
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const access = await getSessionContext();
   if (!access) return localRedirect('/sign-in');
 
@@ -55,7 +57,23 @@ export async function GET(request: Request) {
     if (credentials.version !== attempt.credentialVersion) {
       return localRedirect(returnPath, 'olist_credenciais_alteradas');
     }
-    const tokens = await getOAuthProvider('olist').exchangeCode({
+    const publication = await getOlistPublicationContext(attempt.orgId);
+    if (publication.credentialVersion !== attempt.credentialVersion) {
+      return localRedirect(returnPath, 'olist_credenciais_alteradas');
+    }
+    // The same deadline/signal fences every external and persistence step. A
+    // cancelled request may finish its provider request, but can never publish.
+    const controller = new AbortController();
+    const deadlineAt = Date.now() + 30_000;
+    deadlineTimer = setTimeout(() => controller.abort(), Math.max(0, deadlineAt - Date.now()));
+    const lifecycle = { signal: controller.signal, deadlineAt };
+    const tokens = await (getOAuthProvider('olist').exchangeCode as (input: {
+      credentials: { clientId: string; clientSecret: string; redirectUri: string };
+      code: string;
+      codeVerifier: string;
+      signal: AbortSignal;
+      deadlineAt: number;
+    }) => Promise<import('@/modules/providers/types').OAuthTokens>)({
       credentials: {
         clientId: credentials.clientId,
         clientSecret: credentials.clientSecret,
@@ -63,15 +81,20 @@ export async function GET(request: Request) {
       },
       code,
       codeVerifier: attempt.codeVerifier,
+      ...lifecycle,
     });
     // Do not publish an operational Olist connection until its stable account binding
     // and the exchanged token set win the same credential CAS.
     await loadAndBindOlistAccount(attempt.orgId, {
       credentialVersion: attempt.credentialVersion,
+      sourceGeneration: publication.dataGeneration,
       tokens,
+      ...lifecycle,
     });
+    clearTimeout(deadlineTimer);
     return localRedirect(returnPath, undefined, 'conectado');
   } catch (error) {
+    if (deadlineTimer) clearTimeout(deadlineTimer);
     const safeCode = callbackErrorCode(error);
     logger.warn('olist.oauth.callback_failed', {
       provider: 'olist',

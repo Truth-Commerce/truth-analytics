@@ -25,6 +25,7 @@ vi.mock('@/modules/auth/session', () => ({ getSessionContext: vi.fn() }));
 vi.mock('@/modules/connections/connection-access', () => ({ assertConnectionOrgAccess: vi.fn() }));
 vi.mock('@/modules/connections/provider-connection.repository', () => ({
   getProviderOAuthCredentials: vi.fn(),
+  getOlistPublicationContext: vi.fn(),
 }));
 vi.mock('@/modules/connections/olist-oauth-attempt', () => ({
   OLIST_OAUTH_COOKIE: 'olist_oauth_attempt',
@@ -49,6 +50,7 @@ import { getSessionContext } from '@/modules/auth/session';
 import { assertConnectionOrgAccess } from '@/modules/connections/connection-access';
 import {
   getProviderOAuthCredentials,
+  getOlistPublicationContext,
 } from '@/modules/connections/provider-connection.repository';
 import {
   createOlistOAuthAttempt,
@@ -74,6 +76,7 @@ beforeEach(() => {
     clientSecret: 'secret',
     version: 'version-a',
   });
+  vi.mocked(getOlistPublicationContext).mockResolvedValue({ credentialVersion: 'version-a', dataGeneration: 2 });
   vi.mocked(createOlistOAuthAttempt).mockReturnValue({
     cookieValue: 'signed-cookie',
     state: 'state-a',
@@ -177,9 +180,14 @@ describe('GET /api/connections/olist/callback', () => {
       },
       code: 'code-a',
       codeVerifier: 'verifier-a',
+      signal: expect.any(AbortSignal),
+      deadlineAt: expect.any(Number),
     });
     expect(loadAndBindOlistAccount).toHaveBeenCalledWith(ORG_ID, expect.objectContaining({
       credentialVersion: 'version-a',
+      sourceGeneration: 2,
+      signal: expect.any(AbortSignal),
+      deadlineAt: expect.any(Number),
       tokens: expect.objectContaining({ accessToken: 'access', refreshToken: 'refresh' }),
     }));
     expect(response.headers.get('location')).toContain('/conexoes?olist=conectado');

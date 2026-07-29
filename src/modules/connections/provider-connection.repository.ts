@@ -3,6 +3,7 @@ import {
   and,
   asc,
   eq,
+  inArray,
   isNotNull,
   lte,
   sql,
@@ -52,6 +53,11 @@ export type ProviderRefreshContext = {
   version: string;
 };
 
+export type OlistPublicationContext = {
+  credentialVersion: string;
+  dataGeneration: number;
+};
+
 export async function configureProviderCredentials(input: {
   orgId: string;
   provider: ErpProviderId;
@@ -85,10 +91,8 @@ export async function configureProviderCredentials(input: {
     last_error_at: null,
     status: 'configurado' as const,
   };
-  await db
-    .insert(connections)
-    .values(values)
-    .onConflictDoUpdate({
+  await db.transaction(async (tx) => {
+    await tx.insert(connections).values(values).onConflictDoUpdate({
       target: [connections.org_id, connections.provider],
       set: {
         oauth_client_id: values.oauth_client_id,
@@ -106,6 +110,12 @@ export async function configureProviderCredentials(input: {
         provider_account_fingerprint: null,
       },
     });
+    // Rotating an Olist credential invalidates all readiness/leases together
+    // with its generation and account fingerprint above.
+    if (input.provider === 'olist') {
+      await tx.execute(sql`DELETE FROM connection_sync_state WHERE org_id=${input.orgId} AND provider='olist'`);
+    }
+  });
   await recordAudit({
     orgId: input.orgId,
     userId: input.actorUserId,
@@ -138,8 +148,8 @@ export async function getProviderConnectionSummary(
     provider,
     status: row.status,
     credentialsConfigured: Boolean(row.oauthClientId && row.oauthClientSecret),
-    authorized: Boolean(row.accessToken && row.refreshToken && row.status === 'configurado'),
-    operational: provider === 'bling' && row.status === 'ok',
+    authorized: Boolean(row.accessToken && row.refreshToken && (row.status === 'configurado' || row.status === 'ok')),
+    operational: row.status === 'ok',
     expiresAt: row.expiresAt,
     refreshExpiresAt: row.refreshExpiresAt,
     lastRefreshAt: row.lastRefreshAt,
@@ -261,6 +271,24 @@ export async function getValidAccessTokenForProvider(
     kind: 'access_token',
     ciphertext: row.accessToken,
   });
+}
+
+/** Snapshot captured before provider I/O and used as the final publication CAS. */
+export async function getOlistPublicationContext(orgId: string): Promise<OlistPublicationContext> {
+  const [row] = await db
+    .select({
+      oauthClientId: connections.oauth_client_id,
+      oauthClientSecret: connections.oauth_client_secret,
+      dataGeneration: connections.data_generation,
+    })
+    .from(connections)
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'olist')))
+    .limit(1);
+  if (!row?.oauthClientId || !row.oauthClientSecret) throw new Error('provider_credentials_missing');
+  return {
+    credentialVersion: credentialVersion(row.oauthClientId, row.oauthClientSecret),
+    dataGeneration: row.dataGeneration,
+  };
 }
 
 /** The account fingerprint is a required binding, never caller supplied request state. */
@@ -405,7 +433,7 @@ export async function listProviderConnectionsExpiring(input: {
     .where(
       and(
         eq(connections.provider, input.provider),
-        eq(connections.status, 'configurado'),
+        inArray(connections.status, ['configurado', 'ok']),
         eq(organizations.status, 'active'),
         isNotNull(connections.oauth_client_id),
         isNotNull(connections.oauth_client_secret),
@@ -436,7 +464,7 @@ export async function markProviderConnectionError(input: {
   if (
     !current ||
     !hasVersionedSecrets(current) ||
-    current.status !== 'configurado' ||
+    (current.status !== 'configurado' && current.status !== 'ok') ||
     connectionVersion(current) !== input.expectedVersion
   ) return false;
   const updated = await db
@@ -534,6 +562,6 @@ function configuredVersionWhere(
 ) {
   return and(
     versionWhere(row, orgId, provider),
-    eq(connections.status, 'configurado'),
+    inArray(connections.status, ['configurado', 'ok']),
   );
 }
