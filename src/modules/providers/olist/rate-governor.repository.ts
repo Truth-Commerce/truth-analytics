@@ -7,6 +7,9 @@ export type OlistReservation = { waiterId: string; startAt: Date };
 
 /** Small enough to inject a separate database client for each process in tests. */
 type SqlExecutor = { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> };
+type TransactionalSqlClient = SqlExecutor & {
+  transaction<T>(callback: (transaction: SqlExecutor) => Promise<T>): Promise<T>;
+};
 type QueryResult = { rows?: unknown[] } | unknown[];
 type Decision = { waiter_id?: string; start_at?: Date | string; wake_at?: Date | string; active?: boolean };
 
@@ -46,7 +49,7 @@ function parseCanonicalInteger(raw: string | null, min: number, max: number): nu
 }
 
 /** PostgreSQL is the only queue, clock and fairness authority. */
-export function createOlistRateGovernor(client: SqlExecutor = db) {
+export function createOlistRateGovernor(client: TransactionalSqlClient = db) {
   async function cancel(waiterId: string): Promise<void> {
     // A granted slot can still be cancelled before the HTTP request's startAt.  We
     // retain the consumed slot so cancellation cannot move the distributed clock back.
@@ -58,17 +61,19 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
   }
 
   async function decide(accountFingerprint: string, waiterId: string): Promise<Decision> {
-    return rows(await client.execute(sql`
-      WITH locked AS (
+    return client.transaction(async transaction => {
+      await transaction.execute(sql`
         SELECT pg_advisory_xact_lock(hashtextextended('olist:' || ${accountFingerprint}, 0))
-      ), purged AS (
-        DELETE FROM provider_rate_limit_waiters USING locked
+      `);
+      return rows(await transaction.execute(sql`
+      WITH purged AS (
+        DELETE FROM provider_rate_limit_waiters
         WHERE provider = 'olist' AND account_fingerprint = ${accountFingerprint}
           AND (expires_at <= clock_timestamp() OR cancelled_at IS NOT NULL)
       ), current_state AS (
         INSERT INTO provider_rate_limit_state
           (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
-        SELECT 'olist', ${accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0 FROM locked
+        VALUES ('olist', ${accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0)
         ON CONFLICT (provider, account_fingerprint) DO UPDATE SET updated_at = clock_timestamp()
         RETURNING *
       ), normalized AS (
@@ -148,6 +153,7 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
       LEFT JOIN own_waiter own ON true
       WHERE NOT EXISTS (SELECT 1 FROM updated)
     `))[0] as Decision;
+    });
   }
 
   return {
@@ -197,17 +203,25 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
       if (remaining !== undefined && limit !== undefined && remaining > limit) return;
       if (limit === undefined && remaining === undefined && reset === undefined) return;
       if (signal?.aborted) return;
-      await client.execute(sql`
-        UPDATE provider_rate_limit_state
-        SET observed_limit = CASE WHEN ${limit ?? null}::integer IS NULL THEN observed_limit ELSE ${limit ?? null}::integer END,
-            observed_remaining = CASE WHEN ${remaining ?? null}::integer IS NULL THEN observed_remaining ELSE ${remaining ?? null}::integer END,
-            observed_reset_at = CASE WHEN ${reset ?? null}::bigint IS NULL THEN observed_reset_at ELSE to_timestamp(${reset ?? null}::bigint) END,
-            updated_at = clock_timestamp()
-        WHERE provider = 'olist' AND account_fingerprint = ${fingerprint}
-      `);
-      // The request may have been cancelled while PostgreSQL was processing the
-      // write.  Do not let callers continue a cancelled request with stale state.
-      if (signal?.aborted) return;
+      try {
+        await client.transaction(async transaction => {
+          if (signal?.aborted) throw deadlineError();
+          await transaction.execute(sql`
+            UPDATE provider_rate_limit_state
+            SET observed_limit = CASE WHEN ${limit ?? null}::integer IS NULL THEN observed_limit ELSE ${limit ?? null}::integer END,
+                observed_remaining = CASE WHEN ${remaining ?? null}::integer IS NULL THEN observed_remaining ELSE ${remaining ?? null}::integer END,
+                observed_reset_at = CASE WHEN ${reset ?? null}::bigint IS NULL THEN observed_reset_at ELSE to_timestamp(${reset ?? null}::bigint) END,
+                updated_at = clock_timestamp()
+            WHERE provider = 'olist' AND account_fingerprint = ${fingerprint}
+          `);
+          // A cancellation during the query must abort this transaction, otherwise
+          // stale response headers would be committed after the request lifecycle.
+          if (signal?.aborted) throw deadlineError();
+        });
+      } catch (error) {
+        if (signal?.aborted || error instanceof Error && error.message === 'olist_deadline_exceeded') return;
+        throw error;
+      }
     },
   };
 }

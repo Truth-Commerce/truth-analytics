@@ -16,6 +16,32 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
   const governorB = createOlistRateGovernor(drizzle(sqlB));
   const orgIds: string[] = [];
 
+  function afterInsertBarrier(client: ReturnType<typeof drizzle>) {
+    let release!: () => void;
+    let reached!: () => void;
+    const inserted = new Promise<void>(resolve => { reached = resolve; });
+    const resume = new Promise<void>(resolve => { release = resolve; });
+    let firstRootQuery = true;
+    return {
+      client: {
+        async execute(query: ReturnType<typeof sql>) {
+          const result = await client.execute(query);
+          if (firstRootQuery) {
+            firstRootQuery = false;
+            reached(); // the INSERT has committed before reserve can decide.
+            await resume;
+          }
+          return result;
+        },
+        async transaction<T>(callback: (transaction: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => Promise<T>): Promise<T> {
+          return client.transaction(transaction => callback(transaction));
+        },
+      },
+      inserted,
+      release,
+    };
+  }
+
   async function createOrdersSyncFixture(account: string, input: { backlog: number | null; updatedAgo?: string }) {
     const [organization] = await sqlA`INSERT INTO organizations (name) VALUES (${`governor ${run} ${account}`}) RETURNING id`;
     orgIds.push(organization.id);
@@ -57,17 +83,22 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     let inserts = 0;
     let inserted!: () => void;
     const bothInserted = new Promise<void>(resolve => { inserted = resolve; });
-    const barrier = (client: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => {
-      let firstQuery = true;
+    const barrier = (client: ReturnType<typeof drizzle>) => {
+      let firstRootQuery = true;
       return {
         async execute(query: ReturnType<typeof sql>) {
           const result = await client.execute(query);
-          if (firstQuery) {
-            firstQuery = false;
+          // reserve inserts through the root client; decisions run through their
+          // own explicit transaction. This observes the real post-INSERT state.
+          if (firstRootQuery) {
+            firstRootQuery = false;
             inserts += 1;
             if (inserts === 2) inserted();
           }
           return result;
+        },
+        async transaction<T>(callback: (transaction: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => Promise<T>): Promise<T> {
+          return client.transaction(transaction => callback(transaction));
         },
       };
     };
@@ -148,8 +179,11 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     const account = fingerprint('cancel-post-insert');
     await governorA.reserve({ accountFingerprint: account, priority: 'orders' });
     const controller = new AbortController();
-    const pending = governorB.reserve({ accountFingerprint: account, priority: 'details', signal: controller.signal });
+    const barrier = afterInsertBarrier(drizzle(sqlB));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'details', signal: controller.signal });
+    await barrier.inserted;
     controller.abort();
+    barrier.release();
     await expect(pending).rejects.toThrow('olist_deadline_exceeded');
     const [waiter] = await sqlA`SELECT granted_at, cancelled_at FROM provider_rate_limit_waiters WHERE provider = 'olist' AND account_fingerprint = ${account} ORDER BY enqueued_at DESC LIMIT 1`;
     expect(waiter.cancelled_at).not.toBeNull();

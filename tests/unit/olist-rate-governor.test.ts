@@ -4,32 +4,41 @@ import { sql } from 'drizzle-orm';
 import { createOlistRateGovernor } from '@/modules/providers/olist/rate-governor.repository';
 
 describe('Olist rate governor', () => {
-  it('cancels a grant when the request aborts between DB concession and return to HTTP', async () => {
+  it('rolls back rate-limit headers when the request aborts while their update is in flight', async () => {
     const controller = new AbortController();
-    let calls = 0;
+    let persistedLimit: number | undefined;
+    let pendingLimit: number | undefined;
     const governor = createOlistRateGovernor({
+      async transaction<T>(callback: (transaction: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => Promise<T>): Promise<T> {
+        try {
+          const result = await callback({
+            async execute(_query: ReturnType<typeof sql>) {
+              void _query;
+              pendingLimit = 27;
+              controller.abort();
+              return [];
+            },
+          });
+          persistedLimit = pendingLimit;
+          return result;
+        } finally {
+          pendingLimit = undefined;
+        }
+      },
       async execute(_query: ReturnType<typeof sql>) {
         void _query;
-        calls += 1;
-        if (calls === 1) return [{ id: 'waiter-after-grant' }];
-        if (calls === 2) {
-          controller.abort();
-          return [{
-            waiter_id: 'waiter-after-grant',
-            start_at: new Date(Date.now() + 1_000),
-            active: true,
-          }];
-        }
+        persistedLimit = 27;
+        controller.abort();
         return [];
       },
     });
 
-    await expect(governor.reserve({
-      accountFingerprint: 'olist-unit-after-grant',
-      priority: 'orders',
-      signal: controller.signal,
-    })).rejects.toThrow('olist_deadline_exceeded');
+    await governor.observe(
+      'olist-unit-abort-observe',
+      new Headers({ 'x-ratelimit-limit': '27' }),
+      controller.signal,
+    );
 
-    expect(calls).toBe(3);
+    expect(persistedLimit).toBeUndefined();
   });
 });
