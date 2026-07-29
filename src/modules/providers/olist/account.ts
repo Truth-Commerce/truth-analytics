@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { OAuthTokens } from '@/modules/providers/types';
 
 export type OlistAccountBinding = { fingerprint: string; sourceGeneration: number };
@@ -57,22 +57,25 @@ export async function loadAndBindOlistAccount(orgId: string, pending?: PendingTo
     import('@/db/olist-client'),
   ]);
   return olistBindingDb.transaction(async (tx) => {
-    const timeoutMs = bindingTimeoutMs(pending);
-    await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${timeoutMs}ms'`));
-    await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${timeoutMs}ms'`));
     ensureBindingActive(pending);
+    await setBindingTimeouts(tx, pending);
     const locked = await tx.execute(sql`SELECT id, oauth_client_id, oauth_client_secret, data_generation FROM connections WHERE org_id=${orgId} AND provider='olist' FOR UPDATE`);
     const row = locked[0] as { id?: string; oauth_client_id?: string; oauth_client_secret?: string; data_generation?: number } | undefined;
     if (!row?.id || !row.oauth_client_id || !row.oauth_client_secret || credentialVersion(row.oauth_client_id, row.oauth_client_secret) !== credentials.version || row.data_generation !== publication.dataGeneration) throw new Error('olist_conta_nao_validada');
     const now = new Date();
     const tokenSet = pending ? sql`, access_token=${encryptConnectionSecret({ orgId, provider: 'olist', kind: 'access_token', value: pending.tokens.accessToken })}, refresh_token=${encryptConnectionSecret({ orgId, provider: 'olist', kind: 'refresh_token', value: pending.tokens.refreshToken })}, expira_em=${new Date(now.getTime() + pending.tokens.expiresInSeconds * 1000)}, refresh_expira_em=${new Date(now.getTime() + (pending.tokens.refreshExpiresInSeconds ?? 86_400) * 1000)}, last_refresh_at=${now}, last_error_code=NULL, last_error_at=NULL, status='ok'` : sql``;
     ensureBindingActive(pending);
+    await setBindingTimeouts(tx, pending);
     const applied = await tx.execute(sql`UPDATE connections SET provider_account_fingerprint=${fingerprint}, data_generation=data_generation+1, updated_at=clock_timestamp() ${tokenSet} WHERE id=${row.id} AND oauth_client_id=${row.oauth_client_id} AND oauth_client_secret=${row.oauth_client_secret} AND data_generation=${publication.dataGeneration} RETURNING data_generation`);
     const generation = (applied[0] as { data_generation?: number } | undefined)?.data_generation;
     if (!generation) throw new Error('olist_conta_nao_validada');
     // A new generation cannot reuse readiness from the prior generation.
     ensureBindingActive(pending);
+    await setBindingTimeouts(tx, pending);
     await tx.execute(sql`DELETE FROM connection_sync_state WHERE org_id=${orgId} AND provider='olist'`);
+    // These checks remain inside the transaction so an abort after either write
+    // rolls back the publication instead of committing stale credentials.
+    ensureBindingActive(pending);
     return { fingerprint, sourceGeneration: generation };
   });
 }
@@ -87,4 +90,12 @@ function bindingTimeoutMs(pending?: PendingTokens): number {
   ensureBindingActive(pending);
   const remaining = pending?.deadlineAt === undefined ? OLIST_BINDING_DB_MAX_WAIT_MS : pending.deadlineAt - Date.now();
   return Math.max(1, Math.min(OLIST_BINDING_DB_MAX_WAIT_MS, remaining));
+}
+
+async function setBindingTimeouts(tx: { execute: (query: SQL) => Promise<unknown> }, pending?: PendingTokens): Promise<void> {
+  const statementTimeoutMs = bindingTimeoutMs(pending);
+  await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${statementTimeoutMs}ms'`));
+  const lockTimeoutMs = bindingTimeoutMs(pending);
+  await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`));
+  ensureBindingActive(pending);
 }

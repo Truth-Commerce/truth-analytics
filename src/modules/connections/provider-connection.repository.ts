@@ -362,10 +362,12 @@ export async function saveRefreshedProviderTokens(input: {
   lifecycle?: ProviderConnectionLifecycle;
 }): Promise<boolean> {
   return withOlistMutationTransaction(input.lifecycle, async (tx) => {
+    await setOlistMutationTimeouts(tx, input.lifecycle);
     const current = await getLockedVersionedProviderRow(tx, input.context.orgId, input.context.provider);
     if (!current || !hasVersionedSecrets(current) || connectionVersion(current) !== input.context.version) return false;
     assertLifecycleActive(input.lifecycle);
     const now = input.now ?? new Date();
+    await setOlistMutationTimeouts(tx, input.lifecycle);
     const updated = await tx.update(connections).set({
       access_token: encryptConnectionSecret({
         orgId: input.context.orgId,
@@ -462,9 +464,11 @@ export async function markProviderConnectionError(input: {
   lifecycle?: ProviderConnectionLifecycle;
 }): Promise<boolean> {
   return withOlistMutationTransaction(input.lifecycle, async (tx) => {
+    await setOlistMutationTimeouts(tx, input.lifecycle);
     const current = await getLockedVersionedProviderRow(tx, input.orgId, input.provider);
     if (!current || !hasVersionedSecrets(current) || (current.status !== 'configurado' && current.status !== 'ok') || connectionVersion(current) !== input.expectedVersion) return false;
     assertLifecycleActive(input.lifecycle);
+    await setOlistMutationTimeouts(tx, input.lifecycle);
     const updated = await tx.update(connections).set({
       last_error_code: input.code,
       last_error_at: input.now ?? new Date(),
@@ -489,14 +493,24 @@ type MutationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function withOlistMutationTransaction<T>(lifecycle: ProviderConnectionLifecycle | undefined, work: (tx: MutationTransaction) => Promise<T>): Promise<T> {
   assertLifecycleActive(lifecycle);
-  const timeout = lifecycleTimeoutMs(lifecycle);
   return db.transaction(async (tx) => {
     // These are server-side limits: unlike Promise.race they stop lock/query work.
-    await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${timeout}ms'`));
-    await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${timeout}ms'`));
+    await setOlistMutationTimeouts(tx, lifecycle);
     assertLifecycleActive(lifecycle);
-    return work(tx);
+    const result = await work(tx);
+    // Keep this inside the transaction: an abort after the final mutation must
+    // turn into a rollback rather than a successful commit.
+    assertLifecycleActive(lifecycle);
+    return result;
   });
+}
+
+async function setOlistMutationTimeouts(tx: MutationTransaction, lifecycle?: ProviderConnectionLifecycle): Promise<void> {
+  const statementTimeoutMs = lifecycleTimeoutMs(lifecycle);
+  await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${statementTimeoutMs}ms'`));
+  const lockTimeoutMs = lifecycleTimeoutMs(lifecycle);
+  await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`));
+  assertLifecycleActive(lifecycle);
 }
 
 async function getLockedVersionedProviderRow(tx: MutationTransaction, orgId: string, provider: ErpProviderId): Promise<VersionedProviderRow | null> {
