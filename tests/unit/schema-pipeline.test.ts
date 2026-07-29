@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orders, reports, marketSnapshots } from '@/db/schema';
+import { connections, marketSnapshots, orders, providerRateLimitState, reports } from '@/db/schema';
 
 describe('schema pipeline', () => {
   describe('orders', () => {
@@ -7,8 +7,12 @@ describe('schema pipeline', () => {
       expect(orders.org_id.notNull).toBe(true);
     });
 
-    it('bling_order_id notNull', () => {
-      expect(orders.bling_order_id.notNull).toBe(true);
+    it('bling_order_id is nullable for providers without a Bling identifier', () => {
+      expect(orders.bling_order_id.notNull).toBe(false);
+    });
+
+    it('source_generation defaults to one', () => {
+      expect(orders.source_generation.default).toBe(1);
     });
 
     it('frete default 0', () => {
@@ -21,6 +25,23 @@ describe('schema pipeline', () => {
 
     it('itens default empty array', () => {
       expect(orders.itens.default).toEqual([]);
+    });
+  });
+
+  describe('provider foundation expansion', () => {
+    it('keeps report source fields nullable during rolling deploy', () => {
+      expect(reports.source_provider.notNull).toBe(false);
+      expect(reports.source_generation.notNull).toBe(false);
+    });
+
+    it('adds provider connection identity and generation', () => {
+      expect(connections.provider_account_fingerprint.notNull).toBe(false);
+      expect(connections.data_generation.default).toBe(1);
+    });
+
+    it('exports distributed provider rate-limit state', () => {
+      expect(providerRateLimitState.provider.notNull).toBe(true);
+      expect(providerRateLimitState.account_fingerprint.notNull).toBe(true);
     });
   });
 

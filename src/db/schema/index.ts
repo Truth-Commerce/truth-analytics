@@ -6,6 +6,7 @@ export * from './password-reset-tokens';
 export * from './product-stock';
 export * from './connections';
 export * from './connection-sync-state';
+export * from './provider-rate-limit-state';
 export * from './tracked-products';
 export * from './reports';
 export * from './orders';

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -171,6 +171,38 @@ describe.skipIf(!url)('collect-bling — integração', () => {
     // PRESERVADO do valor original (15.00 dos MOCK_ORDERS): a recoleta não clobbera
     // o frete que o enriquecimento seria dono de gravar.
     expect(updated!.frete).toBe('15.00');
+  });
+
+  it('grava Bling pela chave provider-aware sem apagar detalhe', async () => {
+    const provider = await import('@/modules/providers/bling/provider');
+    mockFetchOrdersOnce(provider, [MOCK_ORDERS[0]]);
+
+    const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
+    await collectBlingOrders(orgId, PERIODO);
+    await tdb
+      .update(orders)
+      .set({
+        itens: [{ sku: 'SKU-1', nome: 'Item', quantidade: 1, valor: 10 }],
+        enriquecido_em: new Date(),
+      })
+      .where(and(eq(orders.org_id, orgId), eq(orders.provider_order_id, MOCK_ORDERS[0].blingOrderId)));
+
+    mockFetchOrdersOnce(provider, [MOCK_ORDERS[0]]);
+    await collectBlingOrders(orgId, PERIODO);
+
+    const [row] = await tdb
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.org_id, orgId),
+          eq(orders.provider, 'bling'),
+          eq(orders.provider_order_id, MOCK_ORDERS[0].blingOrderId),
+        ),
+      );
+
+    expect(row.bling_order_id).toBe(MOCK_ORDERS[0].blingOrderId);
+    expect(row.itens).toHaveLength(1);
   });
 
   it('upsert na colisão com canal fallback ("Bling") NÃO rebaixa o canal já resolvido', async () => {

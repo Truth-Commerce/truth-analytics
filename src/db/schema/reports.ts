@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -19,6 +20,8 @@ export const reports = pgTable(
     org_id: uuid('org_id')
       .notNull()
       .references(() => organizations.id),
+    source_provider: varchar('source_provider', { length: 32 }),
+    source_generation: integer('source_generation'),
     periodo_inicio: timestamp('periodo_inicio', { withTimezone: true, mode: 'date' }).notNull(),
     periodo_fim: timestamp('periodo_fim', { withTimezone: true, mode: 'date' }).notNull(),
     status: varchar('status', { length: 16 }).notNull().default('queued'),

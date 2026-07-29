@@ -13,6 +13,7 @@ vi.mock('@/db/schema', () => ({
   orders: {
     id: 'id',
     org_id: 'org_id',
+    provider: 'provider',
     data: 'data',
     bling_order_id: 'bling_order_id',
     enriquecido_em: 'enriquecido_em',
@@ -35,7 +36,7 @@ vi.mock('@/modules/providers/bling/order-detail', () => ({
 import { enrichOrders } from '@/modules/pipeline/steps/enrich-orders';
 
 /** Encadeia o `db.select()...limit()` para devolver a fila e o `db.update()` para capturar. */
-function armarDb(pendentes: Array<{ id: string; blingOrderId: string }>, restantesDepois: number) {
+function armarDb(pendentes: Array<{ id: string; blingOrderId: string | null }>, restantesDepois: number) {
   let selectChamadas = 0;
   dbMock.select.mockImplementation((cols?: Record<string, unknown>) => {
     // 1ª forma: SELECT de colunas (fila). 2ª: count(*) (restantes).
@@ -124,6 +125,15 @@ describe('enrichOrders', () => {
   it('fila vazia retorna cedo sem chamar o Bling', async () => {
     armarDb([], 0);
     const r = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    expect(r.enriquecidos).toBe(0);
+    expect(fetchOrderDetail).not.toHaveBeenCalled();
+  });
+
+  it('ignora pendentes sem identificador Bling', async () => {
+    armarDb([{ id: 'olist-1', blingOrderId: null }], 0);
+
+    const r = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+
     expect(r.enriquecidos).toBe(0);
     expect(fetchOrderDetail).not.toHaveBeenCalled();
   });
