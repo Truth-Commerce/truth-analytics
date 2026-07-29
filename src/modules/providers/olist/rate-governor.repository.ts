@@ -12,6 +12,7 @@ type Decision = { waiter_id?: string; start_at?: Date | string; wake_at?: Date |
 
 const QUEUE_EXPIRY = "interval '60 seconds'";
 const SLOT_INTERVAL = "interval '2223 milliseconds'";
+const SLO_RECHECK_INTERVAL = "interval '1 second'";
 
 function rows(result: unknown): unknown[] {
   if (Array.isArray(result)) return result;
@@ -97,6 +98,10 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
                  ELSE CASE WHEN w.priority = 'stock' THEN 1 ELSE 0 END END,
           w.enqueued_at, w.id
         LIMIT 1
+      ), own_waiter AS (
+        SELECT w.priority, w.expires_at, w.granted_at, w.cancelled_at
+        FROM provider_rate_limit_waiters w
+        WHERE w.id = ${waiterId}
       ), granted AS (
         UPDATE provider_rate_limit_waiters w SET granted_at = clock_timestamp()
         FROM candidate c, normalized n
@@ -118,6 +123,16 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
       SELECT NULL::text, NULL::timestamptz,
         CASE
           WHEN n.count_in_window >= n.effective_limit THEN n.effective_window_started_at + interval '60 seconds'
+          -- Stock is intentionally suppressed while orders are unhealthy.  If the
+          -- persisted slot is already due, polling at clock_timestamp() turns into
+          -- a hot loop; bound the recheck by its expiry, the next DB window and a
+          -- short future backoff instead.
+          WHEN own.priority = 'stock' AND slo.violated THEN LEAST(
+            own.expires_at,
+            n.effective_window_started_at + interval '60 seconds',
+            CASE WHEN n.next_request_at > clock_timestamp() THEN n.next_request_at
+                 ELSE clock_timestamp() + ${sql.raw(SLO_RECHECK_INTERVAL)} END
+          )
           -- Another live waiter owns the head. Recheck at the persisted next slot;
           -- if it is already due this yields immediately rather than inventing a poll delay.
           WHEN c.id IS NOT NULL AND c.id <> ${waiterId} THEN GREATEST(n.next_request_at, clock_timestamp())
@@ -128,7 +143,9 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
           WHERE own.id = ${waiterId} AND own.expires_at > clock_timestamp()
             AND own.granted_at IS NULL AND own.cancelled_at IS NULL
         )
-      FROM normalized n LEFT JOIN candidate c ON true
+      FROM normalized n CROSS JOIN orders_slo_violated slo
+      LEFT JOIN candidate c ON true
+      LEFT JOIN own_waiter own ON true
       WHERE NOT EXISTS (SELECT 1 FROM updated)
     `))[0] as Decision;
   }
@@ -188,6 +205,9 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
             updated_at = clock_timestamp()
         WHERE provider = 'olist' AND account_fingerprint = ${fingerprint}
       `);
+      // The request may have been cancelled while PostgreSQL was processing the
+      // write.  Do not let callers continue a cancelled request with stale state.
+      if (signal?.aborted) return;
     },
   };
 }
