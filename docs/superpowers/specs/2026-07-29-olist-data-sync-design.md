@@ -22,10 +22,10 @@ O Olist será promovido de `configurado` para `ok` automaticamente somente quand
 
 - Base da API: `https://api.tiny.com.br/public-api/v3`.
 - Autenticação das operações de dados: bearer token OAuth 2.0.
-- Pedidos: `GET /pedidos`, paginação `limit/offset`, filtros `dataInicial/dataFinal`; detalhes em `GET /pedidos/{idPedido}`.
+- Pedidos: `GET /pedidos`, paginação `limit/offset`, filtros `dataInicial/dataFinal` e `dataAtualizacao`; detalhes em `GET /pedidos/{idPedido}`.
 - Produtos: `GET /produtos`, paginação `limit/offset`.
 - O saldo completo é obtido por produto em `GET /estoque/{idProduto}`; a listagem de produtos não contém o saldo disponível.
-- Limites de leitura são compartilhados por conta, não por aplicativo: 30, 60, 120 ou 140 requisições/minuto conforme o plano.
+- Limites são compartilhados por conta, não por aplicativo. A documentação vigente informa 30, 60, 120 ou 140 requisições/minuto conforme o plano e expõe `X-RateLimit-Limit`, `X-RateLimit-Remaining` e `X-RateLimit-Reset`.
 - O aplicativo precisa de permissões de leitura em Pedidos, Produtos, Estoque e Informações da Conta.
 
 Fontes oficiais:
@@ -33,6 +33,7 @@ Fontes oficiais:
 - https://erp.tiny.com.br/public-api/v3/swagger/index.html
 - https://erp.tiny.com.br/public-api/v3/swagger/swagger.json
 - https://ajuda.olist.com/hubs-e-plataformas-via-api/aplicativos-api-v3-configuracoes-e-utilizacao
+- https://api-docs.erp.olist.com/documentacao/comecando/limites-de-consulta
 
 ## Abordagens consideradas
 
@@ -75,8 +76,8 @@ Pedidos e catálogo poderiam ser varridos de uma vez, mas o estoque exige uma ch
 
 1. No máximo um `connections.status='ok'` por organização.
 2. Toda leitura e escrita local é escopada por `org_id` e `provider`.
-3. Um pedido é único por `(org_id, provider, provider_order_id)`.
-4. Um saldo é único por `(org_id, provider, sku)` depois do incremento de estoque.
+3. Um pedido é único por `(org_id, provider, source_generation, provider_order_id)`.
+4. Um saldo é único por `(org_id, provider, source_generation, sku)` depois do incremento de estoque.
 5. Retentativas e retomadas não duplicam pedido, item ou saldo.
 6. Uma falha Olist nunca altera tokens/estado do Bling.
 7. Tokens, client secret, bearer headers e corpos remotos nunca entram em logs, auditoria ou UI.
@@ -84,21 +85,23 @@ Pedidos e catálogo poderiam ser varridos de uma vez, mas o estoque exige uma ch
 9. Uma sync só atualiza `last_sync_at` depois de persistir dados com sucesso.
 10. Cursor só avança depois de persistir o lote correspondente e somente o dono do lease pode avançá-lo.
 11. Toda consulta que alimenta métrica, alerta, meta ou relatório recebe o provider da fonte; Olist em shadow nunca entra em resultado Bling.
-12. Cada relatório grava o provider usado, tornando a análise reproduzível depois de um cutover.
+12. Cada relatório grava provider e geração usados, tornando a análise reproduzível depois de um cutover ou troca de conta.
+13. Cursor, readiness e dados importados pertencem a uma geração da conexão e ao fingerprint da conta Olist; trocar conta ou credenciais invalida o estado anterior.
+14. O fencing protege a escrita do dado e o avanço do cursor na mesma transação, usando o relógio do banco; validar apenas o cursor não é suficiente.
+15. Depois que existirem linhas Olist, rollback de aplicação só pode voltar até a primeira release totalmente provider-aware.
 
 ## Modelo de dados e migração
 
-A migration `0022` conclui a identidade de pedidos iniciada em `0020`:
+O rollout usa expand/contract; nenhuma migration pode quebrar o binário que ainda serve tráfego:
 
-- `orders.bling_order_id` passa a aceitar `NULL` para linhas Olist.
-- remove `orders_org_bling_uq`; a autoridade passa a ser `orders_org_provider_order_uq`.
-- adiciona índice `(org_id, provider, data)` para consultas do período.
-- adiciona `orders.provider_status`, `enrichment_attempts`, `enrichment_last_attempt_at` e `enrichment_last_error_code` para cancelamentos e quarentena de detalhes.
-- adiciona `reports.source_provider`, preenchido como `bling` nos relatórios existentes.
-- mantém coluna e trigger legados para escritores Bling durante a compatibilidade.
-- não reescreve nem apaga pedidos/estoque existentes.
+1. **Expand (`0022`)**: `orders.bling_order_id` aceita `NULL`; mantém `orders_org_bling_uq`, trigger e defaults legados; adiciona índice `(org_id, provider, source_generation, data)`, unique `(org_id, provider, source_generation, provider_order_id)`, `provider_status`, status normalizado, campos de retentativa/quarentena e `source_generation`. `connections.data_generation` nasce em `1`. `reports.source_provider` e `reports.source_generation` nascem nullable ou com defaults compatíveis; registros Bling existentes são preenchidos como `bling/1`, e o código antigo continua escrevendo sem erro.
+2. **Release provider-aware**: todos os writers e leitores passam a usar a identidade nova, mas `OLIST_DATA_SYNC_ENABLED=false` impede qualquer ingestão shadow. Testes e telemetria comprovam que nenhum writer depende de `orders_org_bling_uq` e nenhuma leitura de negócio ignora provider.
+3. **Enable**: somente após a release anterior estabilizar, o worker shadow é habilitado por allowlist. O rollback mínimo passa a ser essa release provider-aware, nunca o binário pré-Olist.
+4. **Contract posterior**: remove `orders_org_bling_uq`, trigger/defaults legados e torna `reports.source_provider`/`source_generation` `NOT NULL` com `CHECK` somente depois de toda a frota e todos os jobs antigos terem saído da janela de rollback.
 
-A remoção de `product_stock_org_sku_uq` fica para a migration do incremento B, somente depois de o writer e todas as leituras de estoque usarem `(org, provider, sku)`.
+Nenhuma etapa reescreve ou apaga pedidos/estoque existentes. A migration de contrato é independente da entrega de valor do incremento A.
+
+A remoção de `product_stock_org_sku_uq` fica para a migration do incremento B, somente depois de o writer e todas as leituras de estoque usarem `(org, provider, source_generation, sku)`. Registros Bling existentes recebem `source_generation=1`.
 
 Leitores históricos continuam aceitando registros Bling existentes. Novos escritores sempre informam `provider` e identificador externo explicitamente.
 
@@ -137,12 +140,13 @@ OAuth permanece em `OAuthConnectionProvider`. O adapter Bling continua expondo s
 
 1. Callback OAuth valida state, ator, organização e versão de credenciais.
 2. Tokens são persistidos por compare-and-swap.
-3. O Olist permanece `configurado` enquanto o backfill de 90 dias e a reconciliação da janela-alvo não estiverem prontos.
-4. Sem outro ERP ativo, uma atualização condicional promove Olist para `ok` depois do gate de readiness.
-5. Se Bling já estiver `ok`, Olist permanece em shadow até uma ação explícita de analista/admin. A transação revalida readiness, demove o ERP atual para `configurado`, promove o alvo e grava auditoria; qualquer falha desfaz tudo.
-6. A mesma transação permite rollback para o Bling sem apagar tokens ou dados.
-7. Refresh preserva o status atual (`ok` ou `configurado`) e nunca demove uma conexão operacional por sucesso.
-8. Erro permanente marca a conexão Olist como `expirado`; erro transitório preserva a operação e registra código seguro.
+3. Depois do callback, um job consulta `GET /info`, normaliza o CPF/CNPJ apenas em memória e persiste somente um fingerprint HMAC-SHA256 com segredo server-side, mais uma geração monotônica da conexão. Alteração de credencial ou fingerprint incrementa a geração e invalida cursor/readiness anterior.
+4. O Olist permanece `configurado` enquanto o workflow durável de backfill de 90 dias e a reconciliação da janela-alvo não estiverem prontos. O callback sinaliza o trabalho e um cron específico retoma conexões autorizadas `configurado` ou `ok`.
+5. Sem outro ERP ativo, uma atualização condicional promove Olist para `ok` depois do gate de readiness.
+6. Se Bling já estiver `ok`, Olist permanece em shadow até uma ação explícita de analista/admin. A transação revalida token, fingerprint, geração, readiness e frescor; demove o ERP atual para `configurado`, promove o alvo e grava auditoria com ator, origem, destino e snapshot do gate; qualquer falha desfaz tudo.
+7. A mesma transação permite rollback para o Bling sem apagar tokens ou dados, desde que a conexão de destino continue autorizada e fresca.
+8. Refresh percorre toda conexão autorizada (`ok` ou `configurado`), preserva o status atual e nunca demove uma conexão operacional por sucesso.
+9. Erro permanente marca a conexão Olist como `expirado`; erro transitório preserva a operação e registra código seguro.
 
 ## Pedidos e relatórios
 
@@ -167,21 +171,24 @@ OAuth permanece em `OAuthConnectionProvider`. O adapter Bling continua expondo s
 
 ### Pipeline neutro
 
-- `collectOrders(orgId, provider, periodo)` resolve o adapter e faz upsert pela chave provider-aware.
-- `enrichOrders(orgId, provider, options)` filtra pendências pelo mesmo provider.
+- `collectOrders(orgId, provider, sourceGeneration, periodo)` resolve o adapter e faz upsert pela chave provider-aware.
+- `enrichOrders(orgId, provider, sourceGeneration, options)` filtra pendências pela mesma fonte e geração.
 - `generateReport` resolve a conexão `ok`, coleta e enriquece pelo provider ativo e mantém todo o restante do pipeline inalterado.
 - Scheduler, geração manual e cron aceitam qualquer ERP registrado e operacional.
-- Toda query de `orders` usada por métricas, alertas, meta, dashboard, analista ou admin recebe `(orgId, provider)`; nenhuma lê providers shadow por acidente.
-- `reports.source_provider` registra o provider resolvido no início da execução.
+- Toda query de `orders` usada por métricas, alertas, meta, dashboard, analista ou admin recebe `(orgId, provider, sourceGeneration)` resolvido da conexão ativa; nenhuma lê provider shadow nem geração antiga por acidente.
+- Uma API/repository central provider-aware atende as leituras de negócio. O inventário cobre métricas, meta, alertas, dashboard, carteira do analista, estoque, calendário e kits; um teste estático impede novas queries diretas de `orders` sem provider + geração e fixtures Bling ativo + Olist shadow/geração antiga comprovam isolamento em cada consumidor.
+- `reports.source_provider` e `reports.source_generation` são capturados imutavelmente ao enfileirar ou assumir o relatório, nunca inferidos novamente no meio do pipeline. Comparativos usam preferencialmente relatórios da mesma fonte e geração; mudança de fonte é sinalizada e comparação cross-provider/cross-generation fica bloqueada sem ação explícita.
 - Códigos/cópias de erro apresentados ao cliente tornam-se neutros (`sem_conexao_erp`, `erp_indisponivel`) com mensagens específicas pelo provider quando houver contexto seguro.
 
 ## Backfill e readiness
 
 - A preparação inicial importa 90 dias, suficiente para mês corrente, comparação anterior e sinais de 30 dias; um período de produto mais antigo pode ampliar a janela explicitamente.
-- `connection_sync_state` usa `resource='orders_list'` e cursor `{ from, to, offset, total }`.
-- O detalhe usa a tabela `orders` como fila durável; após cinco falhas, a linha fica em quarentena por código seguro para não bloquear o lote inteiro.
-- Olist só pode ser ativado quando a listagem da janela terminou, a contagem distinta local confere com `paginacao.total`, não há detalhes pendentes/quarentenados na janela-alvo e amostras de soma diária/canal foram reconciliadas.
-- Incrementais usam janela sobreposta de três dias e upsert idempotente para absorver atualizações/cancelamentos tardios.
+- `connection_sync_state` usa `resource='orders_list'`, geração/fingerprint e cursor `{ from, to, offset, total, pass }`. O callback enfileira a preparação e um cron durável a retoma até concluir, inclusive para conexão `configurado`.
+- Como `offset` percorre um dataset mutável, readiness exige dois passes completos e estáveis da janela, com contagem distinta, checksum determinístico de IDs/status/valores e totais reconciliados.
+- O detalhe usa a tabela `orders` como fila durável. Falhas transitórias (`429`, `5xx`, timeout e primeiro `401`) usam `next_attempt_at` e backoff sem consumir a cota de poison; falhas permanentes de permissão, `404` e payload incompatível contam tentativas. Após o limite, a linha entra em poison queue operável, com reprocessamento/resolução manual auditados.
+- Em `401`, faz no máximo um refresh; uma segunda resposta classifica ausência de permissão e mostra instrução segura para corrigir o aplicativo Olist.
+- Olist só pode ser ativado quando os passes estáveis terminaram, o fingerprint/generation continua o mesmo, não há detalhes pendentes/poison sem resolução na janela-alvo e amostras de soma diária/canal foram reconciliadas.
+- Um spike contratual automatizado valida a semântica de `dataAtualizacao`. Confirmado o contrato, incrementais usam esse filtro com margem de sobreposição e persistem status bruto + normalizado. Enquanto não confirmado, ou se houver inconsistência, uma reconciliação periódica repassa toda a janela de 90 dias; uma janela fixa de três dias por data de criação não é aceita porque perde cancelamentos tardios.
 
 ## Estoque retomável
 
@@ -194,25 +201,28 @@ type OlistStockCursor = {
 };
 ```
 
-1. Adquire lease por `(org, olist, stock)` com expiração curta e fencing token aleatório.
+1. Adquire lease por `(org, olist, stock, generation)` com expiração maior que o pior timeout + retry, fencing monotônico e renovação explícita.
 2. Lista até 100 produtos no `offset` atual.
 3. Retoma no `index` e consulta `GET /estoque/{idProduto}`.
-4. Usa `disponivel` como saldo comercial; persiste `provider_product_id`, SKU e nome.
+4. Usa `disponivel` como saldo comercial; persiste `provider_product_id`, SKU e nome somente se, na mesma transação, o token ainda for dono de um lease não expirado pelo relógio do banco. O saldo guarda a versão de fencing e rejeita write stale.
 5. Avança `index` somente após o upsert daquele produto.
 6. Ao terminar a página, avança `offset` pela quantidade listada e zera `index`.
 7. Ao alcançar `paginacao.total`, encerra o ciclo, zera o cursor e grava `succeeded_at`.
-8. Toda atualização inclui o fencing token; um worker antigo nunca sobrescreve o progresso do sucessor.
+8. Toda escrita do saldo e do cursor inclui o fencing token; um worker antigo nunca sobrescreve o dado nem o progresso do sucessor.
 9. Falha libera/expira o lease, preserva cursor e registra código seguro; a próxima execução retoma.
 
 Produtos sem SKU são ignorados e contabilizados. A sincronização não apaga produtos ausentes nesta fase; reconciliação destrutiva exige evidência de snapshot completo e fica fora do escopo.
 
+O incremento B suporta inicialmente até 20.000 produtos por conta. O worker roda no mínimo a cada cinco minutos, distribui rodadas entre fingerprints com maior idade de cursor e calcula o lote pelo deadline e budget restantes, nunca por um fan-out fixo de 100 detalhes. No plano mínimo oficial, o SLO é concluir um primeiro snapshot de até 5.000 SKUs em 6 horas e até 20.000 em 24 horas; acima do limite, pedidos continuam operacionais, estoque fica explicitamente incompleto e a operação recebe `catalogo_acima_da_capacidade` em vez de uma promessa falsa de frescor.
+
 ## Controle de carga
 
-- Olist assume o pior plano oficial: no máximo 27 leituras/minuto por organização, intervalo mínimo de 2.200 ms com jitter. O budget é compartilhado por listagem, detalhe e estoque da mesma conta.
+- Um governor distribuído e atômico usa o fingerprint da conta como chave, compartilhado entre organizações, crons, instâncias e recursos. Sem fingerprint, somente `/info` pode executar por uma chave provisória de conexão; nenhum fan-out de dados é liberado.
+- O governor inicia conservador abaixo do menor plano oficial de 30 req/min, ajusta capacidade e reset pelos headers `X-RateLimit-Limit`, `X-RateLimit-Remaining` e `X-RateLimit-Reset`, reserva prioridade para pedidos/readiness e usa estoque como best effort. Outro aplicativo da mesma conta ainda pode consumir a cota, portanto `429` corrige o bucket e não causa paralelismo compensatório.
 - Timeout por request: 10 segundos.
 - `429` e `5xx`: até 2 tentativas totais, backoff exponencial com jitter e `Retry-After` limitado a 30 segundos.
 - Outros `4xx`: falha permanente segura; `401` aciona renovação/reclassificação sem logar resposta.
-- Pedidos/detalhes e estoque possuem leases separados; cada execução para de iniciar chamadas antes de 240 segundos. Crons de Olist podem processar organizações diferentes com concorrência limitada porque o limite oficial é por conta.
+- Pedidos/detalhes e estoque possuem leases separados por geração; cada execução para de iniciar chamadas antes de 240 segundos. Fairness é por fingerprint da conta, não por organização.
 - Nenhuma fila, paginação, resposta, lote ou fan-out é ilimitado.
 
 ## Segurança e privacidade
@@ -231,14 +241,14 @@ Produtos sem SKU são ignorados e contabilizados. A sincronização não apaga p
 - `connection_sync_state` registra início, sucesso, falha, processados, backlog e último código.
 - Falha em uma organização não aborta o lote.
 - Operador pode reexecutar o cron: upserts e cursor tornam a repetição segura.
-- Rollback de código mantém as colunas novas compatíveis; a migration é aditiva em dados e só remove constraints legadas que o código antigo não necessita para funcionar.
+- Rollback de código antes de habilitar shadow pode voltar ao binário legado porque a migration expand preserva constraints/triggers/defaults. Depois da primeira linha Olist, o rollback mínimo é a release provider-aware com kill switch; voltar ao binário legado misturaria providers e é proibido pelo runbook.
 - Um kill switch server-side desabilita novas sincronizações Olist sem afetar Bling ou apagar dados.
 
 ## Entregas
 
 ### Incremento A — pedidos e relatórios Olist
 
-- migration/identidade provider-aware;
+- migration expand e identidade provider-aware, ainda com constraint/trigger/default legado;
 - adapter HTTP/listagem/detalhe;
 - preparação shadow, gate de readiness, ativação/cutover/rollback seguros;
 - collect/enrich/pipeline/scheduler/dashboard neutros;
@@ -263,12 +273,12 @@ Critério de valor: um catálogo maior que um lote avança em execuções sucess
 4. Regressões Bling, pipeline, scheduler, dashboard e crons permanecem verdes.
 5. E2E cobre Olist shadow sem alterar métricas, ativação de cliente sem ERP, cutover/rollback pelo analista e ausência de segredos.
 6. CI completa, build e 25+ cenários E2E passam antes do merge.
-7. Migration é aplicada antes do deployment que grava pedidos Olist.
+7. O rollout passa pelos gates: migration expand; deploy provider-aware com sync Olist desligado; prova de telemetria/CI; enable shadow por allowlist; migration contract somente depois da janela de rollback.
 8. Smoke de produção confirma auth, rotas protegidas, cron real e ausência de 5xx.
 
 ## Riscos residuais
 
-- Contas que migram de Bling para Olist precisam de um fluxo posterior de cutover e reconciliação para evitar sobreposição histórica.
+- Comparações históricas que atravessam uma troca de provider precisam ser sinalizadas; o padrão é comparar somente a mesma fonte.
 - Estoque completo pode levar vários lotes em catálogos grandes; a UI deve mostrar frescor e progresso, não prometer snapshot imediato.
 - Olist não fornece comissão no contrato de pedido consultado; métricas de margem/comissão ficam incompletas para esse provider até existir uma fonte oficial.
 - Limites são compartilhados por conta; outros aplicativos Olist podem causar `429`, tratado como degradação transitória e retomável.
