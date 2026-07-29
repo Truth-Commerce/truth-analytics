@@ -2,13 +2,18 @@
 # projeto, 1x/dia e com janela de ±1h. O GitHub Actions não tem essas
 # restrições e dá horário exato. Cada schedule mapeia para uma rota
 # /api/cron/* via github.event.schedule (horários em UTC, como na Vercel).
-# Watchdog a cada 30 min (billing mínimo de 1 min/job → */10 estouraria os
-# 2000 min/mês grátis da org); detecção de relatório travado em até ~30 min.
+# Watchdog a cada 2h, dois minutos antes do renovar-conexoes DE PROPÓSITO: cada
+# chamada acorda o compute do Neon, que só suspende após alguns minutos parado —
+# agrupar os dois no mesmo intervalo faz o banco acordar uma vez, não duas. Era
+# */30 (48 chamadas/dia) e sozinho consumia mais que as ~191h/mês do free tier.
+# Custo da escolha: relatório travado leva até ~2h para ser liberado, em vez de
+# ~30 min. REVERTER PARA "*/30 * * * *" depois da migração para a VPS, onde não
+# há cota de compute (spec 2026-07-29-migracao-banco-hostinger-design.md).
 name: Crons
 
 on:
   schedule:
-    - cron: "*/30 * * * *" # watchdog
+    - cron: "15 */2 * * *" # watchdog
     - cron: "17 */2 * * *" # renovar-conexoes
     - cron: "0 7 * * *" # sincronizar-pedidos
     - cron: "30 7 * * *" # sincronizar-estoque
@@ -33,7 +38,7 @@ jobs:
           ROTA_MANUAL: ${{ inputs.rota }}
         run: |
           case "${{ github.event.schedule }}" in
-            "*/30 * * * *") rota=watchdog ;;
+            "15 */2 * * *") rota=watchdog ;;
             "17 */2 * * *") rota=renovar-conexoes ;;
             "0 7 * * *") rota=sincronizar-pedidos ;;
             "30 7 * * *") rota=sincronizar-estoque ;;
