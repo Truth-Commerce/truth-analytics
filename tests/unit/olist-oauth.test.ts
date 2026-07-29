@@ -144,6 +144,28 @@ describe('Olist OAuth adapter', () => {
     expect(aborts).toBe(2);
   });
 
+  it('inclui a leitura do corpo no timeout de cada tentativa', async () => {
+    vi.useFakeTimers();
+    const response = {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: vi.fn(() => new Promise(() => undefined)),
+    } as unknown as Response;
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = olistOAuthProvider.refresh({ credentials, refreshToken: 'refresh-1' });
+    const assertion = expect(promise).rejects.toMatchObject({
+      code: 'olist_token_erro_transiente',
+      kind: 'transient',
+    });
+    await vi.advanceTimersByTimeAsync(OLIST_TOKEN_REQUEST_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(OLIST_TOKEN_REQUEST_TIMEOUT_MS);
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it.each([400, 401])('classifica HTTP %s como permanente e não repete', async (status) => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('remote body', { status }));
     vi.stubGlobal('fetch', fetchMock);

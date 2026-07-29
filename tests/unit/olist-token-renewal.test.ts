@@ -24,6 +24,7 @@ vi.mock('@/modules/providers/oauth-registry', () => ({ getOAuthProvider: vi.fn((
 import {
   getProviderRefreshContext,
   markProviderConnectionError,
+  saveRefreshedProviderTokens,
 } from '@/modules/connections/provider-connection.repository';
 import { renewOlistConnection } from '@/modules/connections/olist-token-renewal';
 import { OAuthProviderError } from '@/modules/providers/oauth.types';
@@ -66,5 +67,17 @@ describe('renewOlistConnection — códigos seguros', () => {
     expect(markProviderConnectionError).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'olist_refresh_transiente', permanent: false }),
     );
+  });
+
+  it('não persiste refresh quando o sinal é abortado antes do CAS', async () => {
+    const controller = new AbortController();
+    adapter.refresh.mockImplementationOnce(async () => {
+      controller.abort();
+      return { accessToken: 'new', refreshToken: 'new-refresh', expiresInSeconds: 3600 };
+    });
+
+    await expect(renewOlistConnection('org-a', new Date(), { signal: controller.signal })).resolves.toBe('transient');
+    expect(saveRefreshedProviderTokens).not.toHaveBeenCalled();
+    expect(markProviderConnectionError).not.toHaveBeenCalled();
   });
 });

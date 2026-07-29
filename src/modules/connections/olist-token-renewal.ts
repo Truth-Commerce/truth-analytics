@@ -17,19 +17,21 @@ export const OLIST_REFRESH_MARGIN_MS = 10_800_000;
 export const OLIST_REFRESH_BATCH = 50;
 
 export type OlistRenewalResult = 'renewed' | 'expired' | 'transient' | 'won-by-peer';
+type RenewalOptions = { force?: boolean; signal?: AbortSignal; deadlineAt?: number };
 
 export async function renewOlistConnection(
   orgId: string,
   now: Date = new Date(),
-  options: { force?: boolean; signal?: AbortSignal; deadlineAt?: number } = {},
+  options: RenewalOptions = {},
 ): Promise<OlistRenewalResult> {
-  const context = await getProviderRefreshContext(orgId, 'olist');
+  ensureActive(options);
+  const context = await abortable(getProviderRefreshContext(orgId, 'olist'), options);
   if (!options.force && context.expiresAt.getTime() - now.getTime() > OLIST_REFRESH_MARGIN_MS) {
     return 'renewed';
   }
 
   try {
-    const tokens = await getOAuthProvider('olist').refresh({
+    const tokens = await abortable(getOAuthProvider('olist').refresh({
       credentials: {
         clientId: context.clientId,
         clientSecret: context.clientSecret,
@@ -38,32 +40,62 @@ export async function renewOlistConnection(
       refreshToken: context.refreshToken,
       signal: options.signal,
       deadlineAt: options.deadlineAt,
-    });
-    const saved = await saveRefreshedProviderTokens({ context, tokens, now });
+    }), options);
+    ensureActive(options);
+    const saved = await abortable(saveRefreshedProviderTokens({ context, tokens, now }), options);
     if (!saved) {
       await confirmPeerUpdate(orgId);
       return 'won-by-peer';
     }
     return 'renewed';
   } catch (error) {
+    if (isInactive(options)) return 'transient';
     const permanent = error instanceof OAuthProviderError && error.kind === 'permanent';
     const code = permanent ? 'olist_refresh_invalido' : 'olist_refresh_transiente';
-    const marked = await markProviderConnectionError({
+    ensureActive(options);
+    const marked = await abortable(markProviderConnectionError({
       orgId,
       provider: 'olist',
       code,
       permanent,
       expectedVersion: context.version,
       now,
-    });
+    }), options);
     if (!marked) {
       await confirmPeerUpdate(orgId);
       return 'won-by-peer';
     }
     if (!permanent) return 'transient';
-    await notifyOlistConnectionExpired(orgId);
+    ensureActive(options);
+    await abortable(notifyOlistConnectionExpired(orgId), options);
     return 'expired';
   }
+}
+
+function isInactive(options: RenewalOptions): boolean {
+  return Boolean(options.signal?.aborted || (options.deadlineAt !== undefined && options.deadlineAt <= Date.now()));
+}
+
+function ensureActive(options: RenewalOptions): void {
+  if (isInactive(options)) throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
+}
+
+function abortable<T>(promise: Promise<T>, options: RenewalOptions): Promise<T> {
+  ensureActive(options);
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      reject(new OAuthProviderError('olist_token_erro_transiente', 'transient'));
+    };
+    const timer = options.deadlineAt === undefined
+      ? undefined
+      : setTimeout(abort, Math.max(0, options.deadlineAt - Date.now()));
+    options.signal?.addEventListener('abort', abort, { once: true });
+    promise.then(
+      (value) => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); if (isInactive(options)) abort(); else resolve(value); },
+      (error) => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); reject(error); },
+    );
+  });
 }
 
 async function confirmPeerUpdate(orgId: string): Promise<void> {

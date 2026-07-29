@@ -6,6 +6,9 @@ import { observeOlistRateHeaders, reserveOlistRequest } from './rate-governor.re
 
 export const WORST_CASE_OLIST_REQUEST_MS = 60_000;
 export const OLIST_REQUEST_TIMEOUT_MS = 10_000;
+const OLIST_API_BASE = new URL('https://api.tiny.com.br/public-api/v3');
+const OLIST_API_PREFIX = `${OLIST_API_BASE.pathname}/`;
+
 export class OlistDataError extends Error {
   constructor(public readonly code: string, public readonly kind: 'transient' | 'permanent' | 'auth', public readonly status?: number) { super(code); }
 }
@@ -14,43 +17,51 @@ export type OlistDeadlineContext = { deadlineAt: number; signal: AbortSignal };
 export function createOlistDeadlineContext(input?: { signal?: AbortSignal; deadlineAt?: number }): OlistDeadlineContext {
   const controller = new AbortController();
   const deadlineAt = input?.deadlineAt ?? Date.now() + WORST_CASE_OLIST_REQUEST_MS;
-  const remaining = Math.max(0, deadlineAt - Date.now());
-  const timer = setTimeout(() => controller.abort(), remaining);
+  const timer = setTimeout(() => controller.abort(), Math.max(0, deadlineAt - Date.now()));
   const signal = input?.signal ? AbortSignal.any([input.signal, controller.signal]) : controller.signal;
   signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
   return { deadlineAt, signal };
 }
 
 export async function fetchOlistJson<T>(input: { orgId: string; priority: OlistRequestPriority; path: string; query?: Record<string, string>; schema: z.ZodType<T>; signal?: AbortSignal; deadlineAt?: number }): Promise<T> {
-  if (!input.path.startsWith('/') || input.path.startsWith('//')) throw new OlistDataError('olist_path_invalid', 'permanent');
+  const url = buildOlistUrl(input.path, input.query);
   const context = createOlistDeadlineContext(input);
   try {
     const fingerprint = await abortable(getOlistAccountFingerprint(input.orgId), context);
     if (!fingerprint) throw new OlistDataError('olist_conta_nao_validada', 'auth');
-    const url = new URL(input.path, process.env.OLIST_API_BASE ?? 'https://api.erp.olist.com');
-    for (const [key, value] of Object.entries(input.query ?? {})) url.searchParams.set(key, value);
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    let token = await abortable(getValidAccessTokenForProvider(input.orgId, 'olist'), context);
+    let refreshedAfterUnauthorized = false;
+
+    for (let remoteRequests = 0; remoteRequests < 2;) {
       ensureActive(context);
       const reservation = await abortable(reserveOlistRequest({ accountFingerprint: fingerprint, priority: input.priority, signal: context.signal }), context);
       await waitUntil(reservation.startAt.getTime(), context);
-      let token = await abortable(getValidAccessTokenForProvider(input.orgId, 'olist'), context);
-      let response = await request(url, token, context);
-      if (response.status === 401 && attempt === 0) {
-        const renewal = await abortable(renewOlistConnection(input.orgId, new Date(), { force: true, signal: context.signal, deadlineAt: context.deadlineAt }), context);
-        if (renewal !== 'renewed') throw new OlistDataError('olist_nao_autorizado', 'auth', 401);
-        token = await abortable(getValidAccessTokenForProvider(input.orgId, 'olist', 0), context);
+      let response: Response;
+      try {
+        remoteRequests += 1;
         response = await request(url, token, context);
+      } catch (error) {
+        if (error instanceof OlistDataError) throw error;
+        if (remoteRequests >= 2) throw new OlistDataError('olist_indisponivel', 'transient');
+        continue;
       }
       ensureActive(context);
       await abortable(observeOlistRateHeaders(fingerprint, response.headers, context.signal), context);
-      if (response.status === 429 || response.status >= 500) {
-        if (attempt === 0) { await retryAfter(response.headers, context); continue; }
-        throw new OlistDataError('olist_indisponivel', 'transient', response.status);
+      if (response.status === 401) {
+        if (refreshedAfterUnauthorized || remoteRequests >= 2) throw new OlistDataError('olist_nao_autorizado', 'auth', 401);
+        const renewal = await abortable(renewOlistConnection(input.orgId, new Date(), { force: true, signal: context.signal, deadlineAt: context.deadlineAt }), context);
+        if (renewal !== 'renewed' && renewal !== 'won-by-peer') throw new OlistDataError('olist_nao_autorizado', 'auth', 401);
+        token = await abortable(getValidAccessTokenForProvider(input.orgId, 'olist', 0), context);
+        refreshedAfterUnauthorized = true;
+        continue;
       }
-      if (response.status === 401) throw new OlistDataError('olist_nao_autorizado', 'auth', 401);
+      if (response.status === 429 || response.status >= 500) {
+        if (remoteRequests >= 2) throw new OlistDataError('olist_indisponivel', 'transient', response.status);
+        await retryAfter(response.headers, context);
+        continue;
+      }
       if (!response.ok) throw new OlistDataError('olist_resposta_invalida', 'permanent', response.status);
-      const payload = await abortable(response.json(), context);
-      const parsed = input.schema.safeParse(payload);
+      const parsed = input.schema.safeParse(await abortable(response.json(), context));
       if (!parsed.success) throw new OlistDataError('olist_payload_invalido', 'permanent', response.status);
       return parsed.data;
     }
@@ -62,8 +73,21 @@ export async function fetchOlistJson<T>(input: { orgId: string; priority: OlistR
   }
 }
 
+function buildOlistUrl(path: string, query?: Record<string, string>): URL {
+  if (!path.startsWith('/') || path.startsWith('//') || /[\\\u0000-\u001f\u007f]/.test(path)) throw new OlistDataError('olist_path_invalid', 'permanent');
+  const segments = path.split('/');
+  if (segments.some((segment) => {
+    try { const decoded = decodeURIComponent(segment); return decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\'); } catch { return true; }
+  })) throw new OlistDataError('olist_path_invalid', 'permanent');
+  const url = new URL(OLIST_API_BASE);
+  url.pathname = `${OLIST_API_BASE.pathname}${path}`;
+  for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
+  return url;
+}
+
 async function request(url: URL, token: string, context: OlistDeadlineContext): Promise<Response> {
   ensureActive(context);
+  if (url.origin !== OLIST_API_BASE.origin || !url.pathname.startsWith(OLIST_API_PREFIX)) throw new OlistDataError('olist_path_invalid', 'permanent');
   const local = AbortSignal.timeout(Math.min(OLIST_REQUEST_TIMEOUT_MS, remaining(context)));
   return abortable(fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.any([context.signal, local]) }), context);
 }
@@ -78,8 +102,7 @@ function abortable<T>(promise: Promise<T>, context: OlistDeadlineContext): Promi
   });
 }
 function waitUntil(at: number, context: OlistDeadlineContext): Promise<void> {
-  const ms = Math.min(Math.max(0, at - Date.now()), remaining(context));
-  return abortable(new Promise(resolve => setTimeout(resolve, ms)), context);
+  return abortable(new Promise(resolve => setTimeout(resolve, Math.min(Math.max(0, at - Date.now()), remaining(context)))), context);
 }
 function retryAfter(headers: Headers, context: OlistDeadlineContext): Promise<void> {
   const seconds = Number(headers.get('retry-after'));

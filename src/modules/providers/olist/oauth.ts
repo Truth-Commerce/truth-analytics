@@ -71,19 +71,18 @@ export async function refresh(input: {
 async function requestTokens(body: URLSearchParams, signal?: AbortSignal, deadlineAt?: number): Promise<OAuthTokens> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (signal?.aborted || (deadlineAt !== undefined && deadlineAt <= Date.now())) throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
-    let response: Response;
+    let result: { response: Response; tokens?: OAuthTokens };
     try {
-      response = await fetchWithTimeout(TOKEN_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-      }, signal, deadlineAt);
-    } catch {
+      result = await requestTokenAttempt(body, signal, deadlineAt);
+    } catch (error) {
+      if (error instanceof OAuthProviderError) throw error;
       if (attempt === 0) continue;
       throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
     }
 
-    if (response.ok) return parseTokens(response);
+    if (result.tokens) return result.tokens;
+    const response = result.response;
+    if (response.ok) throw new OAuthProviderError('olist_token_resposta_invalida', 'permanent');
     if (response.status === 400 || response.status === 401) {
       throw new OAuthProviderError('olist_token_erro_permanente', 'permanent');
     }
@@ -99,12 +98,32 @@ async function requestTokens(body: URLSearchParams, signal?: AbortSignal, deadli
   throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit, signal?: AbortSignal, deadlineAt?: number): Promise<Response> {
+async function requestTokenAttempt(body: URLSearchParams, signal?: AbortSignal, deadlineAt?: number): Promise<{ response: Response; tokens?: OAuthTokens }> {
+  return withTimeout(async (attemptSignal) => {
+    const response = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      signal: attemptSignal,
+    });
+    return response.ok ? { response, tokens: await parseTokens(response) } : { response };
+  }, signal, deadlineAt);
+}
+
+async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, deadlineAt?: number): Promise<T> {
   const controller = new AbortController();
   const remaining = deadlineAt === undefined ? OLIST_TOKEN_REQUEST_TIMEOUT_MS : Math.max(0, deadlineAt - Date.now());
   const timeout = setTimeout(() => controller.abort(), Math.min(OLIST_TOKEN_REQUEST_TIMEOUT_MS, remaining));
+  const combined = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
   try {
-    return await fetch(url, { ...init, signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal });
+    return await new Promise<T>((resolve, reject) => {
+      const abort = () => reject(new DOMException('aborted', 'AbortError'));
+      combined.addEventListener('abort', abort, { once: true });
+      operation(combined).then(
+        (value) => { combined.removeEventListener('abort', abort); resolve(value); },
+        (error) => { combined.removeEventListener('abort', abort); reject(error); },
+      );
+    });
   } finally {
     clearTimeout(timeout);
   }
