@@ -185,7 +185,6 @@ describe('GET /api/connections/olist/callback', () => {
   });
 
   it('expira no path original antes de trocar o code e salva por compare-and-swap', async () => {
-    let exchangeLifecycle: { signal: AbortSignal; deadlineAt: number } | undefined;
     adapter.exchangeCode.mockImplementationOnce(async () => {
       expect(cookieStore.set).toHaveBeenCalledWith(
         'olist_oauth_attempt',
@@ -225,7 +224,7 @@ describe('GET /api/connections/olist/callback', () => {
       deadlineAt: expect.any(Number),
       tokens: expect.objectContaining({ accessToken: 'access', refreshToken: 'refresh' }),
     }));
-    exchangeLifecycle = vi.mocked(adapter.exchangeCode).mock.calls[0]?.[0] as { signal: AbortSignal; deadlineAt: number };
+    const exchangeLifecycle = vi.mocked(adapter.exchangeCode).mock.calls[0]?.[0] as { signal: AbortSignal; deadlineAt: number };
     const bindingLifecycle = vi.mocked(loadAndBindOlistAccount).mock.calls[0]?.[1] as { signal: AbortSignal; deadlineAt: number };
     expect(bindingLifecycle.signal).toBe(exchangeLifecycle.signal);
     expect(bindingLifecycle.deadlineAt).toBe(exchangeLifecycle.deadlineAt);
