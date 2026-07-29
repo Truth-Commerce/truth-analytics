@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // --- Mocks das dependências externas (db, token, Bling) ---
 // vi.mock é içado ao topo do arquivo; o mock precisa existir nesse momento, por
 // isso vai por vi.hoisted em vez de uma const comum (que ainda não foi avaliada).
-const { dbMock, updates } = vi.hoisted(() => ({
+const { dbMock, updates, wherePredicates } = vi.hoisted(() => ({
   dbMock: { select: vi.fn(), update: vi.fn() },
   updates: [] as Array<Record<string, unknown>>,
+  wherePredicates: [] as unknown[],
 }));
 
 vi.mock('@/db/client', () => ({ db: dbMock }));
@@ -43,7 +44,8 @@ function armarDb(pendentes: Array<{ id: string; blingOrderId: string | null }>, 
     const ehContagem = cols && 'n' in cols;
     return {
       from: () => ({
-        where: (..._w: unknown[]) => {
+        where: (predicate: unknown) => {
+          wherePredicates.push(predicate);
           if (ehContagem) return Promise.resolve([{ n: restantesDepois }]);
           return {
             orderBy: () => ({
@@ -73,6 +75,7 @@ function armarDb(pendentes: Array<{ id: string; blingOrderId: string | null }>, 
 describe('enrichOrders', () => {
   beforeEach(() => {
     updates.length = 0;
+    wherePredicates.length = 0;
     vi.clearAllMocks();
     // Reafirma após clearAllMocks: por padrão a org tem o canal Shopee mapeado.
     fetchCanaisVenda.mockResolvedValue(new Map([['205976832', 'Shopee']]));
@@ -146,6 +149,22 @@ describe('enrichOrders', () => {
 
     expect(r.restantes).toBe(130);
     expect(r.incompleto).toBe(true);
+  });
+
+  it('conta apenas pendentes Bling identificados, sem marcar incompleto por Olist', async () => {
+    armarDb([{ id: 'bling-1', blingOrderId: '100' }], 0);
+    fetchOrderDetail.mockResolvedValue({ itens: [], frete: 0, comissao: 0, canalId: undefined });
+
+    const r = await enrichOrders('org-1', { maxPedidos: 1, prazoMs: 60_000 });
+
+    expect(r.incompleto).toBe(false);
+    const predicate = JSON.stringify(wherePredicates[1]);
+    expect(predicate).toContain('provider');
+    expect(predicate).toContain('bling');
+    expect(predicate).toContain('bling_order_id');
+    expect(predicate).toContain('is not null');
+    expect(predicate).toContain('enriquecido_em');
+    expect(predicate).toContain('is null');
   });
 
   it('canal desconhecido no detalhe nao rebaixa o canal ja gravado', async () => {

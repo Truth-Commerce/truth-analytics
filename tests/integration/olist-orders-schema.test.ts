@@ -1,5 +1,9 @@
+import { copyFile, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -20,14 +24,6 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
       .returning({ id: organizations.id });
     orgId = organization.id;
 
-    await db.insert(reports).values({
-      org_id: orgId,
-      periodo_inicio: new Date('2024-01-01'),
-      periodo_fim: new Date('2024-01-31'),
-      status: 'done',
-      source_provider: 'bling',
-      source_generation: 1,
-    });
   });
 
   afterAll(async () => {
@@ -52,13 +48,61 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
     await expect(db.insert(orders).values(value)).rejects.toMatchObject({ code: '23505' });
   });
 
-  it('preenche relatórios históricos como Bling', async () => {
-    const rows = await db
-      .select({ source: reports.source_provider })
-      .from(reports)
-      .where(eq(reports.org_id, orgId));
+  it('expõe a unique generation-aware além das uniques legadas', async () => {
+    const [index] = await sql.unsafe<{ indexdef: string }[]>(`
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND indexname = 'orders_org_provider_generation_order_uq'
+    `);
 
-    expect(rows.every((row) => row.source === 'bling')).toBe(true);
+    expect(index?.indexdef).toContain('UNIQUE INDEX orders_org_provider_generation_order_uq');
+    expect(index?.indexdef).toContain('(org_id, provider, source_generation, provider_order_id)');
+  });
+
+  it('preenche relatórios históricos como Bling ao aplicar a migration 0022', async () => {
+    const migrationRoot = resolve(process.cwd(), 'src/db/migrations');
+    const migrationDir = await mkdtemp(join(tmpdir(), 'ta-olist-0022-'));
+    const schema = `ta_olist_0022_${RUN}`;
+    const isolatedSql = postgres(url!, { prepare: false, max: 1 });
+    const isolatedDb = drizzle(isolatedSql);
+
+    try {
+      for (const file of await readdir(migrationRoot)) {
+        if (file.endsWith('.sql') && basename(file) < '0022_olist_orders_reports_expand.sql') {
+          await copyFile(join(migrationRoot, file), join(migrationDir, file));
+        }
+      }
+
+      await isolatedSql.unsafe(`CREATE SCHEMA "${schema}"`);
+      await isolatedSql.unsafe(`SET search_path TO "${schema}"`);
+      await migrate(isolatedDb, { migrationsFolder: migrationDir });
+
+      const [legacyOrg] = await isolatedDb
+        .insert(organizations)
+        .values({ name: `ta-legacy-report-${RUN}`, status: 'active' })
+        .returning({ id: organizations.id });
+      await isolatedDb.insert(reports).values({
+        org_id: legacyOrg.id,
+        periodo_inicio: new Date('2024-01-01'),
+        periodo_fim: new Date('2024-01-31'),
+        status: 'done',
+      });
+
+      await isolatedSql.unsafe(
+        await readFile(join(migrationRoot, '0022_olist_orders_reports_expand.sql'), 'utf8'),
+      );
+
+      const rows = await isolatedDb
+        .select({ source: reports.source_provider, generation: reports.source_generation })
+        .from(reports)
+        .where(eq(reports.org_id, legacyOrg.id));
+      expect(rows).toEqual([{ source: 'bling', generation: 1 }]);
+    } finally {
+      await isolatedSql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => undefined);
+      await isolatedSql.end();
+      await rm(migrationDir, { recursive: true, force: true });
+    }
   });
 
   it('mantém writers legados válidos durante rolling deploy', async () => {

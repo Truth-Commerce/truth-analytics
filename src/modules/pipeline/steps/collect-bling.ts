@@ -12,7 +12,7 @@ export type CollectResult = {
   total: number;
 };
 
-/** Upsert idempotente de UMA página de pedidos (org_id, bling_order_id). */
+/** Upsert idempotente de UMA página de pedidos pela chave provider-aware do Bling. */
 async function upsertOrdersPage(orgId: string, rawOrders: RawOrder[]): Promise<number> {
   const validOrders = rawOrders.filter((o) => o.blingOrderId.trim() !== '');
   if (validOrders.length === 0) return 0;

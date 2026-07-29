@@ -67,7 +67,14 @@ async function contarPendentes(orgId: string): Promise<number> {
   const [linha] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(orders)
-    .where(and(eq(orders.org_id, orgId), isNull(orders.enriquecido_em)));
+    .where(
+      and(
+        eq(orders.org_id, orgId),
+        eq(orders.provider, 'bling'),
+        isNotNull(orders.bling_order_id),
+        isNull(orders.enriquecido_em),
+      ),
+    );
   return linha?.n ?? 0;
 }
 
