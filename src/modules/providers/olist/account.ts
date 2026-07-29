@@ -63,7 +63,12 @@ export async function loadAndBindOlistAccount(orgId: string, pending?: PendingTo
     const row = locked[0] as { id?: string; oauth_client_id?: string; oauth_client_secret?: string; data_generation?: number } | undefined;
     if (!row?.id || !row.oauth_client_id || !row.oauth_client_secret || credentialVersion(row.oauth_client_id, row.oauth_client_secret) !== credentials.version || row.data_generation !== publication.dataGeneration) throw new Error('olist_conta_nao_validada');
     const now = new Date();
-    const tokenSet = pending ? sql`, access_token=${encryptConnectionSecret({ orgId, provider: 'olist', kind: 'access_token', value: pending.tokens.accessToken })}, refresh_token=${encryptConnectionSecret({ orgId, provider: 'olist', kind: 'refresh_token', value: pending.tokens.refreshToken })}, expira_em=${new Date(now.getTime() + pending.tokens.expiresInSeconds * 1000)}, refresh_expira_em=${new Date(now.getTime() + (pending.tokens.refreshExpiresInSeconds ?? 86_400) * 1000)}, last_refresh_at=${now}, last_error_code=NULL, last_error_at=NULL, status='ok'` : sql``;
+    // Raw SQL parameters do not inherit Drizzle column encoders. Serialize Date
+    // values explicitly so postgres-js receives canonical timestamptz strings.
+    const expiresAt = new Date(now.getTime() + (pending?.tokens.expiresInSeconds ?? 0) * 1000).toISOString();
+    const refreshExpiresAt = new Date(now.getTime() + (pending?.tokens.refreshExpiresInSeconds ?? 86_400) * 1000).toISOString();
+    const refreshedAt = now.toISOString();
+    const tokenSet = pending ? sql`, access_token=${encryptConnectionSecret({ orgId, provider: 'olist', kind: 'access_token', value: pending.tokens.accessToken })}, refresh_token=${encryptConnectionSecret({ orgId, provider: 'olist', kind: 'refresh_token', value: pending.tokens.refreshToken })}, expira_em=${expiresAt}::timestamptz, refresh_expira_em=${refreshExpiresAt}::timestamptz, last_refresh_at=${refreshedAt}::timestamptz, last_error_code=NULL, last_error_at=NULL, status='ok'` : sql``;
     ensureBindingActive(pending);
     await setBindingTimeouts(tx, pending);
     const applied = await tx.execute(sql`UPDATE connections SET provider_account_fingerprint=${fingerprint}, data_generation=data_generation+1, updated_at=clock_timestamp() ${tokenSet} WHERE id=${row.id} AND oauth_client_id=${row.oauth_client_id} AND oauth_client_secret=${row.oauth_client_secret} AND data_generation=${publication.dataGeneration} RETURNING data_generation`);

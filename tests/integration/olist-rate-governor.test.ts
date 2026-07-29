@@ -58,7 +58,7 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
               async execute(query: ReturnType<typeof sql>) {
                 const result = await transaction.execute(query);
                 queries += 1;
-                if (queries === 2) { // advisory lock, then the decision query
+                if (queries === 3) { // advisory lock, state initialization, then the decision query
                   reached(result);
                   await resume;
                 }

@@ -65,17 +65,25 @@ export function createOlistRateGovernor(client: TransactionalSqlClient = db) {
       await transaction.execute(sql`
         SELECT pg_advisory_xact_lock(hashtextextended('olist:' || ${accountFingerprint}, 0))
       `);
+      // Initialize the state in a separate command. PostgreSQL does not support
+      // reliably modifying the same row twice in one WITH statement (the former
+      // UPSERT followed by UPDATE made every real reservation look inactive).
+      await transaction.execute(sql`
+        INSERT INTO provider_rate_limit_state
+          (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
+        VALUES ('olist', ${accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0)
+        ON CONFLICT (provider, account_fingerprint) DO NOTHING
+      `);
       return rows(await transaction.execute(sql`
       WITH purged AS (
         DELETE FROM provider_rate_limit_waiters
         WHERE provider = 'olist' AND account_fingerprint = ${accountFingerprint}
           AND (expires_at <= clock_timestamp() OR cancelled_at IS NOT NULL)
       ), current_state AS (
-        INSERT INTO provider_rate_limit_state
-          (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
-        VALUES ('olist', ${accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0)
-        ON CONFLICT (provider, account_fingerprint) DO UPDATE SET updated_at = clock_timestamp()
-        RETURNING *
+        SELECT *
+        FROM provider_rate_limit_state
+        WHERE provider = 'olist' AND account_fingerprint = ${accountFingerprint}
+        FOR UPDATE
       ), normalized AS (
         SELECT s.*,
           CASE WHEN s.window_started_at <= clock_timestamp() - interval '60 seconds' THEN 0 ELSE s.requests_in_window END AS count_in_window,
