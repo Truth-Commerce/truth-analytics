@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ORG_ID = '00000000-0000-4000-8000-000000000001';
 const cookieStore = {
@@ -103,6 +103,8 @@ beforeEach(() => {
   vi.mocked(loadAndBindOlistAccount).mockResolvedValue({ fingerprint: 'a'.repeat(64), sourceGeneration: 2 });
 });
 
+afterEach(() => vi.useRealTimers());
+
 describe('GET /api/connections/olist', () => {
   it('redireciona sessão ausente para sign-in', async () => {
     vi.mocked(getSessionContext).mockResolvedValueOnce(null);
@@ -150,6 +152,38 @@ describe('GET /api/connections/olist', () => {
 });
 
 describe('GET /api/connections/olist/callback', () => {
+  it('interrompe as leituras preliminares quando excedem o budget do callback', async () => {
+    vi.useFakeTimers();
+    vi.mocked(assertConnectionOrgAccess).mockImplementationOnce(() => new Promise(() => undefined));
+
+    const pending = callback(
+      new Request('https://attacker.example/api/connections/olist/callback?code=code-a&state=state-a'),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    const response = await pending;
+    expect(response.headers.get('location')).toContain('olist_oauth_transiente');
+    expect(getProviderOAuthCredentials).not.toHaveBeenCalled();
+    expect(adapter.exchangeCode).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('limpa o timer do callback ao retornar antes do exchange', async () => {
+    vi.useFakeTimers();
+    vi.mocked(getProviderOAuthCredentials).mockResolvedValueOnce({
+      clientId: 'new-client',
+      clientSecret: 'new-secret',
+      version: 'version-b',
+    });
+
+    await callback(
+      new Request('https://attacker.example/api/connections/olist/callback?code=code-a&state=state-a'),
+    );
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('expira no path original antes de trocar o code e salva por compare-and-swap', async () => {
     let exchangeLifecycle: { signal: AbortSignal; deadlineAt: number } | undefined;
     adapter.exchangeCode.mockImplementationOnce(async () => {

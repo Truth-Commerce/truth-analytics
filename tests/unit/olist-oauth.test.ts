@@ -202,12 +202,11 @@ describe('Olist OAuth adapter', () => {
 
   it('inclui a leitura do corpo de exchange no timeout de cada tentativa', async () => {
     vi.useFakeTimers();
-    const response = {
-      ok: true,
+    const response = new Response('{}', {
       status: 200,
-      headers: new Headers(),
-      json: vi.fn(() => new Promise(() => undefined)),
-    } as unknown as Response;
+      headers: { 'content-type': 'application/json' },
+    });
+    vi.spyOn(response, 'json').mockImplementation(() => new Promise(() => undefined));
     const fetchMock = vi.fn().mockResolvedValue(response);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -224,6 +223,37 @@ describe('Olist OAuth adapter', () => {
     await vi.advanceTimersByTimeAsync(OLIST_TOKEN_REQUEST_TIMEOUT_MS);
     await assertion;
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('classifica AbortError durante a leitura do body como transitório', async () => {
+    const response = new Response('{');
+    vi.spyOn(response, 'json').mockRejectedValue(new DOMException('aborted', 'AbortError'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+
+    await expect(
+      olistOAuthProvider.exchangeCode({ credentials, code: 'code-1', codeVerifier: 'verifier-1' }),
+    ).rejects.toMatchObject({ code: 'olist_token_erro_transiente', kind: 'transient' });
+  });
+
+  it('remove o listener de abort após esperar Retry-After', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response('slow down', { status: 429, headers: { 'retry-after': '1' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        access_token: 'access', refresh_token: 'refresh', expires_in: 14_400,
+      }), { status: 200 })));
+
+    const pending = olistOAuthProvider.refresh({
+      credentials,
+      refreshToken: 'refresh-1',
+      signal: controller.signal,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ accessToken: 'access' });
+
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 
   it.each([400, 401])('classifica HTTP %s como permanente e não repete', async (status) => {

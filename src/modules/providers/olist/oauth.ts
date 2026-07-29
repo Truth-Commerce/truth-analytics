@@ -138,9 +138,14 @@ async function parseTokens(response: Response): Promise<OAuthTokens> {
       refreshExpiresInSeconds: parsed.refresh_expires_in ?? 86_400,
       ...(parsed.scope ? { scope: parsed.scope } : {}),
     };
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     throw new OAuthProviderError('olist_token_resposta_invalida', 'permanent');
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function retryDelayMs(response: Response): number {
@@ -152,7 +157,15 @@ function retryDelayMs(response: Response): number {
 function wait(ms: number, signal?: AbortSignal, deadlineAt?: number): Promise<void> {
   const delay = Math.min(ms, deadlineAt === undefined ? ms : Math.max(0, deadlineAt - Date.now()));
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, delay);
-    signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new OAuthProviderError('olist_token_erro_transiente', 'transient')); }, { once: true });
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      reject(new OAuthProviderError('olist_token_erro_transiente', 'transient'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, delay);
+    signal?.addEventListener('abort', abort, { once: true });
   });
 }
