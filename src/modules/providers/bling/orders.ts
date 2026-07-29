@@ -74,6 +74,13 @@ export function mapOrder(raw: BlingOrderPayload, canais: Map<string, string>): R
   return { providerOrderId: id, providerStatus: '', canal, data, valorTotal, frete, itens };
 }
 
+function updatedWindow(updatedAfter: Date, now = new Date()): { inicio: Date; fim: Date } {
+  return {
+    inicio: updatedAfter,
+    fim: now >= updatedAfter ? now : updatedAfter,
+  };
+}
+
 export async function fetchOrders(
   orgId: string,
   request: OrderPageRequest,
@@ -94,7 +101,9 @@ export async function fetchOrders(
       url.searchParams.set('dataInicial', formatDate(request.periodo.inicio));
       url.searchParams.set('dataFinal', formatDate(request.periodo.fim));
     } else {
-      url.searchParams.set('dataAlteracao', formatDate(request.updatedAfter));
+      const janela = updatedWindow(request.updatedAfter);
+      url.searchParams.set('dataAlteracaoInicial', formatDate(janela.inicio));
+      url.searchParams.set('dataAlteracaoFinal', formatDate(janela.fim));
     }
     url.searchParams.set('pagina', String(page));
     url.searchParams.set('limite', String(request.limit));
@@ -109,7 +118,16 @@ export async function fetchOrders(
     }
 
     const pageData = body.data ?? [];
-    if (pageData.length === 0) break;
+    if (pageData.length === 0) {
+      await onPage({
+        orders: [],
+        offset,
+        nextOffset: offset,
+        total: offset,
+        done: true,
+      });
+      break;
+    }
 
     const orders = pageData.map((raw) => mapOrder(raw, canais));
     const done = pageData.length < request.limit;
