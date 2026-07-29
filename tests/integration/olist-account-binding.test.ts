@@ -82,7 +82,7 @@ describe.skipIf(!url)('Olist account binding — PostgreSQL real', () => {
       tokens: { accessToken: 'rollback-access', refreshToken: 'rollback-refresh', expiresInSeconds: 3600 },
       signal: controller.signal,
     });
-    await waitForBlockedDelete(tdb, orgId);
+    await waitForBlockedDelete(tdb);
     controller.abort();
     release();
 
@@ -124,7 +124,7 @@ describe.skipIf(!url)('Olist account binding — PostgreSQL real', () => {
   });
 });
 
-async function waitForBlockedDelete(tdb: ReturnType<typeof drizzle>, orgId: string): Promise<void> {
+async function waitForBlockedDelete(tdb: ReturnType<typeof drizzle>): Promise<void> {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     const rows = await tdb.execute(

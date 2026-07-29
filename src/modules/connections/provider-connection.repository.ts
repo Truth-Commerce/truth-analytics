@@ -542,25 +542,6 @@ type CompleteVersionedProviderRow = VersionedProviderRow & {
   refreshToken: string;
 };
 
-async function getVersionedProviderRow(
-  orgId: string,
-  provider: ErpProviderId,
-): Promise<VersionedProviderRow | null> {
-  const [row] = await db
-    .select({
-      id: connections.id,
-      status: connections.status,
-      oauthClientId: connections.oauth_client_id,
-      oauthClientSecret: connections.oauth_client_secret,
-      accessToken: connections.access_token,
-      refreshToken: connections.refresh_token,
-    })
-    .from(connections)
-    .where(and(eq(connections.org_id, orgId), eq(connections.provider, provider)))
-    .limit(1);
-  return row ?? null;
-}
-
 function connectionVersion(row: Omit<VersionedProviderRow, 'id' | 'status'>): string {
   return createHash('sha256')
     .update(row.oauthClientId ?? '')
