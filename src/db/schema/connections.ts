@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  check,
   pgTable,
   text,
   timestamp,
@@ -43,6 +44,10 @@ export const connections = pgTable(
     org_erp_ok_uq: uniqueIndex('connections_org_erp_ok_uq')
       .on(t.org_id)
       .where(sql`${t.status} = 'ok'`),
+    status_check: check(
+      'connections_status_check',
+      sql`${t.status} IN ('ok', 'expirado', 'erro', 'configurado')`,
+    ),
   }),
 );
 

@@ -2,6 +2,7 @@ export type OAuthTokens = {
   accessToken: string;
   refreshToken: string;
   expiresInSeconds: number;
+  refreshExpiresInSeconds?: number;
   scope?: string;
 };
 

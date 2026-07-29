@@ -12,18 +12,23 @@ import { DisconnectBling } from './disconnect-bling';
 import { TrackedProducts } from './tracked-products';
 import { GeracaoAutomaticaToggle } from './geracao-automatica-toggle';
 import { feedbackDeCallback } from './callback-feedback';
+import { OlistConnectionCard } from '@/components/connections/olist-connection-card';
+import { olistFeedback } from '@/components/connections/olist-feedback';
+import { olistCallbackUri } from '@/modules/connections/olist-oauth-attempt';
+import { getProviderConnectionSummary } from '@/modules/connections/provider-connection.repository';
 
 export const metadata: Metadata = { title: 'Conexões' };
 
 export default async function ConexoesPage(props: {
-  searchParams?: Promise<{ ok?: string; erro?: string }>;
+  searchParams?: Promise<{ ok?: string; erro?: string; olist?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
-  const [conn, produtos, settings] = await Promise.all([
+  const [conn, produtos, settings, olistSummary] = await Promise.all([
     getConnection(access.orgId),
     listTrackedProducts(access.orgId),
     getOrgSettings(access.orgId),
+    getProviderConnectionSummary(access.orgId, 'olist'),
   ]);
 
   return (
@@ -40,6 +45,15 @@ export default async function ConexoesPage(props: {
         return feedback ? (
           <Alert variant={feedback.variante} title={feedback.titulo}>
             {feedback.mensagem}
+          </Alert>
+        ) : null;
+      })()}
+
+      {(() => {
+        const feedback = olistFeedback(searchParams);
+        return feedback ? (
+          <Alert variant={feedback.variant} title={feedback.title}>
+            {feedback.message}
           </Alert>
         ) : null;
       })()}
@@ -69,6 +83,13 @@ export default async function ConexoesPage(props: {
           )}
         </CardContent>
       </Card>
+
+      <OlistConnectionCard
+        orgId={access.orgId}
+        surface="client_connections"
+        summary={olistSummary}
+        redirectUri={olistCallbackUri()}
+      />
 
       {/* Produtos monitorados */}
       <Card id="produtos-monitorados">

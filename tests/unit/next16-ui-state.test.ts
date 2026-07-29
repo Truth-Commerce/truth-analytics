@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { mobileMenuKey } from '@/components/app-shell';
+import { resolveTabValue } from '@/components/ui/Tabs';
 import {
   shouldFinishCreateTemplate,
   shouldFinishUpdateTemplate,
@@ -21,5 +22,11 @@ describe('estado concorrente da UI no Next 16', () => {
   it('troca a identidade do menu móvel em cada rota', () => {
     expect(mobileMenuKey('/dashboard')).not.toBe(mobileMenuKey('/conexoes'));
     expect(mobileMenuKey('/dashboard')).toBe('/dashboard');
+  });
+
+  it('aceita aba navegada válida e ignora valor ausente', () => {
+    const ids = ['kanban', 'conexao'];
+    expect(resolveTabValue(ids, 'conexao', 'kanban')).toBe('conexao');
+    expect(resolveTabValue(ids, 'inexistente', 'kanban')).toBe('kanban');
   });
 });

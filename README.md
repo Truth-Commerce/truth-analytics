@@ -43,6 +43,7 @@ A interface atual utiliza tema claro editorial, verde como cor de marca, menu la
 ### Inteligência e dados
 
 - OAuth por cliente com a API v3 do Bling, atualização de tokens e sincronização de pedidos e estoque.
+- Fundação OAuth do Olist ERP (antigo Tiny), com credenciais isoladas por organização, autorização e renovação automática de tokens.
 - Benchmark público do Mercado Livre e enriquecimento opcional por SerpAPI.
 - Pipeline de métricas, análise estruturada por IA e geração de relatórios.
 - Histórico, comparação entre relatórios e exportação em PDF.
@@ -78,6 +79,7 @@ flowchart LR
     App["Truth Analytics<br/>Next.js"]
     DB[("PostgreSQL")]
     Bling["Bling API v3"]
+    Olist["Olist ERP<br/>(antigo Tiny)"]
     Market["Mercado Livre<br/>SerpAPI opcional"]
     AI["Anthropic"]
     Email["Resend"]
@@ -87,6 +89,7 @@ flowchart LR
     Admin --> App
     App <--> DB
     App <--> Bling
+    App <--> Olist
     App --> Market
     App --> AI
     App --> Email
@@ -102,7 +105,23 @@ As fronteiras mais importantes são:
 
 ### ERPs
 
-O banco e o registry de provedores já aceitam a evolução para múltiplos ERPs, preservando os identificadores e o fluxo legado do Bling. Nesta versão, **Bling é o único provedor operacional e conectável**; Olist (antigo Tiny) ainda não possui OAuth, sincronização nem interface disponíveis. Antes de ativar o writer de pedidos Olist, a próxima fase deve tornar `bling_order_id` nullable e revisar a constraint legada correspondente, para que um pedido exclusivamente Olist não dependa de um identificador Bling. Depois disso, os incrementos são OAuth e refresh do Olist, coleta de pedidos e detalhes, e estoque com controle de rate limit.
+O banco e os registries de provedores aceitam múltiplos ERPs sem alterar o fluxo legado. O **Bling continua sendo o único provedor operacional**: pedidos, estoque, relatórios e indicadores ainda são alimentados exclusivamente por ele. O **Olist ERP (antigo Tiny) já pode ser configurado e autorizado**, mas permanece fora do registry operacional e ainda não importa dados.
+
+#### Conectar o Olist ERP
+
+Cada organização usa seu próprio aplicativo OAuth do Olist. Isso mantém credenciais, consentimento e ciclo de tokens isolados por cliente.
+
+1. No portal do Olist, crie o aplicativo da organização e habilite apenas permissões de leitura.
+2. Cadastre exatamente a callback de produção: `https://truth-analytics.vercel.app/api/connections/olist/callback`.
+3. Como cliente, abra **Conexões → Olist ERP (antigo Tiny)**. Como analista responsável, abra o cliente e selecione a aba **Conexão**.
+4. Informe `Client ID` e `Client Secret`, salve e use **Autorizar no Olist**.
+5. Depois do consentimento, confirme o estado **Autorizado**. Isso valida a fundação OAuth; não ativa importação de pedidos ou estoque.
+
+O tempo real dos tokens é respeitado conforme a resposta do Olist; a duração nominal considerada na operação é de cerca de **4 horas para o access token** e **1 dia para o refresh token**. A rotina `renovar-conexoes` roda a cada duas horas, começa a renovar três horas antes do vencimento e processa até 50 organizações por execução. Atualizações concorrentes usam compare-and-swap, evitando que uma renovação atrasada sobrescreva credenciais ou tokens mais novos.
+
+Ao trocar credenciais, salve o novo par e autorize novamente: os tokens anteriores são descartados com segurança. **Desconectar** remove Client ID, Client Secret, access token e refresh token cifrados daquela organização. Falhas permanentes expiram a autorização e avisam cliente e analista responsável; falhas transitórias preservam o estado para nova tentativa.
+
+Antes de ativar a coleta Olist, a próxima fase deve tornar `bling_order_id` nullable e revisar a constraint legada correspondente, para que pedidos exclusivamente Olist não dependam de identificadores Bling. Em seguida vêm coleta de pedidos e detalhes, estoque, paginação, rate limit, idempotência e reconciliação por provedor.
 
 ```mermaid
 flowchart LR
@@ -125,7 +144,7 @@ flowchart LR
 | Banco | PostgreSQL, Drizzle ORM 0.45 e postgres-js |
 | Autenticação | Auth.js 5, Credentials Provider e bcrypt |
 | IA | Anthropic SDK, saída estruturada e validação com Zod |
-| Integrações | Bling API v3, Mercado Livre, SerpAPI e Resend |
+| Integrações | Bling API v3, OAuth do Olist ERP, Mercado Livre, SerpAPI e Resend |
 | Documentos | React PDF |
 | Testes | Vitest e Playwright |
 | Entrega | GitHub Actions e Vercel |
@@ -199,6 +218,7 @@ Recursos adicionais dependem de suas próprias credenciais:
 | Grupo | Variáveis principais |
 |---|---|
 | Bling | `BLING_CLIENT_ID`, `BLING_CLIENT_SECRET`, `BLING_REDIRECT_URI` |
+| Olist | Nenhuma credencial global: Client ID e Client Secret são cadastrados por organização; a callback deriva de `APP_URL` |
 | IA | `ANTHROPIC_API_KEY`, `ANALYSIS_MODEL` |
 | Mercado | `SERPAPI_KEY` — opcional; a fonte pública continua disponível sem ela |
 | E-mail | `RESEND_API_KEY`, `EMAIL_FROM`, `ADMIN_ALERT_EMAIL` |
@@ -272,7 +292,7 @@ O workflow [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) roda em pull
 
 O projeto está conectado à Vercel. Alterações integradas à `master` seguem para produção pela integração Git e devem ser acompanhadas no workflow e no deployment correspondente.
 
-As rotas para sincronização de pedidos e estoque, geração de relatórios, alertas, digest semanal e watchdog já existem e exigem autenticação por segredo. O agendamento deve ser configurado no ambiente de hospedagem; não há um cronograma versionado em `vercel.json` neste repositório.
+As rotas para sincronização de pedidos e estoque, renovação Olist, geração de relatórios, alertas, digest semanal e watchdog exigem `Authorization: Bearer <CRON_SECRET>`. O cronograma oficial está versionado em [`.github/workflows/crons.yml`](./.github/workflows/crons.yml); `renovar-conexoes` roda em `17 */2 * * *` (UTC) e registra heartbeat no painel de operações.
 
 ## Segurança e privacidade
 
@@ -281,7 +301,9 @@ Os controles implementados incluem:
 - senhas armazenadas com bcrypt e sessões geridas pelo Auth.js;
 - papéis `client`, `analista` e `admin_truth`, com autorização no servidor;
 - escopo por organização e validação explícita da carteira do analista;
-- tokens OAuth do Bling cifrados com AES-256-GCM e suporte a rotação de chaves;
+- credenciais e tokens OAuth cifrados com AES-256-GCM, contexto de organização/provedor/tipo e suporte a rotação de chaves;
+- OAuth Olist com state assinado de curta duração, cookie `HttpOnly`/`SameSite=Lax`, PKCE S256 e callback derivada exclusivamente de `APP_URL`;
+- compare-and-swap na autorização e na renovação Olist para impedir sobrescrita concorrente;
 - limitação de tentativas de login e fluxo de redefinição de senha;
 - auditoria de operações administrativas relevantes;
 - CSP, HSTS, proteção contra framing, `nosniff` e política de permissões;
@@ -303,6 +325,7 @@ Segurança é um processo contínuo. Mudanças em autenticação, autorização,
 - testes herméticos, proteção destrutiva do banco e PostgreSQL descartável na CI;
 - ações oficiais do GitHub e imagem de banco fixadas por versão/digest;
 - produção ativa na Vercel.
+- OAuth Olist por organização, disponível para cliente e analista responsável, com renovação automática e monitoramento operacional.
 
 ## Limitações conhecidas
 
@@ -311,7 +334,7 @@ Segurança é um processo contínuo. Mudanças em autenticação, autorização,
 - Permanecem avisos não bloqueantes de lint em pontos legados.
 - A ordem entre carregamento de metadata e autorização em algumas páginas dinâmicas de admin e analista precisa de endurecimento adicional.
 - Testes de integração que dependem do banco podem ser ignorados localmente quando `DATABASE_URL_TEST` não está configurada; a CI os executa com banco descartável.
-- As rotas operacionais estão prontas para agendamento, mas o cronograma da hospedagem não é mantido neste repositório.
+- A autorização Olist ainda não coleta pedidos, produtos ou estoque; até a próxima fase, todos os relatórios continuam usando dados do Bling.
 
 ## Caminho para R$ 300 mil brutos anuais
 

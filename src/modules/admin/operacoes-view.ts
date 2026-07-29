@@ -18,17 +18,23 @@ const MINUTO_MS = 60_000;
 const HORA_MS = 60 * MINUTO_MS;
 const DIA_MS = 24 * HORA_MS;
 
-export type TipoCadencia = 'diario' | 'semanal' | 'watchdog';
+export type TipoCadencia = 'bihorario' | 'diario' | 'semanal' | 'watchdog';
 
 /** Tolerância = cadência esperada + margem de segurança (nunca é a cadência crua). */
 const TOLERANCIA_DIARIA_MS = 26 * HORA_MS; // esperado 24h + 2h de margem
 const TOLERANCIA_SEMANAL_MS = 8 * DIA_MS; // esperado 7 dias + 1 dia de margem
 const TOLERANCIA_WATCHDOG_MS = 40 * MINUTO_MS; // esperado 30min + 10min de margem
+const TOLERANCIA_BIHORARIA_MS = 150 * MINUTO_MS; // esperado 2h + 30min de margem
 
 type CadenciaRota = { tipo: TipoCadencia; toleranciaMs: number; label: string };
 
 /** As 6 rotas que chamam `registrarHeartbeat` hoje (api/cron/*\/route.ts). */
 export const CADENCIA_POR_ROTA: Record<string, CadenciaRota> = {
+  'renovar-conexoes': {
+    tipo: 'bihorario',
+    toleranciaMs: TOLERANCIA_BIHORARIA_MS,
+    label: 'Renovar conexões Olist (a cada 2h)',
+  },
   'sincronizar-pedidos': {
     tipo: 'diario',
     toleranciaMs: TOLERANCIA_DIARIA_MS,

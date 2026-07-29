@@ -9,6 +9,7 @@ name: Crons
 on:
   schedule:
     - cron: "*/30 * * * *" # watchdog
+    - cron: "17 */2 * * *" # renovar-conexoes
     - cron: "0 7 * * *" # sincronizar-pedidos
     - cron: "30 7 * * *" # sincronizar-estoque
     - cron: "0 9 * * *" # gerar-relatorios
@@ -33,6 +34,7 @@ jobs:
         run: |
           case "${{ github.event.schedule }}" in
             "*/30 * * * *") rota=watchdog ;;
+            "17 */2 * * *") rota=renovar-conexoes ;;
             "0 7 * * *") rota=sincronizar-pedidos ;;
             "30 7 * * *") rota=sincronizar-estoque ;;
             "0 9 * * *") rota=gerar-relatorios ;;
