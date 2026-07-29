@@ -189,32 +189,56 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     expect(waiter.cancelled_at).not.toBeNull();
   });
 
-  it('purges an expired pending waiter before choosing the next live reservation', async () => {
-    const account = fingerprint('expiry');
+  it('uses a future database wake-up for healthy orders when the rate window is full', async () => {
+    const account = fingerprint('slo-healthy-window');
+    await createOrdersSyncFixture(account, { backlog: 0 });
     await sqlA`
-      INSERT INTO provider_rate_limit_waiters (provider, account_fingerprint, priority, expires_at)
-      VALUES ('olist', ${account}, 'stock', clock_timestamp() - interval '1 second')
+      INSERT INTO provider_rate_limit_state (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
+      VALUES ('olist', ${account}, clock_timestamp(), clock_timestamp(), 27, 0)
     `;
-    const reservation = await governorA.reserve({ accountFingerprint: account, priority: 'orders' });
+    const controller = new AbortController();
+    const barrier = afterDecisionBarrier(drizzle(sqlA));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const wakeAt = decisionWakeAt(await barrier.decided);
+    expect(wakeAt?.getTime()).toBeGreaterThan(Date.now());
+    controller.abort();
+    barrier.release();
+    await expect(pending).rejects.toThrow('olist_deadline_exceeded');
+  });
+
+  it('expires a publicly waiting reservation before it can be granted', async () => {
+    const account = fingerprint('expiry');
+    const barrier = afterInsertBarrier(drizzle(sqlA));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'orders' });
+    await barrier.inserted;
+    await sqlB`
+      UPDATE provider_rate_limit_waiters
+      SET expires_at = clock_timestamp() - interval '1 second'
+      WHERE provider = 'olist' AND account_fingerprint = ${account}
+    `;
+    barrier.release();
+    await expect(pending).rejects.toThrow('olist_deadline_exceeded');
     const [expired] = await sqlB`
       SELECT id FROM provider_rate_limit_waiters
       WHERE provider = 'olist' AND account_fingerprint = ${account} AND expires_at <= clock_timestamp()
     `;
-    expect(reservation.waiterId).toBeTruthy();
     expect(expired).toBeUndefined();
   });
 
   it('gives a pending stock waiter the sixth turn after five high-priority grants when orders SLO is healthy', async () => {
     const account = fingerprint('fair');
     await createOrdersSyncFixture(account, { backlog: 0 });
-    await sqlA`
-      INSERT INTO provider_rate_limit_state (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
-      VALUES ('olist', ${account}, clock_timestamp(), clock_timestamp(), 0, 5)
-    `;
-    const [stock, high] = await Promise.all([
-      governorA.reserve({ accountFingerprint: account, priority: 'stock' }),
-      governorB.reserve({ accountFingerprint: account, priority: 'details' }),
-    ]);
+    for (let grant = 0; grant < 5; grant += 1) {
+      await governorA.reserve({ accountFingerprint: account, priority: 'details' });
+    }
+    const stockBarrier = afterInsertBarrier(drizzle(sqlA));
+    const highBarrier = afterInsertBarrier(drizzle(sqlB));
+    const stockPending = createOlistRateGovernor(stockBarrier.client).reserve({ accountFingerprint: account, priority: 'stock' });
+    const highPending = createOlistRateGovernor(highBarrier.client).reserve({ accountFingerprint: account, priority: 'details' });
+    await Promise.all([stockBarrier.inserted, highBarrier.inserted]);
+    stockBarrier.release();
+    highBarrier.release();
+    const [stock, high] = await Promise.all([stockPending, highPending]);
     expect(stock.startAt.getTime()).toBeLessThan(high.startAt.getTime());
   });
 
