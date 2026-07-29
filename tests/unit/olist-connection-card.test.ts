@@ -22,6 +22,7 @@ describe('OlistConnectionCard', () => {
       }),
     );
     expect(html).toContain('Olist ERP (antigo Tiny)');
+    expect(html).toContain('data-testid="olist-connection-status"');
     expect(html).toContain(redirectUri);
     expect(html).toMatch(/somente leitura/i);
     expect(html).toMatch(/relatórios continuam usando Bling/i);

@@ -36,7 +36,7 @@ test('cliente e analista atribuído configuram credenciais sem vazar segredo', a
   await page.fill('input[name="clientId"]', 'e2e-client-id');
   await page.fill('input[name="clientSecret"]', 'e2e-secret-value');
   await page.getByRole('button', { name: 'Salvar credenciais' }).click();
-  await expect(page.getByText('Credenciais salvas')).toBeVisible();
+  await expect(page.getByTestId('olist-connection-status')).toHaveText('Credenciais salvas');
   await expect(page.getByRole('link', { name: 'Autorizar no Olist' })).toBeVisible();
   expect(await page.content()).not.toContain('e2e-secret-value');
 
@@ -50,11 +50,13 @@ test('cliente e analista atribuído configuram credenciais sem vazar segredo', a
   await page.fill('input[name="clientId"]', 'e2e-client-id-2');
   await page.fill('input[name="clientSecret"]', 'e2e-secret-value-2');
   await page.getByRole('button', { name: 'Salvar credenciais' }).click();
-  await expect(page.getByText('Credenciais salvas')).toBeVisible();
+  await expect(page.getByTestId('olist-connection-status')).toHaveText('Credenciais salvas');
 });
 
-test('analista fora da carteira recebe 404', async ({ page }) => {
+test('analista fora da carteira vê página 404 sem dados da conexão', async ({ page }) => {
   await login(page, unassignedEmail);
-  const response = await page.goto(`/analista/${orgId}?tab=conexao`);
-  expect(response?.status()).toBe(404);
+  await page.goto(`/analista/${orgId}?tab=conexao`);
+  await expect(page.getByRole('heading', { name: 'Página não encontrada (404)' })).toBeVisible();
+  await expect(page.getByTestId('olist-connection-card')).toHaveCount(0);
+  await expect(page.getByText(`${E2E_PREFIX}cliente-ativo`)).toHaveCount(0);
 });

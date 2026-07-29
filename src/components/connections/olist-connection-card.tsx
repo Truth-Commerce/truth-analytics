@@ -48,7 +48,7 @@ export function OlistConnectionCard(props: {
           <CardTitle as="h2" className="text-base">
             Olist ERP (antigo Tiny)
           </CardTitle>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs text-muted" data-testid="olist-connection-status">
             {reconnectRequired
               ? 'Reconexão necessária'
               : authorized
