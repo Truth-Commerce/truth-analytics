@@ -4,13 +4,14 @@ vi.mock('@/modules/connections/connection.repository', () => ({
   getValidAccessToken: vi.fn().mockResolvedValue('token-teste'),
 }));
 
-import { fetchOrders } from '@/modules/providers/bling/orders';
+import { fetchOrders, mapOrder } from '@/modules/providers/bling/orders';
 
 function paginaVazia(): Response {
   return new Response(JSON.stringify({ data: [] }), { status: 200 });
 }
 
 const PERIODO = { inicio: new Date('2026-06-01'), fim: new Date('2026-07-01') };
+const CREATED_REQUEST = { mode: 'created' as const, periodo: PERIODO, offset: 0, limit: 100 as const };
 
 /**
  * fetchOrders resolve o nome do canal antes de paginar (1 requisição a
@@ -49,9 +50,9 @@ describe('fetchOrders retry/backoff', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const promise = fetchOrders('org-1', PERIODO);
+    const promise = fetchOrders('org-1', CREATED_REQUEST, async () => {});
     await vi.advanceTimersByTimeAsync(1000);
-    await expect(promise).resolves.toEqual([]);
+    await expect(promise).resolves.toBeUndefined();
     expect(chamadasDePedidos(fetchMock)).toBe(2);
   });
 
@@ -62,7 +63,7 @@ describe('fetchOrders retry/backoff', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const promise = fetchOrders('org-1', PERIODO);
+    const promise = fetchOrders('org-1', CREATED_REQUEST, async () => {});
 
     // Se o header fosse ignorado, o fallback exponencial (1s) já teria refeito o fetch aos 2s.
     await vi.advanceTimersByTimeAsync(2000);
@@ -70,7 +71,7 @@ describe('fetchOrders retry/backoff', () => {
 
     // Honrando Retry-After: só refaz aos 5s.
     await vi.advanceTimersByTimeAsync(3000);
-    await expect(promise).resolves.toEqual([]);
+    await expect(promise).resolves.toBeUndefined();
     expect(chamadasDePedidos(fetchMock)).toBe(2);
   });
 
@@ -78,9 +79,9 @@ describe('fetchOrders retry/backoff', () => {
     const fetchMock = mockDePedidos(new Response(null, { status: 503 }), paginaVazia());
     vi.stubGlobal('fetch', fetchMock);
 
-    const promise = fetchOrders('org-1', PERIODO);
+    const promise = fetchOrders('org-1', CREATED_REQUEST, async () => {});
     await vi.advanceTimersByTimeAsync(1000); // fallback exponencial da 1ª tentativa
-    await expect(promise).resolves.toEqual([]);
+    await expect(promise).resolves.toBeUndefined();
     expect(chamadasDePedidos(fetchMock)).toBe(2);
   });
 
@@ -88,7 +89,7 @@ describe('fetchOrders retry/backoff', () => {
     const fetchMock = mockDePedidos(new Response(null, { status: 429 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const promise = fetchOrders('org-1', PERIODO);
+    const promise = fetchOrders('org-1', CREATED_REQUEST, async () => {});
     const esperado = expect(promise).rejects.toThrow('bling_erro_429');
     await vi.advanceTimersByTimeAsync(1000 + 2000); // backoff 1s + 2s
     await esperado;
@@ -98,11 +99,11 @@ describe('fetchOrders retry/backoff', () => {
   it('4xx ≠ 429 falha direto sem retry', async () => {
     const fetchMock = mockDePedidos(new Response(null, { status: 403 }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(fetchOrders('org-1', PERIODO)).rejects.toThrow('bling_indisponivel');
+    await expect(fetchOrders('org-1', CREATED_REQUEST, async () => {})).rejects.toThrow('bling_indisponivel');
     expect(chamadasDePedidos(fetchMock)).toBe(1);
   });
 
-  it('onPage recebe cada página e o retorno não acumula', async () => {
+  it('onPage recebe páginas com offsets provider-neutral', async () => {
     const pedido = { id: 1, data: '2026-06-10', total: 100 };
     const cheia = Array.from({ length: 100 }, (_, i) => ({ ...pedido, id: i + 1 }));
     const fetchMock = mockDePedidos(
@@ -111,11 +112,26 @@ describe('fetchOrders retry/backoff', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const paginas: number[] = [];
-    const retorno = await fetchOrders('org-1', PERIODO, async (pagina) => {
-      paginas.push(pagina.length);
+    const paginas: Array<{ offset: number; nextOffset: number; total: number; done: boolean; count: number }> = [];
+    await fetchOrders('org-1', CREATED_REQUEST, async (pagina) => {
+      paginas.push({
+        offset: pagina.offset,
+        nextOffset: pagina.nextOffset,
+        total: pagina.total,
+        done: pagina.done,
+        count: pagina.orders.length,
+      });
     });
-    expect(paginas).toEqual([100, 1]);
-    expect(retorno).toEqual([]);
+    expect(paginas).toEqual([
+      { offset: 0, nextOffset: 100, total: 100, done: false, count: 100 },
+      { offset: 100, nextOffset: 200, total: 101, done: true, count: 1 },
+    ]);
+  });
+
+  it('normaliza o pedido para a identidade provider-neutral', () => {
+    expect(mapOrder({ id: 17, data: '2026-07-29', total: 50 }, new Map())).toMatchObject({
+      providerOrderId: '17',
+      providerStatus: '',
+    });
   });
 });

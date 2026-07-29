@@ -1,6 +1,7 @@
 import { serverEnv } from '@/lib/env';
+import { fetchCanaisVenda } from '@/modules/providers/bling/canais';
 import { fetchBling } from '@/modules/providers/bling/http';
-import type { RawOrderItem } from '@/modules/providers/types';
+import type { RawOrderDetail, RawOrderItem } from '@/modules/providers/data.types';
 
 type BlingItemPayload = {
   codigo?: string | null;
@@ -20,14 +21,8 @@ type BlingDetalheResponse = {
   data?: BlingDetalhePayload | null;
 };
 
-export type OrderDetail = {
-  itens: RawOrderItem[];
-  frete: number;
-  /** taxas.taxaComissao — o que o marketplace retém. Chega em reais, não em %. */
-  comissao: number;
-  /** loja.id, para resolver o canal quando a listagem não foi a origem da linha. */
-  canalId?: string;
-};
+/** @deprecated Consumers must use the provider-neutral overload with orgId. */
+export type LegacyOrderDetail = Omit<RawOrderDetail, 'canal'> & { canalId?: string };
 
 /** Número tolerante a string/null do Bling; nunca devolve NaN. */
 function num(v: number | string | null | undefined): number {
@@ -54,11 +49,22 @@ function mapItem(item: BlingItemPayload): RawOrderItem {
  *
  * Erros propagam (o chamador decide) — `fetchBling` já faz backoff de 429/5xx.
  */
-export async function fetchOrderDetail(
-  blingOrderId: string,
+export function fetchOrderDetail(blingOrderId: string, token: string): Promise<LegacyOrderDetail>;
+export function fetchOrderDetail(
+  orgId: string,
+  providerOrderId: string,
   token: string,
-): Promise<OrderDetail> {
-  const url = `${serverEnv.BLING_API_BASE}/pedidos/vendas/${encodeURIComponent(blingOrderId)}`;
+): Promise<RawOrderDetail>;
+export async function fetchOrderDetail(
+  orgIdOrProviderOrderId: string,
+  providerOrderIdOrToken: string,
+  maybeToken?: string,
+): Promise<RawOrderDetail | LegacyOrderDetail> {
+  const hasOrgId = maybeToken !== undefined;
+  const orgId = hasOrgId ? orgIdOrProviderOrderId : undefined;
+  const providerOrderId = hasOrgId ? providerOrderIdOrToken : orgIdOrProviderOrderId;
+  const token = hasOrgId ? maybeToken : providerOrderIdOrToken;
+  const url = `${serverEnv.BLING_API_BASE}/pedidos/vendas/${encodeURIComponent(providerOrderId)}`;
   const res = await fetchBling(url, token);
 
   let body: BlingDetalheResponse;
@@ -71,11 +77,22 @@ export async function fetchOrderDetail(
   const d = body.data;
   if (!d) throw new Error('bling_detalhe_vazio');
 
-  const canalId = d.loja?.id;
+  const lojaId = d.loja?.id;
+  const canalId = lojaId === null || lojaId === undefined ? undefined : String(lojaId);
+  if (!hasOrgId) {
+    return {
+      itens: (d.itens ?? []).map(mapItem),
+      frete: num(d.transporte?.frete),
+      comissao: num(d.taxas?.taxaComissao),
+      canalId,
+    };
+  }
+
+  const canais = canalId ? await fetchCanaisVenda(orgId!, token) : undefined;
   return {
     itens: (d.itens ?? []).map(mapItem),
     frete: num(d.transporte?.frete),
     comissao: num(d.taxas?.taxaComissao),
-    canalId: canalId === null || canalId === undefined ? undefined : String(canalId),
+    canal: canalId ? canais?.get(canalId) : undefined,
   };
 }

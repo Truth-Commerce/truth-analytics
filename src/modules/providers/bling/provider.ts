@@ -1,13 +1,37 @@
+import { getValidAccessToken } from '@/modules/connections/connection.repository';
+import { fetchOrderDetail } from '@/modules/providers/bling/order-detail';
+import { fetchOrders as fetchDataOrders } from '@/modules/providers/bling/orders';
 import { buildAuthorizeUrl, exchangeCode, refreshTokens } from '@/modules/providers/bling/oauth';
-import { fetchOrders } from '@/modules/providers/bling/orders';
 import { fetchStock } from '@/modules/providers/bling/stock';
+import type { ErpDataProvider } from '@/modules/providers/data.types';
 import type { ConnectionProvider } from '@/modules/providers/types';
 
+export const blingDataProvider: ErpDataProvider = {
+  name: 'bling',
+  fetchOrders: fetchDataOrders,
+  async fetchOrderDetail(orgId, providerOrderId) {
+    const token = await getValidAccessToken(orgId);
+    return fetchOrderDetail(orgId, providerOrderId, token);
+  },
+};
+
+/** @deprecated New code must obtain operational data through blingDataProvider. */
 export const blingProvider: ConnectionProvider = {
   name: 'bling',
   buildAuthorizeUrl,
   exchangeCode,
   refresh: refreshTokens,
-  fetchOrders,
+  async fetchOrders(orgId, periodo, onPage) {
+    const orders = [] as Awaited<ReturnType<ConnectionProvider['fetchOrders']>>;
+    await fetchDataOrders(orgId, { mode: 'created', periodo, offset: 0, limit: 100 }, async (page) => {
+      const legacyPage = page.orders.map(({ providerOrderId, ...order }) => ({
+        ...order,
+        blingOrderId: providerOrderId,
+      }));
+      if (onPage) await onPage(legacyPage);
+      else orders.push(...legacyPage);
+    });
+    return orders;
+  },
   fetchStock,
 };
