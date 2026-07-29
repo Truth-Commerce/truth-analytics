@@ -14,7 +14,6 @@ import {
 } from '@/modules/connections/olist-oauth-attempt';
 import {
   getProviderOAuthCredentials,
-  saveProviderTokens,
 } from '@/modules/connections/provider-connection.repository';
 import { getOAuthProvider } from '@/modules/providers/oauth-registry';
 import { OAuthProviderError } from '@/modules/providers/oauth.types';
@@ -65,14 +64,12 @@ export async function GET(request: Request) {
       code,
       codeVerifier: attempt.codeVerifier,
     });
-    const saved = await saveProviderTokens({
-      orgId: attempt.orgId,
-      provider: 'olist',
+    // Do not publish an operational Olist connection until its stable account binding
+    // and the exchanged token set win the same credential CAS.
+    await loadAndBindOlistAccount(attempt.orgId, {
       credentialVersion: attempt.credentialVersion,
       tokens,
     });
-    if (!saved) return localRedirect(returnPath, 'olist_credenciais_alteradas');
-    await loadAndBindOlistAccount(attempt.orgId);
     return localRedirect(returnPath, undefined, 'conectado');
   } catch (error) {
     const safeCode = callbackErrorCode(error);

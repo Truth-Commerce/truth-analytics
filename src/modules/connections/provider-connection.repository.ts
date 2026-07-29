@@ -263,6 +263,16 @@ export async function getValidAccessTokenForProvider(
   });
 }
 
+/** The account fingerprint is a required binding, never caller supplied request state. */
+export async function getOlistAccountFingerprint(orgId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ fingerprint: connections.provider_account_fingerprint })
+    .from(connections)
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'olist')))
+    .limit(1);
+  return row?.fingerprint ?? null;
+}
+
 export async function getProviderRefreshContext(
   orgId: string,
   provider: ErpProviderId,
@@ -347,7 +357,7 @@ export async function saveRefreshedProviderTokens(input: {
       last_refresh_at: now,
       last_error_code: null,
       last_error_at: null,
-      status: 'configurado',
+      status: current.status,
     })
     .where(versionWhere(current, input.context.orgId, input.context.provider))
     .returning({ id: connections.id });

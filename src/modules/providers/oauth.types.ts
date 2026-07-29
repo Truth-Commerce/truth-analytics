@@ -33,5 +33,7 @@ export interface OAuthConnectionProvider {
   refresh(input: {
     credentials: OAuthClientCredentials;
     refreshToken: string;
+    signal?: AbortSignal;
+    deadlineAt?: number;
   }): Promise<OAuthTokens>;
 }

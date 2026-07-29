@@ -55,6 +55,8 @@ export async function exchangeCode(input: {
 export async function refresh(input: {
   credentials: OAuthClientCredentials;
   refreshToken: string;
+  signal?: AbortSignal;
+  deadlineAt?: number;
 }): Promise<OAuthTokens> {
   return requestTokens(
     new URLSearchParams({
@@ -62,19 +64,20 @@ export async function refresh(input: {
       client_id: input.credentials.clientId,
       client_secret: input.credentials.clientSecret,
       refresh_token: input.refreshToken,
-    }),
+    }), input.signal, input.deadlineAt,
   );
 }
 
-async function requestTokens(body: URLSearchParams): Promise<OAuthTokens> {
+async function requestTokens(body: URLSearchParams, signal?: AbortSignal, deadlineAt?: number): Promise<OAuthTokens> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (signal?.aborted || (deadlineAt !== undefined && deadlineAt <= Date.now())) throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
     let response: Response;
     try {
       response = await fetchWithTimeout(TOKEN_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
-      });
+      }, signal, deadlineAt);
     } catch {
       if (attempt === 0) continue;
       throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
@@ -86,7 +89,7 @@ async function requestTokens(body: URLSearchParams): Promise<OAuthTokens> {
     }
     if (response.status === 429 || response.status >= 500) {
       if (attempt === 0) {
-        await wait(retryDelayMs(response));
+        await wait(retryDelayMs(response), signal, deadlineAt);
         continue;
       }
       throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
@@ -96,11 +99,12 @@ async function requestTokens(body: URLSearchParams): Promise<OAuthTokens> {
   throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(url: string, init: RequestInit, signal?: AbortSignal, deadlineAt?: number): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), OLIST_TOKEN_REQUEST_TIMEOUT_MS);
+  const remaining = deadlineAt === undefined ? OLIST_TOKEN_REQUEST_TIMEOUT_MS : Math.max(0, deadlineAt - Date.now());
+  const timeout = setTimeout(() => controller.abort(), Math.min(OLIST_TOKEN_REQUEST_TIMEOUT_MS, remaining));
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { ...init, signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -127,6 +131,10 @@ function retryDelayMs(response: Response): number {
   return Math.min(seconds, MAX_RETRY_AFTER_SECONDS) * 1000;
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function wait(ms: number, signal?: AbortSignal, deadlineAt?: number): Promise<void> {
+  const delay = Math.min(ms, deadlineAt === undefined ? ms : Math.max(0, deadlineAt - Date.now()));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, delay);
+    signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new OAuthProviderError('olist_token_erro_transiente', 'transient')); }, { once: true });
+  });
 }

@@ -25,7 +25,6 @@ vi.mock('@/modules/auth/session', () => ({ getSessionContext: vi.fn() }));
 vi.mock('@/modules/connections/connection-access', () => ({ assertConnectionOrgAccess: vi.fn() }));
 vi.mock('@/modules/connections/provider-connection.repository', () => ({
   getProviderOAuthCredentials: vi.fn(),
-  saveProviderTokens: vi.fn(),
 }));
 vi.mock('@/modules/connections/olist-oauth-attempt', () => ({
   OLIST_OAUTH_COOKIE: 'olist_oauth_attempt',
@@ -50,7 +49,6 @@ import { getSessionContext } from '@/modules/auth/session';
 import { assertConnectionOrgAccess } from '@/modules/connections/connection-access';
 import {
   getProviderOAuthCredentials,
-  saveProviderTokens,
 } from '@/modules/connections/provider-connection.repository';
 import {
   createOlistOAuthAttempt,
@@ -99,7 +97,6 @@ beforeEach(() => {
     refreshToken: 'refresh',
     expiresInSeconds: 14_400,
   });
-  vi.mocked(saveProviderTokens).mockResolvedValue(true);
   vi.mocked(loadAndBindOlistAccount).mockResolvedValue({ fingerprint: 'a'.repeat(64), sourceGeneration: 2 });
 });
 
@@ -181,12 +178,10 @@ describe('GET /api/connections/olist/callback', () => {
       code: 'code-a',
       codeVerifier: 'verifier-a',
     });
-    expect(saveProviderTokens).toHaveBeenCalledWith(expect.objectContaining({
-      orgId: ORG_ID,
-      provider: 'olist',
+    expect(loadAndBindOlistAccount).toHaveBeenCalledWith(ORG_ID, expect.objectContaining({
       credentialVersion: 'version-a',
+      tokens: expect.objectContaining({ accessToken: 'access', refreshToken: 'refresh' }),
     }));
-    expect(loadAndBindOlistAccount).toHaveBeenCalledWith(ORG_ID);
     expect(response.headers.get('location')).toContain('/conexoes?olist=conectado');
   });
 
@@ -213,7 +208,7 @@ describe('GET /api/connections/olist/callback', () => {
       ),
     );
     expect(adapter.exchangeCode).not.toHaveBeenCalled();
-    expect(saveProviderTokens).not.toHaveBeenCalled();
+    expect(loadAndBindOlistAccount).not.toHaveBeenCalled();
   });
 
   it('não troca code quando versão de credenciais mudou', async () => {
@@ -228,7 +223,7 @@ describe('GET /api/connections/olist/callback', () => {
       ),
     );
     expect(adapter.exchangeCode).not.toHaveBeenCalled();
-    expect(saveProviderTokens).not.toHaveBeenCalled();
+    expect(loadAndBindOlistAccount).not.toHaveBeenCalled();
   });
 
   it('mapeia access_denied sem chamar exchange', async () => {
