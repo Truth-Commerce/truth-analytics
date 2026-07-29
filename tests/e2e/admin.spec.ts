@@ -9,6 +9,7 @@ const clienteEmail = `${E2E_PREFIX}cli-${RUN}@example.com`;
 const clienteSenha = 'cliente-forte-123';
 const clienteAdminEmail = `${E2E_PREFIX}cli-admin-${RUN}@example.com`;
 const analistaAdminEmail = `${E2E_PREFIX}analista-admin-${RUN}@example.com`;
+const promovidoEmail = `${E2E_PREFIX}promovido-${RUN}@example.com`;
 
 test.beforeAll(async () => {
   await seedE2EAdmin(adminEmail, adminSenha);
@@ -59,7 +60,8 @@ test('admin cria cliente com organização e analista interno em fluxos separado
   await page.click('button[type="submit"]');
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
 
-  await page.goto('/admin/usuarios');
+  // Aba de clientes: criação da empresa + primeiro acesso.
+  await page.goto('/admin/usuarios?aba=clientes');
 
   const clientForm = page.getByTestId('usuarios-criar-cliente-form');
   await expect(clientForm.locator('select')).toHaveCount(0);
@@ -67,12 +69,47 @@ test('admin cria cliente com organização e analista interno em fluxos separado
   await clientForm.locator('input[name="email"]').fill(clienteAdminEmail);
   await clientForm.getByRole('button', { name: 'Criar cliente' }).click();
   await expect(page.getByTestId('usuarios-criar-cliente-sucesso')).toBeVisible();
-  await expect(page.getByText(clienteAdminEmail, { exact: true }).first()).toBeVisible();
+  await expect(page.getByTestId('clientes-table').getByText(clienteAdminEmail)).toBeVisible();
+
+  // Aba da equipe: criação do analista interno.
+  await page.goto('/admin/usuarios?aba=equipe');
 
   const analystForm = page.getByTestId('usuarios-criar-analista-form');
   await expect(analystForm.locator('select')).toHaveCount(0);
   await analystForm.locator('input[name="email"]').fill(analistaAdminEmail);
   await analystForm.getByRole('button', { name: 'Criar analista' }).click();
   await expect(page.getByTestId('usuarios-criar-analista-sucesso')).toBeVisible();
-  await expect(page.getByText(analistaAdminEmail, { exact: true }).first()).toBeVisible();
+  await expect(page.getByTestId('equipe-table').getByText(analistaAdminEmail)).toBeVisible();
+
+  // Cada aba mostra só o seu: o analista não aparece entre os clientes.
+  await page.goto('/admin/usuarios?aba=clientes');
+  await expect(page.getByTestId('clientes-table').getByText(analistaAdminEmail)).toHaveCount(0);
+});
+
+test('admin promove uma conta de cliente a analista e ela muda de aba', async ({ page }) => {
+  await page.goto('/sign-in');
+  await page.fill('input[name="email"]', adminEmail);
+  await page.fill('input[name="senha"]', adminSenha);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'));
+
+  await page.goto('/admin/usuarios?aba=clientes');
+  const clientForm = page.getByTestId('usuarios-criar-cliente-form');
+  await clientForm.locator('input[name="orgName"]').fill(`${E2E_PREFIX}Promovido ${RUN}`);
+  await clientForm.locator('input[name="email"]').fill(promovidoEmail);
+  await clientForm.getByRole('button', { name: 'Criar cliente' }).click();
+  await expect(page.getByTestId('usuarios-criar-cliente-sucesso')).toBeVisible();
+
+  const linha = page.getByTestId('clientes-table').locator('tr', { hasText: promovidoEmail });
+  await linha.locator('select[name="role"]').selectOption('analista');
+  await linha.getByRole('button', { name: 'Salvar' }).click();
+
+  // Sai da aba de clientes e entra na da equipe, já na operação interna.
+  await page.goto('/admin/usuarios?aba=clientes');
+  await expect(page.getByTestId('clientes-table').getByText(promovidoEmail)).toHaveCount(0);
+
+  await page.goto('/admin/usuarios?aba=equipe');
+  const linhaEquipe = page.getByTestId('equipe-table').locator('tr', { hasText: promovidoEmail });
+  await expect(linhaEquipe).toBeVisible();
+  await expect(linhaEquipe.getByText('Fora da operação interna')).toHaveCount(0);
 });
