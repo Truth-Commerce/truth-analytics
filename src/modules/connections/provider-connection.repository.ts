@@ -5,6 +5,7 @@ import {
   eq,
   isNotNull,
   lte,
+  sql,
 } from 'drizzle-orm';
 
 import { db } from '@/db/client';
