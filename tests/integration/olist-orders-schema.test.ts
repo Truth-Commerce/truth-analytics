@@ -8,6 +8,7 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { orders, organizations, reports } from '@/db/schema';
+import { hasPostgresErrorCode } from '@/db/postgres-error';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -45,7 +46,12 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
     };
 
     await db.insert(orders).values(value);
-    await expect(db.insert(orders).values(value)).rejects.toMatchObject({ code: '23505' });
+    const duplicateError = await db
+      .insert(orders)
+      .values(value)
+      .then(() => undefined)
+      .catch((error: unknown) => error);
+    expect(hasPostgresErrorCode(duplicateError, '23505')).toBe(true);
   });
 
   it('expõe a unique generation-aware além das uniques legadas', async () => {
@@ -94,12 +100,11 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
         .insert(organizations)
         .values({ name: `ta-legacy-report-${RUN}`, status: 'active' })
         .returning({ id: organizations.id });
-      await isolatedDb.insert(reports).values({
-        org_id: legacyOrg.id,
-        periodo_inicio: new Date('2024-01-01'),
-        periodo_fim: new Date('2024-01-31'),
-        status: 'done',
-      });
+      await isolatedSql.unsafe(
+        `INSERT INTO "reports" ("org_id", "periodo_inicio", "periodo_fim", "status")
+         VALUES ($1, $2, $3, $4)`,
+        [legacyOrg.id, new Date('2024-01-01'), new Date('2024-01-31'), 'done'],
+      );
 
       await isolatedSql.unsafe(
         await readFile(join(migrationRoot, '0022_olist_orders_reports_expand.sql'), 'utf8'),

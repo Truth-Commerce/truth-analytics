@@ -175,7 +175,8 @@ describe.skipIf(!url)('collect-bling — integração', () => {
 
   it('grava Bling pela chave provider-aware sem apagar detalhe', async () => {
     const provider = await import('@/modules/providers/bling/provider');
-    mockFetchOrdersOnce(provider, [MOCK_ORDERS[0]]);
+    const ORDER_WITH_RESOLVED_CHANNEL = { ...MOCK_ORDERS[0], canal: 'Loja Virtual Atualizada' };
+    mockFetchOrdersOnce(provider, [ORDER_WITH_RESOLVED_CHANNEL]);
 
     const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
     await collectBlingOrders(orgId, PERIODO);
@@ -185,9 +186,11 @@ describe.skipIf(!url)('collect-bling — integração', () => {
         itens: [{ sku: 'SKU-1', nome: 'Item', quantidade: 1, valor: 10 }],
         enriquecido_em: new Date(),
       })
-      .where(and(eq(orders.org_id, orgId), eq(orders.provider_order_id, MOCK_ORDERS[0].blingOrderId)));
+      .where(
+        and(eq(orders.org_id, orgId), eq(orders.provider_order_id, ORDER_WITH_RESOLVED_CHANNEL.blingOrderId)),
+      );
 
-    mockFetchOrdersOnce(provider, [MOCK_ORDERS[0]]);
+    mockFetchOrdersOnce(provider, [ORDER_WITH_RESOLVED_CHANNEL]);
     await collectBlingOrders(orgId, PERIODO);
 
     const [row] = await tdb
@@ -197,11 +200,11 @@ describe.skipIf(!url)('collect-bling — integração', () => {
         and(
           eq(orders.org_id, orgId),
           eq(orders.provider, 'bling'),
-          eq(orders.provider_order_id, MOCK_ORDERS[0].blingOrderId),
+          eq(orders.provider_order_id, ORDER_WITH_RESOLVED_CHANNEL.blingOrderId),
         ),
       );
 
-    expect(row.bling_order_id).toBe(MOCK_ORDERS[0].blingOrderId);
+    expect(row.bling_order_id).toBe(ORDER_WITH_RESOLVED_CHANNEL.blingOrderId);
     expect(row.itens).toHaveLength(1);
   });
 
