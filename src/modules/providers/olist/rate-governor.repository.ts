@@ -11,23 +11,32 @@ export function createOlistRateGovernor(client: SqlExecutor = db) {
   return {
     async reserve(input: { accountFingerprint: string; priority: OlistRequestPriority; signal?: AbortSignal }): Promise<OlistReservation> {
       if (input.signal?.aborted) throw new Error('olist_deadline_exceeded');
-      const result = await client.execute(sql`
-        INSERT INTO provider_rate_limit_state (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
-        VALUES ('olist', ${input.accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0)
-        ON CONFLICT (provider, account_fingerprint) DO NOTHING
-        RETURNING next_request_at AS start_at
-      `) as { rows?: unknown[] } | unknown[];
-      if (input.signal?.aborted) throw new Error('olist_deadline_exceeded');
-      const first = (Array.isArray(result) ? result : result.rows ?? [])[0] as { start_at?: Date } | undefined;
-      if (first?.start_at) return { startAt: new Date(first.start_at) };
       const slot = await client.execute(sql`
-        UPDATE provider_rate_limit_state
-        SET next_request_at = GREATEST(COALESCE(next_request_at, clock_timestamp()), clock_timestamp()) + interval '2223 milliseconds',
-            requests_in_window = requests_in_window + 1,
-            consecutive_high_priority = CASE WHEN ${input.priority} = 'stock' THEN 0 ELSE consecutive_high_priority + 1 END,
-            updated_at = clock_timestamp()
-        WHERE provider = 'olist' AND account_fingerprint = ${input.accountFingerprint}
-        RETURNING next_request_at - interval '2223 milliseconds' AS start_at
+        WITH state AS (
+          INSERT INTO provider_rate_limit_state (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
+          VALUES ('olist', ${input.accountFingerprint}, clock_timestamp(), clock_timestamp(), 0, 0)
+          ON CONFLICT (provider, account_fingerprint) DO UPDATE SET updated_at = clock_timestamp()
+          RETURNING *
+        ), expired AS (
+          DELETE FROM provider_rate_limit_waiters WHERE provider='olist' AND account_fingerprint=${input.accountFingerprint} AND expires_at <= clock_timestamp()
+        ), mine AS (
+          INSERT INTO provider_rate_limit_waiters (provider, account_fingerprint, priority, expires_at)
+          VALUES ('olist', ${input.accountFingerprint}, ${input.priority}, clock_timestamp() + interval '60 seconds') RETURNING id
+        ), candidate AS (
+          SELECT w.id, w.priority FROM provider_rate_limit_waiters w, state s
+          WHERE w.provider='olist' AND w.account_fingerprint=${input.accountFingerprint} AND w.expires_at > clock_timestamp() AND w.granted_at IS NULL
+          ORDER BY CASE WHEN s.consecutive_high_priority >= 5 AND EXISTS (SELECT 1 FROM provider_rate_limit_waiters sw WHERE sw.provider=w.provider AND sw.account_fingerprint=w.account_fingerprint AND sw.priority='stock' AND sw.granted_at IS NULL AND sw.expires_at > clock_timestamp()) THEN CASE WHEN w.priority='stock' THEN 0 ELSE 1 END ELSE CASE WHEN w.priority='stock' THEN 1 ELSE 0 END END, w.enqueued_at, w.id
+          LIMIT 1
+        ), granted AS (
+          UPDATE provider_rate_limit_waiters w SET granted_at=clock_timestamp() FROM candidate c WHERE w.id=c.id RETURNING c.priority
+        )
+        UPDATE provider_rate_limit_state s SET
+          next_request_at = GREATEST(COALESCE(s.next_request_at, clock_timestamp()), clock_timestamp()) + interval '2223 milliseconds',
+          requests_in_window = s.requests_in_window + 1,
+          consecutive_high_priority = CASE WHEN (SELECT priority FROM granted)='stock' THEN 0 ELSE s.consecutive_high_priority+1 END,
+          updated_at=clock_timestamp()
+        WHERE s.provider='olist' AND s.account_fingerprint=${input.accountFingerprint}
+        RETURNING s.next_request_at - interval '2223 milliseconds' AS start_at
       `) as { rows?: unknown[] } | unknown[];
       const row = (Array.isArray(slot) ? slot : slot.rows ?? [])[0] as { start_at: Date } | undefined;
       if (!row || input.signal?.aborted) throw new Error('olist_deadline_exceeded');

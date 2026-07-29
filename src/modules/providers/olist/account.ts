@@ -17,11 +17,11 @@ export function fingerprintOlistAccount(cpfCnpj: string): string {
 
 export async function loadAndBindOlistAccount(orgId: string): Promise<OlistAccountBinding> {
   // Keep fingerprint validation independently importable; DB configuration is only required for binding.
-  const [{ db }, { getProviderRefreshContext, getValidAccessTokenForProvider }] = await Promise.all([
+  const [{ db }, { credentialVersion, getProviderOAuthCredentials, getValidAccessTokenForProvider }] = await Promise.all([
     import('@/db/client'),
     import('@/modules/connections/provider-connection.repository'),
   ]);
-  const before = await getProviderRefreshContext(orgId, 'olist');
+  const before = await getProviderOAuthCredentials(orgId, 'olist');
   const token = await getValidAccessTokenForProvider(orgId, 'olist');
   const response = await fetch(new URL('/info', process.env.OLIST_API_BASE ?? 'https://api.erp.olist.com'), {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000),
@@ -35,12 +35,12 @@ export async function loadAndBindOlistAccount(orgId: string): Promise<OlistAccou
   const fingerprint = fingerprintOlistAccount(document);
   // Network happens before this short transaction; the credential version is rechecked before write.
   return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT id FROM connections WHERE org_id = ${orgId} AND provider = 'olist' FOR UPDATE`);
-    const after = await getProviderRefreshContext(orgId, 'olist');
-    if (after.version !== before.version) throw new Error('olist_conta_nao_validada');
+    const locked = await tx.execute(sql`SELECT oauth_client_id, oauth_client_secret FROM connections WHERE org_id = ${orgId} AND provider = 'olist' FOR UPDATE`);
+    const row = locked[0] as { oauth_client_id?: string; oauth_client_secret?: string } | undefined;
+    if (!row?.oauth_client_id || !row.oauth_client_secret || credentialVersion(row.oauth_client_id, row.oauth_client_secret) !== before.version) throw new Error('olist_conta_nao_validada');
     const rows = await tx.execute(sql`
       UPDATE connections SET provider_account_fingerprint = ${fingerprint}, data_generation = data_generation + 1, updated_at = clock_timestamp()
-      WHERE org_id = ${orgId} AND provider = 'olist'
+      WHERE org_id = ${orgId} AND provider = 'olist' AND oauth_client_id=${row.oauth_client_id} AND oauth_client_secret=${row.oauth_client_secret}
       RETURNING data_generation
     `);
     const generation = (rows[0] as { data_generation?: number } | undefined)?.data_generation;
