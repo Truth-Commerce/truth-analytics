@@ -42,6 +42,41 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     };
   }
 
+  function afterDecisionBarrier(client: ReturnType<typeof drizzle>) {
+    let release!: () => void;
+    let reached!: (result: unknown) => void;
+    const decided = new Promise<unknown>(resolve => { reached = resolve; });
+    const resume = new Promise<void>(resolve => { release = resolve; });
+    return {
+      client: {
+        execute: client.execute.bind(client),
+        async transaction<T>(callback: (transaction: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => Promise<T>): Promise<T> {
+          return client.transaction(async transaction => {
+            let queries = 0;
+            return callback({
+              async execute(query: ReturnType<typeof sql>) {
+                const result = await transaction.execute(query);
+                queries += 1;
+                if (queries === 2) { // advisory lock, then the decision query
+                  reached(result);
+                  await resume;
+                }
+                return result;
+              },
+            });
+          });
+        },
+      },
+      decided,
+      release,
+    };
+  }
+
+  function decisionWakeAt(result: unknown): Date | undefined {
+    const resultRows = Array.isArray(result) ? result : (result as { rows?: unknown[] }).rows ?? [];
+    return new Date((resultRows[0] as { wake_at?: Date | string } | undefined)?.wake_at ?? Number.NaN);
+  }
+
   async function createOrdersSyncFixture(account: string, input: { backlog: number | null; updatedAgo?: string }) {
     const [organization] = await sqlA`INSERT INTO organizations (name) VALUES (${`governor ${run} ${account}`}) RETURNING id`;
     orgIds.push(organization.id);
@@ -115,7 +150,7 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     expect(one.startAt.getTime()).toBeLessThan(two.startAt.getTime());
   });
 
-  it('rechecks suppressed stock at a future DB wake-up and cancels it after insertion', async () => {
+  it('uses a future database wake-up for suppressed stock before cancellation', async () => {
     const account = fingerprint('slo-expired-next-slot');
     await createOrdersSyncFixture(account, { backlog: 1 });
     await sqlA`
@@ -123,8 +158,12 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
       VALUES ('olist', ${account}, clock_timestamp() - interval '1 second', clock_timestamp(), 0, 0)
     `;
     const controller = new AbortController();
-    const pending = governorA.reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const barrier = afterDecisionBarrier(drizzle(sqlA));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const wakeAt = decisionWakeAt(await barrier.decided);
+    expect(wakeAt?.getTime()).toBeGreaterThan(Date.now());
     controller.abort();
+    barrier.release();
     await expect(pending).rejects.toThrow('olist_deadline_exceeded');
     const [waiter] = await sqlB`
       SELECT granted_at, cancelled_at FROM provider_rate_limit_waiters
@@ -134,12 +173,16 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     expect(waiter.cancelled_at).not.toBeNull();
   });
 
-  it('treats stale orders synchronization as a stock SLO violation', async () => {
+  it('uses a future database wake-up when stale orders violate the stock SLO', async () => {
     const account = fingerprint('slo-stale');
     await createOrdersSyncFixture(account, { backlog: 0, updatedAgo: '16 minutes' });
     const controller = new AbortController();
-    const pending = governorB.reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const barrier = afterDecisionBarrier(drizzle(sqlB));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const wakeAt = decisionWakeAt(await barrier.decided);
+    expect(wakeAt?.getTime()).toBeGreaterThan(Date.now());
     controller.abort();
+    barrier.release();
     await expect(pending).rejects.toThrow('olist_deadline_exceeded');
     const [waiter] = await sqlA`SELECT granted_at, cancelled_at FROM provider_rate_limit_waiters WHERE provider = 'olist' AND account_fingerprint = ${account}`;
     expect(waiter.granted_at).toBeNull();
