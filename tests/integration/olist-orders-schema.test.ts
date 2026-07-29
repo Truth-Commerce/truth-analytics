@@ -70,8 +70,11 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
     const migrationRoot = resolve(process.cwd(), 'src/db/migrations');
     const migrationDir = await mkdtemp(join(tmpdir(), 'ta-olist-0022-'));
     const schema = `ta_olist_0022_${RUN}`;
+    if (!/^ta_olist_0022_\d+$/.test(schema)) {
+      throw new Error('invalid isolated migration schema');
+    }
     const isolatedSql = postgres(url!, { prepare: false, max: 1 });
-    const isolatedDb = drizzle(isolatedSql);
+    let legacyOrgId: string | undefined;
 
     try {
       for (const file of await readdir(migrationRoot)) {
@@ -90,38 +93,50 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
 
       await isolatedSql.unsafe(`CREATE SCHEMA "${schema}"`);
       await isolatedSql.unsafe(`SET search_path TO "${schema}"`);
-      await migrate(isolatedDb, { migrationsFolder: migrationDir, migrationsSchema: schema });
+      await migrate(drizzle(isolatedSql), { migrationsFolder: migrationDir, migrationsSchema: schema });
       const [applied] = await isolatedSql.unsafe<{ count: number }[]>(
         `SELECT count(*)::int AS count FROM "${schema}"."__drizzle_migrations"`,
       );
       expect(applied?.count).toBe(22);
 
-      const [legacyOrg] = await isolatedDb
-        .insert(organizations)
-        .values({ name: `ta-legacy-report-${RUN}`, status: 'active' })
-        .returning({ id: organizations.id });
+      const [legacyOrg] = await isolatedSql.unsafe<{ id: string }[]>(
+        `INSERT INTO "public"."organizations" ("name", "status") VALUES ($1, $2) RETURNING "id"`,
+        [`ta-legacy-report-${RUN}`, 'active'],
+      );
+      if (!legacyOrg?.id) {
+        throw new Error('failed to seed legacy organization');
+      }
+      legacyOrgId = legacyOrg.id;
       await isolatedSql.unsafe(
-        `INSERT INTO "reports" ("org_id", "periodo_inicio", "periodo_fim", "status")
+        `INSERT INTO "${schema}"."reports" ("org_id", "periodo_inicio", "periodo_fim", "status")
          VALUES ($1, $2, $3, $4)`,
         [
-          legacyOrg.id,
+          legacyOrgId,
           '2024-01-01T00:00:00.000Z',
           '2024-01-31T00:00:00.000Z',
           'done',
         ],
       );
 
+      await isolatedSql.unsafe(`SET search_path TO "${schema}"`);
       await isolatedSql.unsafe(
         await readFile(join(migrationRoot, '0022_olist_orders_reports_expand.sql'), 'utf8'),
       );
 
-      const rows = await isolatedDb
-        .select({ source: reports.source_provider, generation: reports.source_generation })
-        .from(reports)
-        .where(eq(reports.org_id, legacyOrg.id));
+      await isolatedSql.unsafe(`SET search_path TO "${schema}"`);
+      const rows = await isolatedSql.unsafe<{ source: string | null; generation: number | null }[]>(
+        `SELECT "source_provider" AS "source", "source_generation" AS "generation"
+         FROM "${schema}"."reports" WHERE "org_id" = $1`,
+        [legacyOrgId],
+      );
       expect(rows).toEqual([{ source: 'bling', generation: 1 }]);
     } finally {
       await isolatedSql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => undefined);
+      if (legacyOrgId) {
+        await isolatedSql
+          .unsafe(`DELETE FROM "public"."organizations" WHERE "id" = $1`, [legacyOrgId])
+          .catch(() => undefined);
+      }
       await isolatedSql.end();
       await rm(migrationDir, { recursive: true, force: true });
     }
