@@ -26,7 +26,7 @@
 - O incremento A precisa entregar relatório Olist completo antes de começar o incremento B; o incremento B precisa entregar cobertura/alertas de estoque antes de ser considerado concluído.
 - Olist ativo precisa renovar tokens tanto em `configurado` quanto em `ok`, preservando o status que possuía antes do refresh.
 - Depois que a primeira linha shadow Olist existir, o rollback mínimo de binário é a release provider-aware completa; deploy de binário anterior é proibido porque ele lê por org apenas e depende da unique Bling legada.
-- SLOs operacionais: pedidos incrementais p95 até 30 minutos e hard limit 2 horas; backfill/readiness de até 90 dias em 24 horas; estoque até 5.000 produtos em 6 horas e até 20.000 em 24 horas; total remoto acima de 20.000 para com `olist_catalogo_acima_do_limite` antes do fan-out.
+- SLOs operacionais: pedidos incrementais p95 até 30 minutos e hard limit 2 horas; backfill/readiness de até 90 dias em 24 horas; estoque até 5.000 produtos em 6 horas e até 20.000 em 24 horas; total remoto acima de 20.000 para com o código único `catalogo_acima_da_capacidade` antes do fan-out.
 
 ---
 
@@ -284,6 +284,7 @@ Expected after commit: no output from `git status --short`.
 - Produces: `observeOlistRateHeaders(fingerprint, headers): Promise<void>` for case-insensitive `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` when present; absence keeps the conservative 27/min governor.
 - Produces: `fetchOlistJson<T>(input: { orgId: string; priority: OlistRequestPriority; path: string; query?: Record<string,string>; schema: z.ZodType<T> }): Promise<T>`.
 - Produces: `OlistDataError` with `code`, `kind: 'transient' | 'permanent' | 'auth'`, and HTTP status only.
+- Produces: `WORST_CASE_OLIST_REQUEST_MS = 60_000`, covering governor start, two 10s attempts and capped 30s retry delay with margin.
 - Changes: `renewOlistConnection(orgId: string, now?: Date, options?: { force?: boolean }): Promise<OlistRenewalResult>`; `force` bypasses only the expiry-margin short circuit and retains compare-and-swap.
 
 - [ ] **Step 1: Write failing account, distributed-governor and HTTP tests**
@@ -443,7 +444,7 @@ Expected after commit: no output from `git status --short`.
 
 **Interfaces:**
 - Produces: `SyncResource = 'orders_list' | 'order_details' | 'stock'`.
-- Produces: `acquireSyncLease(input): Promise<SyncLease | null>`, `renewSyncLease(lease, ttlMs): Promise<SyncLease | null>`, `advanceSyncCursor(input): Promise<boolean>`, `completeSyncLease(input): Promise<boolean>`, `failSyncLease(input): Promise<boolean>`.
+- Produces: `acquireSyncLease(input): Promise<SyncLease | null>`, `getSyncLeaseRemainingMs(lease): Promise<number | null>`, `renewSyncLease(lease, ttlMs): Promise<SyncLease | null>`, `advanceSyncCursor(input): Promise<boolean>`, `completeSyncLease(input): Promise<boolean>`, `failSyncLease(input): Promise<boolean>`.
 - Produces: `parseOrdersCursor(value): OlistOrdersCursor` where `{ pass: 'created' | 'updated'; from: string; to: string; updatedAfter: string; offset: number; total: number | null; sourceGeneration: number }`.
 - Produces schema fields `source_generation`, `account_fingerprint`, monotonic `fencing_version bigint`; unique lease key is `(org_id,provider,source_generation,resource)`.
 
@@ -463,7 +464,7 @@ expect(await advanceSyncCursor({ ...first!, cursor: { from, to, offset: 100, tot
 expect(await advanceSyncCursor({ ...successor!, cursor: { from, to, offset: 100, total: 200 }, processedDelta: 100 })).toBe(true);
 ```
 
-Assert separate resources/generations can lease concurrently; same source/resource cannot; fingerprint mismatch cannot renew/write; `renewSyncLease` extends from `clock_timestamp()` only for the current token+fencingVersion; fencingVersion never decreases across expiry/reacquisition; completion/failure are owner-only; malformed or wrong-generation cursors reset to the explicit initial cursor.
+Assert separate resources/generations can lease concurrently; same source/resource cannot; fingerprint mismatch cannot renew/write; `getSyncLeaseRemainingMs` is computed as `lease_expires_at - clock_timestamp()` in PostgreSQL; `renewSyncLease` extends from DB time only for current token+fencingVersion; fencingVersion never decreases; completion/failure are owner-only; malformed/wrong-generation cursors reset explicitly.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -483,7 +484,7 @@ export type SyncLease = {
 };
 ```
 
-Migration `0023` adds/backfills generation 1, fingerprint and fencing version, replaces `connection_sync_state_org_provider_resource_uq` with the generation-aware unique, and drops only `orders_org_provider_order_uq` to enable shadow after the Task 8 gate; it retains every Bling legacy object. Acquisition uses `clock_timestamp()`, increments `fencing_version = fencing_version + 1` atomically on every ownership grant, and never accepts caller time. Every renew/advance/complete/fail predicate includes org, provider, generation, fingerprint, token, fencingVersion and `lease_expires_at > clock_timestamp()`. Do not hold DB locks across ERP HTTP.
+Migration `0023` adds/backfills generation 1, fingerprint and fencing version, replaces `connection_sync_state_org_provider_resource_uq` with the generation-aware unique, and drops only `orders_org_provider_order_uq` to enable shadow after the Task 8 gate; it retains every Bling legacy object. Acquisition uses `clock_timestamp()`, increments `fencing_version = fencing_version + 1` atomically on every ownership grant, and never accepts caller time. Every timing/renew/advance/complete/fail predicate includes org, provider, generation, fingerprint, token, fencingVersion and `lease_expires_at > clock_timestamp()`. `getSyncLeaseRemainingMs` returns a DB-computed duration; callers never compare against `Date.now()`. Do not hold DB locks across ERP HTTP.
 
 - [ ] **Step 4: Verify GREEN on PostgreSQL**
 
@@ -516,7 +517,7 @@ Expected after commit: no output from `git status --short`. Apply `0023` to prod
 **Interfaces:**
 - Produces: `collectOrders(source: ErpDataSource, periodo: Periodo, options?: { deadlineMs?: number; startOffset?: number }): Promise<CollectResult & { expectedTotal?: number; incompleto?: boolean }>`.
 - Preserves: `collectBlingOrders` as a deprecated wrapper resolving Bling generation and calling `collectOrders(source, periodo)`.
-- Produces: `persistOrdersPageWithLease(input): Promise<boolean>`; page upsert and cursor advance share one transaction fenced by lease token, DB expiry and data generation.
+- Produces: `persistOrdersPageWithLease(input: { lease: SyncLease; source: ErpDataSource; page: OrderPage; nextCursor: OlistOrdersCursor }): Promise<boolean>`; it consumes `lease.fencingVersion` in the page upsert/cursor transaction.
 
 - [ ] **Step 1: Write failing idempotency, resume and isolation tests**
 
@@ -532,7 +533,7 @@ expect(await countOrders(sourceA, '6201')).toBe(1);
 expect(await countOrders(sourceB, '6201')).toBe(1);
 ```
 
-Seed an enriched row and assert list replay updates date/total/status/channel but preserves `itens`, `frete`, `comissao`, `enriquecido_em`. Make page 2 persistence fail and assert cursor remains at page 2 start; rerun and assert it resumes there. Expire/replace the lease after HTTP returns and assert the stale worker writes neither orders nor cursor. Increment connection generation and assert the old worker is fenced out. Assert an Olist order writes `bling_order_id=null` and current generation, while a Bling order continues mirroring both IDs.
+Seed an enriched row and assert list replay updates date/total/status/channel but preserves detail fields. Make page 2 persistence fail and assert cursor remains. Simulate an execution longer than the original TTL: DB remaining time falls below `WORST_CASE_OLIST_REQUEST_MS`, caller renews, receives the same fencingVersion/new expiry, persists later pages and completes. In a second case let the predecessor expire, acquire a successor with higher fencingVersion and assert the stale predecessor cannot write. Generation/fingerprint/token/fencingVersion/expiry mismatches each block both order upsert and cursor.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -548,7 +549,7 @@ Use conflict target:
 target: [orders.org_id, orders.provider, orders.source_generation, orders.provider_order_id]
 ```
 
-Values include provider, provider order ID, nullable mirrored Bling ID, provider status, `source_generation`, channel/date/total. Conflict target is `(org_id,provider,source_generation,provider_order_id)`. The update set excludes detail-owned fields and preserves a good channel when the incoming value is `Bling`, `Canal não identificado` or `Olist ERP`. For Olist acquire `orders_list`, use the saved offset when cursor window/generation matches, persist each page and advance cursor in one transaction whose first predicate checks `lease_token`, `lease_expires_at > clock_timestamp()` and current connection generation. Complete the lease only after `done=true`; if the deadline arrives first, fenced-release with cursor preserved and return `incompleto=true`. For Bling keep the existing non-leased report collection behavior but use the same neutral upsert.
+Values include provider, provider order ID, nullable mirrored Bling ID, provider status, `source_generation`, channel/date/total. Conflict target is `(org_id,provider,source_generation,provider_order_id)`. Before **every** Olist list HTTP call, query `getSyncLeaseRemainingMs(lease)`; if DB remaining time is below exported `WORST_CASE_OLIST_REQUEST_MS = 60_000`, call `renewSyncLease(lease, 270_000)` and abort ownership immediately on `null`. The returned lease—not JavaScript time—is passed forward. `persistOrdersPageWithLease` passes `lease.fencingVersion` into the upsert/cursor transaction, whose ownership predicate includes generation, account fingerprint, token, fencingVersion and `lease_expires_at > clock_timestamp()`. Complete with the same full predicate only after `done=true`; fenced-release on deadline. Bling keeps non-leased behavior through the same neutral mapper.
 
 - [ ] **Step 4: Verify GREEN and no Bling behavior drift**
 
@@ -590,7 +591,7 @@ expect(fetchOrderDetail).toHaveBeenCalledWith(orgId, '6201');
 expect(result).toMatchObject({ enriquecidos: 1, falhas: 0, quarentenados: 0 });
 ```
 
-Assert selection filters org, provider and current generation; excludes rows with `enrichment_attempts >= 5`; success writes items/freight/commission/channel, clears error/attempts and sets `enriquecido_em`; stale/expired detail lease writes nothing. Transient/local failures remain retryable with exponential next-attempt time and do not consume the five permanent attempts; `missing_remote`, `permission` and `contract` increment permanent attempts; fifth permanent failure becomes quarantined. One failing order does not prevent the next; no request starts after deadline; Olist uses concurrency 1 while Bling preserves its 340ms gate/concurrency 3.
+Assert selection filters org, provider and current generation; excludes rows with `enrichment_attempts >= 5`; success writes detail under current lease. Generation/fingerprint/token/fencingVersion/expiry mismatch writes neither detail nor attempts. Transient/local failures remain retryable without consuming five permanent attempts; `missing_remote`, `permission` and `contract` increment them; fifth becomes quarantined. One failure does not block next; no request starts after deadline; Olist concurrency 1, Bling gate unchanged.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -600,7 +601,7 @@ npm test -- tests/unit/enrich-orders.test.ts tests/integration/enrich-orders-pro
 
 - [ ] **Step 3: Implement provider-specific execution policy behind one queue**
 
-Pending projection becomes `{ id, providerOrderId }` from `orders.provider_order_id`. The SQL predicate is org, provider, current generation, `enriquecido_em IS NULL`, permanent attempts below five, `next_attempt_at <= clock_timestamp()`, optional period. Acquire resource `order_details`; after HTTP, update detail/attempt state only when token remains owner, lease is unexpired by `clock_timestamp()` and generation still matches. Olist HTTP uses the distributed governor, so no second limiter is created. Count pending/quarantined with the same source. Log only provider, orgId, local row ID and safe code.
+Pending projection becomes `{ id, providerOrderId }` from `orders.provider_order_id`. Predicate is org/provider/generation, pending detail, permanent attempts below five and DB retry time. Acquire `order_details`; before each remote call use the same DB-remaining/renew rule as Task 6. Every detail or attempt update passes `lease.fencingVersion` and predicates generation, fingerprint, token, fencingVersion and DB expiry. Olist HTTP uses the distributed governor; count/log remain source-scoped and safe.
 
 - [ ] **Step 4: Verify GREEN**
 
@@ -1175,7 +1176,7 @@ Expected after commit: no output from `git status --short`. Apply `0025` only af
 - Produces: `OlistStockCursor = { offset: number; index: number; sourceGeneration: number }`.
 - Produces: `fetchOlistProductsPage(orgId, offset): Promise<OlistProductPage>` and `fetchOlistProductStock(orgId, productId): Promise<number>`.
 - Changes: `sincronizarEstoqueDaOrg(source: ErpDataSource, options?: { deadlineMs?: number }): Promise<StockSyncResult>`.
-- Produces: `persistStockItemAndAdvance(input: { lease: SyncLease; source: ErpDataSource; item: RawStockItem; nextCursor: OlistStockCursor }): Promise<boolean>`.
+- Produces: `persistStockItemAndAdvance(input: { lease: SyncLease; source: ErpDataSource; item: RawStockItem; nextCursor: OlistStockCursor }): Promise<boolean>`; its stock upsert writes `lease.fencingVersion` and cursor in one fenced transaction.
 - Produces: `StockSyncResult = { produtos: number; ignoradosSemSku: number; restantes: number; incompleto: boolean }`.
 
 - [ ] **Step 1: Add official fixtures and failing cursor tests**
@@ -1189,7 +1190,7 @@ await sincronizarEstoqueDaOrg({ orgId, provider: 'olist', sourceGeneration: 3 },
 expect(await readStockCursor(orgId)).toEqual({ offset: 100, index: 8, sourceGeneration: 3 });
 ```
 
-Inject failure after item 7 and assert item 7/cursor commit atomically. Steal/expire the lease after HTTP returns and assert stale worker changes neither stock row nor cursor/fencing version; increment connection generation and assert old worker is fenced out. Rerun resumes without duplicate effects, product without SKU increments ignored counter, and no absent product is deleted. A page reporting total 20.001 stops before detail fan-out with `olist_catalogo_acima_do_limite`; fixtures of 5.000 and 20.000 remain eligible.
+Inject failure after item 7 and assert item/cursor commit atomically. Simulate a run longer than the original TTL: before a later remote call DB remaining time is below 60s, lease renew succeeds, the run persists with the renewed lease and completes. In a second case the predecessor expires, a successor receives higher fencingVersion, and the stale predecessor changes neither stock nor cursor. Generation/fingerprint/token/fencingVersion/expiry mismatches each fail. A page total 20.001 stops before detail fan-out and surfaces exactly `catalogo_acima_da_capacidade` in state, heartbeat and alert; fixtures 5.000/20.000 remain eligible.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -1199,7 +1200,7 @@ npm test -- tests/unit/olist-products.test.ts tests/unit/olist-stock.test.ts tes
 
 - [ ] **Step 3: Implement page/index state machine**
 
-Acquire resource `stock` for the exact source generation. Load one product page at `cursor.offset`; for each product from `cursor.index`, call stock detail through the shared governor. `persistStockItemAndAdvance` runs one transaction whose ownership predicate uses `lease_token`, `lease_expires_at > clock_timestamp()` and current connection generation; only its successful CTE/upsert advances cursor. At page completion set the next offset/index with generation. On total completion reset offset/index for the same generation, set `succeeded_at` and only then update connection `last_sync_at`. Stop before deadline with cursor preserved. Stock yields to overdue orders, while weighted fairness guarantees one stock slot after five high-priority slots when order freshness is within SLO.
+Acquire resource `stock` for the exact source. Immediately before **every** remote product-page or stock-detail call, obtain DB remaining time; when below `WORST_CASE_OLIST_REQUEST_MS=60_000`, call `renewSyncLease(lease,270_000)`, replace the local lease with its result and stop on `null`. JavaScript time never authorizes work. `persistStockItemAndAdvance` passes `lease.fencingVersion` into an atomic upsert/cursor transaction whose predicate includes generation, fingerprint, token, fencingVersion and `lease_expires_at > clock_timestamp()`. Page completion, final reset, success and `last_sync_at` use the same ownership tuple. Stock yields to overdue orders, with weighted fairness when freshness is within SLO.
 
 - [ ] **Step 4: Verify GREEN and shared 27/min budget**
 
@@ -1248,7 +1249,7 @@ Expected after commit: no output from `git status --short`.
 
 - [ ] **Step 1: Write failing active-stock isolation and E2E tests**
 
-Seed different Bling/current-Olist/old-generation-Olist balances for the same SKU and assert coverage, stock alerts, analyst carteira and dashboard use only the active provider+generation for numerator and velocity. Flip active source and assert all four switch together. Cron test includes Bling and Olist refs with generation, isolates one failing org and records incomplete progress. Workflow must call stock `*/5 * * * *`; fake-clock capacity tests demonstrate 5.000 items can progress within 6h and 20.000 within 24h under 27/min across repeated invocations. E2E displays progress/freshness and final coverage.
+Seed different Bling/current-Olist/old-generation-Olist balances for the same SKU and assert coverage, stock alerts, analyst carteira and dashboard use only the active source. Flip source and assert all switch together. Cron isolates failures and records progress. A 20.001 catalog produces exactly `catalogo_acima_da_capacidade` in sync state, heartbeat response and operator alert mapping—no alias/prefix. Workflow calls stock `*/5`; capacity tests prove 5.000/6h and 20.000/24h under 27/min. E2E displays progress/freshness/final coverage.
 
 - [ ] **Step 2: Run tests and verify RED**
 
