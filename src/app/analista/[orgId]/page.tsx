@@ -31,7 +31,6 @@ import { listOrgUsers } from '@/modules/auth/user.repository';
 import { statusSugestaoBadge } from '@/modules/calendario/calendario-view-model';
 import { badgeDoEstado, labelCobertura, resumoEstoque } from '@/modules/estoque/estoque-view-model';
 import { statusKitBadge } from '@/modules/kits/kits-view-model';
-import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { getDashboardData } from '@/modules/reports/dashboard-data';
 import { paceMeta, progressoMeta } from '@/modules/reports/compare';
 import {
@@ -50,10 +49,8 @@ import { getProviderConnectionSummary } from '@/modules/connections/provider-con
 
 import type { Metadata } from 'next';
 
-export async function generateMetadata(props: { params: Promise<{ orgId: string }> }): Promise<Metadata> {
-  const params = await props.params;
-  const org = await getOrganizationById(params.orgId);
-  return { title: org ? `${org.name} · Cliente` : 'Cliente' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: 'Cliente' };
 }
 
 export default async function AnalistaOrgPage(props: {
