@@ -18,6 +18,7 @@ import {
 } from '@/modules/connections/provider-connection.repository';
 import { getOAuthProvider } from '@/modules/providers/oauth-registry';
 import { OAuthProviderError } from '@/modules/providers/oauth.types';
+import { loadAndBindOlistAccount } from '@/modules/providers/olist/account';
 
 export async function GET(request: Request) {
   const access = await getSessionContext();
@@ -71,6 +72,7 @@ export async function GET(request: Request) {
       tokens,
     });
     if (!saved) return localRedirect(returnPath, 'olist_credenciais_alteradas');
+    await loadAndBindOlistAccount(attempt.orgId);
     return localRedirect(returnPath, undefined, 'conectado');
   } catch (error) {
     const safeCode = callbackErrorCode(error);
@@ -90,6 +92,7 @@ function callbackErrorCode(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   if (code === 'acesso_negado' || code === 'organizacao_inativa') return code;
   if (code === 'provider_credentials_missing') return 'olist_credenciais_alteradas';
+  if (code === 'olist_conta_nao_validada' || code === 'olist_account_fingerprint_key_invalid') return 'olist_conta_nao_validada';
   return 'olist_oauth_transiente';
 }
 

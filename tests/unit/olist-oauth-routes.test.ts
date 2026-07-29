@@ -44,6 +44,7 @@ vi.mock('@/modules/connections/olist-oauth-attempt', () => ({
     surface === 'client_connections' ? '/conexoes' : `/analista/${orgId}?tab=conexao`),
 }));
 vi.mock('@/modules/providers/oauth-registry', () => ({ getOAuthProvider: vi.fn(() => adapter) }));
+vi.mock('@/modules/providers/olist/account', () => ({ loadAndBindOlistAccount: vi.fn() }));
 
 import { getSessionContext } from '@/modules/auth/session';
 import { assertConnectionOrgAccess } from '@/modules/connections/connection-access';
@@ -57,6 +58,7 @@ import {
 } from '@/modules/connections/olist-oauth-attempt';
 import { GET as start } from '@/app/api/connections/olist/route';
 import { GET as callback } from '@/app/api/connections/olist/callback/route';
+import { loadAndBindOlistAccount } from '@/modules/providers/olist/account';
 
 const access = {
   id: 'user-a',
@@ -98,6 +100,7 @@ beforeEach(() => {
     expiresInSeconds: 14_400,
   });
   vi.mocked(saveProviderTokens).mockResolvedValue(true);
+  vi.mocked(loadAndBindOlistAccount).mockResolvedValue({ fingerprint: 'a'.repeat(64), sourceGeneration: 2 });
 });
 
 describe('GET /api/connections/olist', () => {
@@ -183,6 +186,7 @@ describe('GET /api/connections/olist/callback', () => {
       provider: 'olist',
       credentialVersion: 'version-a',
     }));
+    expect(loadAndBindOlistAccount).toHaveBeenCalledWith(ORG_ID);
     expect(response.headers.get('location')).toContain('/conexoes?olist=conectado');
   });
 

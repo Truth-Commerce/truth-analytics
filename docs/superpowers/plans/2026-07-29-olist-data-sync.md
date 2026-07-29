@@ -435,8 +435,8 @@ Expected after commit: no output from `git status --short`.
 
 **Files:**
 - Modify: `src/db/schema/connection-sync-state.ts`
-- Create: `src/db/migrations/0023_olist_sync_state_shadow_enable.sql`
-- Create: `src/db/migrations/meta/0023_snapshot.json`
+- Create: `src/db/migrations/0024_olist_sync_state_shadow_enable.sql`
+- Create: `src/db/migrations/meta/0024_snapshot.json`
 - Modify: `src/db/migrations/meta/_journal.json`
 - Create: `src/modules/connections/sync-state.repository.ts`
 - Create: `tests/integration/sync-state-lease.test.ts`
@@ -484,7 +484,7 @@ export type SyncLease = {
 };
 ```
 
-Migration `0023` adds/backfills generation 1, fingerprint and fencing version, replaces `connection_sync_state_org_provider_resource_uq` with the generation-aware unique, and drops only `orders_org_provider_order_uq` to enable shadow after the Task 8 gate; it retains every Bling legacy object. Acquisition uses `clock_timestamp()`, increments `fencing_version = fencing_version + 1` atomically on every ownership grant, and never accepts caller time. Every timing/renew/advance/complete/fail predicate includes org, provider, generation, fingerprint, token, fencingVersion and `lease_expires_at > clock_timestamp()`. `getSyncLeaseRemainingMs` returns a DB-computed duration; callers never compare against `Date.now()`. Do not hold DB locks across ERP HTTP.
+Migration `0024` adds/backfills generation 1, fingerprint and fencing version, replaces `connection_sync_state_org_provider_resource_uq` with the generation-aware unique, and drops only `orders_org_provider_order_uq` to enable shadow after the Task 8 gate; it retains every Bling legacy object. Migration `0023` is reserved exclusively for Olist governor waiters. Acquisition uses `clock_timestamp()`, increments `fencing_version = fencing_version + 1` atomically on every ownership grant, and never accepts caller time. Every timing/renew/advance/complete/fail predicate includes org, provider, generation, fingerprint, token, fencingVersion and `lease_expires_at > clock_timestamp()`. `getSyncLeaseRemainingMs` returns a DB-computed duration; callers never compare against `Date.now()`. Do not hold DB locks across ERP HTTP.
 
 - [ ] **Step 4: Verify GREEN on PostgreSQL**
 

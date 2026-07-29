@@ -21,9 +21,10 @@ export type OlistRenewalResult = 'renewed' | 'expired' | 'transient' | 'won-by-p
 export async function renewOlistConnection(
   orgId: string,
   now: Date = new Date(),
+  options: { force?: boolean } = {},
 ): Promise<OlistRenewalResult> {
   const context = await getProviderRefreshContext(orgId, 'olist');
-  if (context.expiresAt.getTime() - now.getTime() > OLIST_REFRESH_MARGIN_MS) {
+  if (!options.force && context.expiresAt.getTime() - now.getTime() > OLIST_REFRESH_MARGIN_MS) {
     return 'renewed';
   }
 
