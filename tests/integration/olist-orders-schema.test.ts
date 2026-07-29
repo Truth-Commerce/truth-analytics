@@ -103,7 +103,12 @@ describe.skipIf(!url)('orders Olist expand — integração', () => {
       await isolatedSql.unsafe(
         `INSERT INTO "reports" ("org_id", "periodo_inicio", "periodo_fim", "status")
          VALUES ($1, $2, $3, $4)`,
-        [legacyOrg.id, new Date('2024-01-01'), new Date('2024-01-31'), 'done'],
+        [
+          legacyOrg.id,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-31T00:00:00.000Z',
+          'done',
+        ],
       );
 
       await isolatedSql.unsafe(
