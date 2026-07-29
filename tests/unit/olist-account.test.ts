@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 describe('fingerprintOlistAccount', () => {
+  it('usa somente o endpoint /info sob o prefixo oficial público da Olist', async () => {
+    const { olistAccountInfoUrl } = await import('@/modules/providers/olist/account');
+    expect(olistAccountInfoUrl().toString()).toBe('https://api.tiny.com.br/public-api/v3/info');
+  });
+
   it('normaliza o documento antes do HMAC SHA-256 dedicado', async () => {
     vi.stubEnv('OLIST_ACCOUNT_FINGERPRINT_KEY', Buffer.alloc(32, 7).toString('base64'));
     vi.resetModules();

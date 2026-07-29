@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { OAuthTokens } from '@/modules/providers/types';
 
 export type OlistAccountBinding = { fingerprint: string; sourceGeneration: number };
+const OLIST_ACCOUNT_API_BASE = new URL('https://api.tiny.com.br/public-api/v3/');
 type PendingTokens = {
   credentialVersion: string;
   tokens: OAuthTokens;
@@ -20,6 +21,15 @@ export function fingerprintOlistAccount(cpfCnpj: string): string {
   return createHmac('sha256', key).update(cpfCnpj.replace(/\D/g, '')).digest('hex');
 }
 
+/** Fixed provider origin and prefix; relative construction cannot escape v3. */
+export function olistAccountInfoUrl(): URL {
+  const url = new URL('info', OLIST_ACCOUNT_API_BASE);
+  if (url.origin !== OLIST_ACCOUNT_API_BASE.origin || !url.pathname.startsWith(OLIST_ACCOUNT_API_BASE.pathname)) {
+    throw new Error('olist_path_invalid');
+  }
+  return url;
+}
+
 /** Network /info is deliberately outside the lock; publication is a single credential-CAS transaction. */
 export async function loadAndBindOlistAccount(orgId: string, pending?: PendingTokens): Promise<OlistAccountBinding> {
   const { credentialVersion, getOlistPublicationContext, getProviderOAuthCredentials, getValidAccessTokenForProvider } = await import('@/modules/connections/provider-connection.repository');
@@ -32,7 +42,7 @@ export async function loadAndBindOlistAccount(orgId: string, pending?: PendingTo
   if (publication.credentialVersion !== credentials.version || (pending?.sourceGeneration !== undefined && pending.sourceGeneration !== publication.dataGeneration)) throw new Error('olist_conta_nao_validada');
   const accessToken = pending?.tokens.accessToken ?? await getValidAccessTokenForProvider(orgId, 'olist', 0);
   const timeout = AbortSignal.timeout(Math.max(0, Math.min(10_000, pending?.deadlineAt === undefined ? 10_000 : pending.deadlineAt - Date.now())));
-  const response = await fetch(new URL('/info', 'https://api.erp.olist.com'), {
+  const response = await fetch(olistAccountInfoUrl(), {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
     signal: pending?.signal ? AbortSignal.any([pending.signal, timeout]) : timeout,
   });
