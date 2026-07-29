@@ -12,6 +12,7 @@ const fingerprint = (suffix: string) => `olist-${run}-${suffix}`.slice(0, 64);
 describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
   const sqlA = postgres(url ?? '', { prepare: false, max: 1 });
   const sqlB = postgres(url ?? '', { prepare: false, max: 1 });
+  const sqlLock = postgres(url ?? '', { prepare: false, max: 1 });
   const governorA = createOlistRateGovernor(drizzle(sqlA));
   const governorB = createOlistRateGovernor(drizzle(sqlB));
   const orgIds: string[] = [];
@@ -101,7 +102,7 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     await sqlA`DELETE FROM organizations WHERE id = ANY(${orgIds}::uuid[])`;
     orgIds.length = 0;
   });
-  afterAll(async () => { await sqlA.end(); await sqlB.end(); });
+  afterAll(async () => { await sqlA.end(); await sqlB.end(); await sqlLock.end(); });
 
   it('serializa o mesmo fingerprint em dois clientes e concede um slot por waiter', async () => {
     const account = fingerprint('same');
@@ -139,15 +140,32 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     };
     const lockedGovernorA = createOlistRateGovernor(barrier(drizzle(sqlA)));
     const lockedGovernorB = createOlistRateGovernor(barrier(drizzle(sqlB)));
-    const waiting = await sqlA.begin(async transaction => {
+    let persistedOrder: string[] = [];
+    const waiting = await sqlLock.begin(async transaction => {
       await transaction`SELECT pg_advisory_xact_lock(hashtextextended('olist:' || ${account}, 0))`;
       const first = lockedGovernorA.reserve({ accountFingerprint: account, priority: 'orders' });
       const second = lockedGovernorB.reserve({ accountFingerprint: account, priority: 'details' });
       await bothInserted; // real clients crossed the insert barrier while this explicit xact lock is held.
+      const persisted = await transaction`
+        SELECT id
+        FROM provider_rate_limit_waiters
+        WHERE provider = 'olist' AND account_fingerprint = ${account}
+        ORDER BY enqueued_at, id
+      `;
+      persistedOrder = persisted.map(waiter => waiter.id);
       return [first, second] as const;
     });
     const [one, two] = await Promise.all(waiting);
-    expect(one.startAt.getTime()).toBeLessThan(two.startAt.getTime());
+    const reservations = new Map([
+      [one.waiterId, one],
+      [two.waiterId, two],
+    ]);
+    expect(persistedOrder).toHaveLength(2);
+    const [firstWaiterId, secondWaiterId] = persistedOrder;
+    expect(reservations.has(firstWaiterId)).toBe(true);
+    expect(reservations.has(secondWaiterId)).toBe(true);
+    expect(reservations.get(firstWaiterId)!.startAt.getTime())
+      .toBeLessThan(reservations.get(secondWaiterId)!.startAt.getTime());
   });
 
   it('uses a future database wake-up for suppressed stock before cancellation', async () => {
