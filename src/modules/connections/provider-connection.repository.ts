@@ -46,6 +46,7 @@ export type ConnectionRef = {
 export type ProviderRefreshContext = {
   orgId: string;
   provider: ErpProviderId;
+  status: 'configurado' | 'ok';
   clientId: string;
   clientSecret: string;
   refreshToken: string;
@@ -316,6 +317,7 @@ export async function getProviderRefreshContext(
       accessToken: connections.access_token,
       refreshToken: connections.refresh_token,
       expiresAt: connections.expira_em,
+      status: connections.status,
     })
     .from(connections)
     .where(and(eq(connections.org_id, orgId), eq(connections.provider, provider)))
@@ -325,13 +327,15 @@ export async function getProviderRefreshContext(
     !row.oauthClientSecret ||
     !row.accessToken ||
     !row.refreshToken ||
-    !row.expiresAt
+    !row.expiresAt ||
+    (row.status !== 'configurado' && row.status !== 'ok')
   ) {
     throw new Error('provider_not_authorized');
   }
   return {
     orgId,
     provider,
+    status: row.status,
     clientId: decryptConnectionSecret({
       orgId,
       provider,
@@ -388,7 +392,7 @@ export async function saveRefreshedProviderTokens(input: {
       last_refresh_at: now,
       last_error_code: null,
       last_error_at: null,
-      status: current.status,
+      status: input.context.status,
     }).where(versionWhere(current, input.context.orgId, input.context.provider)).returning({ id: connections.id });
     return updated.length === 1;
   });

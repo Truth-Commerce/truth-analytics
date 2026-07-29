@@ -2,7 +2,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { dbMock, stored } = vi.hoisted(() => ({
-  dbMock: { select: vi.fn(), update: vi.fn() },
+  dbMock: { select: vi.fn(), update: vi.fn(), transaction: vi.fn() },
   stored: {
     id: 'connection-a',
     status: 'configurado',
@@ -80,6 +80,12 @@ describe('provider connection refresh CAS', () => {
         }),
       }),
     }));
+
+    dbMock.transaction.mockImplementation(async (callback) => callback({
+      execute: vi.fn().mockResolvedValue([currentRow()]),
+      select: dbMock.select,
+      update: dbMock.update,
+    }));
   });
 
   it('salva o refresh legítimo quando uma falha permanente da mesma versão marcou expirado antes', async () => {
@@ -127,5 +133,23 @@ describe('provider connection refresh CAS', () => {
     await expect(markProviderConnectionError(error)).resolves.toBe(true);
     await expect(markProviderConnectionError(error)).resolves.toBe(false);
     expect(stored.status).toBe('expirado');
+  });
+
+  it('preserva o status operacional capturado antes do refresh', async () => {
+    stored.status = 'ok';
+    const context = await getProviderRefreshContext('org-a', 'olist');
+
+    await expect(
+      saveRefreshedProviderTokens({
+        context,
+        tokens: {
+          accessToken: 'access-new',
+          refreshToken: 'refresh-new',
+          expiresInSeconds: 7_200,
+        },
+      }),
+    ).resolves.toBe(true);
+
+    expect(stored.status).toBe('ok');
   });
 });

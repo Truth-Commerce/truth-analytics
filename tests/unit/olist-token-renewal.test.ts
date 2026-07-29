@@ -35,6 +35,7 @@ describe('renewOlistConnection — códigos seguros', () => {
     vi.mocked(getProviderRefreshContext).mockResolvedValue({
       orgId: 'org-a',
       provider: 'olist',
+      status: 'configurado',
       clientId: 'client-id',
       clientSecret: 'client-secret',
       refreshToken: 'refresh-secret',
