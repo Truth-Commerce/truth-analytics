@@ -103,6 +103,7 @@ test('admin promove uma conta de cliente a analista e ela muda de aba', async ({
   const linha = page.getByTestId('clientes-table').locator('tr', { hasText: promovidoEmail });
   await linha.locator('select[name="role"]').selectOption('analista');
   await linha.getByRole('button', { name: 'Salvar' }).click();
+  await expect(linha.locator('[data-testid^="papel-ok-"]')).toContainText('Papel alterado');
 
   // Sai da aba de clientes e entra na da equipe, já na operação interna.
   await page.goto('/admin/usuarios?aba=clientes');
