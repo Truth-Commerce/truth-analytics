@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createSyncStateRepository,
+  parsePreparationCursor,
   parseOrdersCursor,
 } from '@/modules/connections/sync-state.repository';
 
@@ -51,5 +52,13 @@ describe('parseOrdersCursor', () => {
       resource: 'orders_list',
       ttlMs: 1_000,
     })).rejects.toThrow('sync_source_generation_invalid');
+  });
+});
+
+describe('parsePreparationCursor', () => {
+  it('fails closed for stale or malformed preparation state', () => {
+    expect(parsePreparationCursor({ version: 1, snapshot: { done: true }, catchup: { done: true }, expectedCount: 2, checksum: 'abc' }, 3)).toMatchObject({ version: 1, sourceGeneration: 3 });
+    expect(parsePreparationCursor({ version: 2 }, 3)).toBeNull();
+    expect(parsePreparationCursor({ version: 1, snapshot: { done: true }, catchup: { done: true }, expectedCount: -1, checksum: 'abc' }, 3)).toBeNull();
   });
 });

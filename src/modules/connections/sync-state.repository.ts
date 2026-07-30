@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import type { ErpProviderId } from '@/modules/providers/types';
 
-export type SyncResource = 'orders_list' | 'order_details' | 'stock';
+export type SyncResource = 'orders_list' | 'order_details' | 'stock' | 'orders_prepare';
 export type SyncSource = { orgId: string; provider: ErpProviderId; sourceGeneration: number; accountFingerprint: string | null };
 export type SyncLease = SyncSource & {
   resource: SyncResource;
@@ -106,6 +106,14 @@ export function createSyncStateRepository(client: SqlExecutor = db) {
       `));
       return result.length === 1;
     },
+    /** Releases a fenced lease without publishing success/failure, preserving resumable state. */
+    async yieldSyncLease(input: SyncLease): Promise<boolean> {
+      const result = rows(await client.execute(sql`
+        UPDATE connection_sync_state SET lease_token = NULL, lease_expires_at = NULL, updated_at = clock_timestamp()
+        WHERE ${ownerPredicate(input)} RETURNING id
+      `));
+      return result.length === 1;
+    },
     async failSyncLease(input: SyncLease & { errorCode: string }): Promise<boolean> {
       const result = rows(await client.execute(sql`
         UPDATE connection_sync_state SET lease_token = NULL, lease_expires_at = NULL, failed_at = clock_timestamp(), updated_at = clock_timestamp(), last_error_code = ${input.errorCode}
@@ -122,6 +130,7 @@ export const getSyncLeaseRemainingMs = repository.getSyncLeaseRemainingMs;
 export const renewSyncLease = repository.renewSyncLease;
 export const advanceSyncCursor = repository.advanceSyncCursor;
 export const completeSyncLease = repository.completeSyncLease;
+export const yieldSyncLease = repository.yieldSyncLease;
 export const failSyncLease = repository.failSyncLease;
 
 function iso(value: unknown): string | null {
@@ -142,4 +151,24 @@ export function parseOrdersCursor(value: unknown, sourceGeneration?: number): Ol
   const total = cursor.total === null ? null : nonNegativeInteger(cursor.total);
   if (!pass || !from || !to || !updatedAfter || offset === null || generation === null || total === null && cursor.total !== null || (sourceGeneration !== undefined && generation !== sourceGeneration)) return null;
   return { pass, from, to, updatedAfter, offset, total, sourceGeneration: generation };
+}
+
+export type PreparationCursor = {
+  version: 1;
+  sourceGeneration: number;
+  snapshot: { done: boolean };
+  catchup: { done: boolean };
+  expectedCount: number;
+  checksum: string;
+};
+
+/** Versioned readiness state: any malformed persisted shape explicitly resets preparation. */
+export function parsePreparationCursor(value: unknown, sourceGeneration: number): PreparationCursor | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const cursor = value as Record<string, unknown>;
+  const snapshot = cursor.snapshot as { done?: unknown } | undefined;
+  const catchup = cursor.catchup as { done?: unknown } | undefined;
+  const expectedCount = nonNegativeInteger(cursor.expectedCount);
+  if (cursor.version !== 1 || snapshot?.done !== true || catchup?.done !== true || expectedCount === null || typeof cursor.checksum !== 'string' || cursor.checksum.length === 0) return null;
+  return { version: 1, sourceGeneration, snapshot: { done: true }, catchup: { done: true }, expectedCount, checksum: cursor.checksum };
 }
