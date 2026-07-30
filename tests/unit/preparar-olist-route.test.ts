@@ -53,7 +53,7 @@ describe('cron preparar-olist', () => {
 
     const response = await GET(request());
 
-    expect(await response.json()).toEqual({ orgs: 0, prepared: 0, failed: 0 });
+    expect(await response.json()).toEqual({ orgs: 0, ready: 0, pending: 0, blocked: 0, stale: 0, failed: 0 });
     expect(candidates).not.toHaveBeenCalled();
     expect(prepare).not.toHaveBeenCalled();
     expect(heartbeat).not.toHaveBeenCalled();
