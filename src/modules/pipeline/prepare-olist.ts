@@ -16,6 +16,13 @@ const LEASE_TTL_MS = 270_000;
 const INITIAL_CAP = 1_000;
 type Facts = { expectedCount: number; checksum: string; dailyChecksum: string; channelChecksum: string };
 
+export function applyVerificationResult(cursor: PreparationCursor, phase: 'verify1' | 'verify2', evidence: Facts, remoteTotal: number): PreparationCursor {
+  if (remoteTotal !== evidence.expectedCount) { cursor.progress = null; cursor.reason = 'verification_count_mismatch'; return cursor; }
+  if (phase === 'verify1') { cursor.verify1 = { done: true, ...evidence }; cursor.stage = 'verify2'; delete cursor.reason; return cursor; }
+  if (!cursor.verify1 || JSON.stringify(cursor.verify1) !== JSON.stringify({ done: true, ...evidence })) { cursor.verify1 = { done: true, ...evidence }; cursor.verify2 = null; cursor.progress = null; cursor.stage = 'verify2'; cursor.reason = 'verification_unstable'; return cursor; }
+  cursor.verify2 = { done: true, ...evidence }; cursor.stage = 'details'; delete cursor.reason; return cursor;
+}
+
 export function preparationWindow(capturedAt: string): { from: string; to: string; catchUpFrom: string } {
   const captured = new Date(capturedAt); if (Number.isNaN(captured.getTime())) throw new Error('prepare_database_clock_invalid');
   const to = new Date(Date.UTC(captured.getUTCFullYear(), captured.getUTCMonth(), captured.getUTCDate()));
@@ -135,10 +142,7 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
       const phase = cursor.stage; const verified = await fetchPhase(source, active, cursor, phase, deadlineAt, options.maxOrders ?? INITIAL_CAP); cursor = verified.cursor; active = verified.lease;
       if (verified.yielded || cursor.stage === 'blocked') { if (cursor.stage === 'blocked' && !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
       const evidence = await facts(source, cursor);
-      if (verified.remoteTotal !== evidence.expectedCount) { cursor.progress = null; cursor.reason = 'verification_count_mismatch'; }
-      else if (phase === 'verify1') { cursor.verify1 = { done: true, ...evidence }; cursor.stage = 'verify2'; delete cursor.reason; }
-      else if (!cursor.verify1 || JSON.stringify(cursor.verify1) !== JSON.stringify({ done: true, ...evidence })) { cursor.verify1 = { done: true, ...evidence }; cursor.verify2 = null; cursor.progress = null; cursor.stage = 'verify2'; cursor.reason = 'verification_unstable'; }
-      else { cursor.verify2 = { done: true, ...evidence }; cursor.stage = 'details'; delete cursor.reason; }
+      applyVerificationResult(cursor, phase, evidence, verified.remoteTotal ?? -1);
       if (!await save(active, cursor)) throw new Error('prepare_lease_lost'); if (!await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window);
     }
     if (cursor.stage === 'details') {

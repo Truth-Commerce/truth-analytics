@@ -12,9 +12,14 @@ vi.mock('@/modules/providers/registry', () => ({ getErpDataProvider: () => ({ fe
 vi.mock('@/modules/pipeline/steps/enrich-orders', () => ({ enrichOrders: vi.fn() }));
 vi.mock('@/modules/pipeline/order-reconciliation', () => ({ reconcileOrderReadiness: vi.fn() }));
 
-import { preparationWindow } from '@/modules/pipeline/prepare-olist';
+import { applyVerificationResult, preparationWindow } from '@/modules/pipeline/prepare-olist';
 
 describe('Olist shadow preparation window', () => {
+  const verificationCursor = () => ({ version: 1 as const, stage: 'verify2' as const, sourceGeneration: 1, accountFingerprint: 'a'.repeat(64), window: { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' }, catchUpFrom: '2026-01-02T01:00:00.000Z', snapshot: { done: true }, catchup: { done: true, completedAt: '2026-01-02T01:00:00.000Z' }, verify1: { done: true as const, expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, verify2: null, progress: null });
+  const evidence = { expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) };
+  it('retries verification when remote count diverges', () => expect(applyVerificationResult(verificationCursor(), 'verify2', evidence, 2)).toMatchObject({ stage: 'verify2', reason: 'verification_count_mismatch' }));
+  it('promotes divergent verify2 evidence for a retry', () => expect(applyVerificationResult(verificationCursor(), 'verify2', { ...evidence, checksum: 'd'.repeat(32) }, 1)).toMatchObject({ stage: 'verify2', reason: 'verification_unstable' }));
+  it('advances matching verify2 evidence to details without stale reason', () => expect(applyVerificationResult(verificationCursor(), 'verify2', evidence, 1)).toMatchObject({ stage: 'details', reason: undefined }));
   beforeEach(() => {
     vi.clearAllMocks();
     execute.mockResolvedValue([{ now: '2026-07-30T19:42:10.123Z' }]);
