@@ -61,7 +61,9 @@ describe.skipIf(!url)('sync incremental Olist', () => {
       },
     } as ErpDataProvider);
     const { sincronizarPedidosDaOrg } = await import('@/modules/pipeline/sync-pedidos');
-    await expect(sincronizarPedidosDaOrg(source(), now)).resolves.toMatchObject({ incompleto: undefined });
+    await expect(sincronizarPedidosDaOrg(source(), now)).resolves.toMatchObject({
+      enriquecimento: { incompleto: false },
+    });
     expect(requests).toEqual([{ updatedAfter: new Date(watermark.getTime() - 5 * 60_000) }]);
     const [fresh] = await db.select({ last: connections.last_sync_at }).from(connections)
       .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'olist'), eq(connections.data_generation, 3)));

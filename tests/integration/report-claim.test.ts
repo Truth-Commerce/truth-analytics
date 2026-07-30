@@ -105,14 +105,14 @@ describe.skipIf(!url)('claimQueuedReport — integração', () => {
     const { getReportById } = await import('@/modules/reports/report.repository');
     const [queued, running, partial, unknown, invalidGeneration] = await tdb.insert(reports).values([
       { org_id: noSourceOrgId, status: 'queued', periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
-      { org_id: noSourceOrgId, status: 'running', periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
+      { org_id: inactiveOrgId, status: 'running', periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
       { org_id: noSourceOrgId, status: 'done', source_provider: 'olist', periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
       { org_id: noSourceOrgId, status: 'done', source_provider: 'desconhecido', source_generation: 4, periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
       { org_id: noSourceOrgId, status: 'done', source_provider: 'olist', source_generation: 0, periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
     ]).returning({ id: reports.id });
 
-    for (const report of [queued, running, partial, unknown, invalidGeneration]) {
-      await expect(getReportById(report.id, noSourceOrgId)).resolves.toMatchObject({
+    for (const [report, expectedOrgId] of [[queued, noSourceOrgId], [running, inactiveOrgId], [partial, noSourceOrgId], [unknown, noSourceOrgId], [invalidGeneration, noSourceOrgId]] as const) {
+      await expect(getReportById(report.id, expectedOrgId)).resolves.toMatchObject({
         sourceProvider: null,
         sourceGeneration: null,
       });
