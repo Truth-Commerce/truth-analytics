@@ -1,0 +1,29 @@
+{
+  "itens": [
+    {
+      "id": 6201,
+      "situacao": 3,
+      "dataCriacao": "2026-07-01T10:30:00.000Z",
+      "valor": "199.90",
+      "ecommerce": {
+        "id": 12,
+        "canalVenda": "Mercado Livre",
+        "nome": "Loja ML",
+        "numeroPedidoEcommerce": "ML-6201",
+        "numeroPedidoCanalVenda": "CANAL-6201"
+      },
+      "origemPedido": 0,
+      "extraOficial": { "aceito": true }
+    },
+    {
+      "id": "6202",
+      "situacao": "1",
+      "dataCriacao": "2026-07-02T10:30:00.000Z",
+      "valor": "50.00",
+      "ecommerce": { "nome": "Loja Shopee" },
+      "origemPedido": 0
+    }
+  ],
+  "paginacao": { "limit": 2, "offset": 0, "total": 3 },
+  "campoFuturo": "tolerado"
+}

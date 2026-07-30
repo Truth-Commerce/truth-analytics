@@ -1,0 +1,16 @@
+{
+  "id": 6201,
+  "itens": [
+    {
+      "produto": { "id": 1001, "sku": "SKU-1", "descricao": "Produto 1" },
+      "quantidade": 2,
+      "valorUnitario": 49.95
+    }
+  ],
+  "valorFrete": 10,
+  "ecommerce": { "canalVenda": "Mercado Livre", "nome": "Loja ML" },
+  "intermediador": { "nome": "Ignorado quando ecommerce existe" },
+  "cliente": { "nome": "Nao deve ser lido", "documento": "000" },
+  "endereco": { "cidade": "Nao deve ser lido" },
+  "campoFuturo": true
+}
