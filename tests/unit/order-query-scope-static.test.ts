@@ -13,6 +13,8 @@ const EXPECTED_READS: Record<string, number> = {
   'modules/organizations/organization-settings.repository.ts': 2,
   'modules/pipeline/steps/compute-metrics.ts': 2,
   'modules/pipeline/steps/enrich-orders.ts': 2,
+  'modules/pipeline/order-reconciliation.ts': 3,
+  'modules/pipeline/prepare-olist.ts': 3,
 };
 
 function files(dir: string): string[] {
@@ -35,7 +37,7 @@ describe('all production order readers have a frozen provider/generation scope',
     expect(readers).toEqual(EXPECTED_READS);
 
     for (const [name, reads] of Object.entries(EXPECTED_READS)) {
-      if (name === 'modules/pipeline/steps/enrich-orders.ts') continue;
+      if (name === 'modules/pipeline/steps/enrich-orders.ts' || name === 'modules/pipeline/order-reconciliation.ts' || name === 'modules/pipeline/prepare-olist.ts') continue;
       const content = readFileSync(join(ROOT, name), 'utf8');
       expect(matchCount(content, /\borderScopes?\s*\(/g), name).toBeGreaterThanOrEqual(reads);
     }

@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import type { ErpProviderId } from '@/modules/providers/types';
 
-export type SyncResource = 'orders_list' | 'order_details' | 'stock';
+export type SyncResource = 'orders_list' | 'order_details' | 'stock' | 'orders_prepare';
 export type SyncSource = { orgId: string; provider: ErpProviderId; sourceGeneration: number; accountFingerprint: string | null };
 export type SyncLease = SyncSource & {
   resource: SyncResource;
@@ -106,6 +106,23 @@ export function createSyncStateRepository(client: SqlExecutor = db) {
       `));
       return result.length === 1;
     },
+    /** Releases a fenced lease without publishing success/failure, preserving resumable state. */
+    async yieldSyncLease(input: SyncLease): Promise<boolean> {
+      const result = rows(await client.execute(sql`
+        UPDATE connection_sync_state SET lease_token = NULL, lease_expires_at = NULL, updated_at = clock_timestamp()
+        WHERE ${ownerPredicate(input)} RETURNING id
+      `));
+      return result.length === 1;
+    },
+    async savePreparationCursor(input: SyncLease & { cursor: unknown }): Promise<boolean> {
+      if (input.resource !== 'orders_prepare') return false;
+      const serializedCursor = serializeCursor(input.cursor);
+      const result = rows(await client.execute(sql`
+        UPDATE connection_sync_state SET cursor=${serializedCursor}::jsonb, updated_at=clock_timestamp()
+        WHERE ${ownerPredicate(input)} RETURNING id
+      `));
+      return result.length === 1;
+    },
     async failSyncLease(input: SyncLease & { errorCode: string }): Promise<boolean> {
       const result = rows(await client.execute(sql`
         UPDATE connection_sync_state SET lease_token = NULL, lease_expires_at = NULL, failed_at = clock_timestamp(), updated_at = clock_timestamp(), last_error_code = ${input.errorCode}
@@ -121,7 +138,9 @@ export const acquireSyncLease = repository.acquireSyncLease;
 export const getSyncLeaseRemainingMs = repository.getSyncLeaseRemainingMs;
 export const renewSyncLease = repository.renewSyncLease;
 export const advanceSyncCursor = repository.advanceSyncCursor;
+export const savePreparationCursor = repository.savePreparationCursor;
 export const completeSyncLease = repository.completeSyncLease;
+export const yieldSyncLease = repository.yieldSyncLease;
 export const failSyncLease = repository.failSyncLease;
 
 function iso(value: unknown): string | null {
@@ -142,4 +161,66 @@ export function parseOrdersCursor(value: unknown, sourceGeneration?: number): Ol
   const total = cursor.total === null ? null : nonNegativeInteger(cursor.total);
   if (!pass || !from || !to || !updatedAfter || offset === null || generation === null || total === null && cursor.total !== null || (sourceGeneration !== undefined && generation !== sourceGeneration)) return null;
   return { pass, from, to, updatedAfter, offset, total, sourceGeneration: generation };
+}
+
+export type PreparationPhase = 'snapshot' | 'catchup' | 'verify1' | 'verify2' | 'details' | 'ready' | 'blocked';
+export type PreparationProgress = { phaseKey: PreparationPhase; cycleId: string; offset: number; total: number | null };
+export type PreparationCursor = {
+  version: 1;
+  stage: PreparationPhase;
+  sourceGeneration: number;
+  accountFingerprint: string;
+  window: { from: string; to: string };
+  catchUpFrom: string;
+  snapshot: { done: boolean };
+  catchup: { done: boolean; completedAt: string | null };
+  verify1: PreparationVerification | null;
+  verify2: PreparationVerification | null;
+  progress: PreparationProgress | null;
+  reason?: string;
+};
+export type PreparationVerification = { done: true; expectedCount: number; checksum: string; dailyChecksum: string; channelChecksum: string };
+
+/** Versioned readiness state: any malformed persisted shape explicitly resets preparation. */
+export function parsePreparationCursor(value: unknown, sourceGeneration: number, accountFingerprint: string): PreparationCursor | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const cursor = value as Record<string, unknown>;
+  const snapshot = cursor.snapshot as { done?: unknown } | undefined;
+  const catchup = cursor.catchup as { done?: unknown; completedAt?: unknown } | undefined;
+  const generation = positiveInteger(cursor.sourceGeneration);
+  const fingerprint = typeof cursor.accountFingerprint === 'string' ? cursor.accountFingerprint : null;
+  const window = cursor.window as { from?: unknown; to?: unknown } | undefined;
+  const from = iso(window?.from); const to = iso(window?.to); const catchUpFrom = iso(cursor.catchUpFrom);
+  const catchupCompletedAt = catchup?.completedAt === null ? null : iso(catchup?.completedAt);
+  const digest = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{32}$/i.test(value);
+  const verify = (value: unknown): PreparationVerification | null => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const entry = value as Record<string, unknown>; const expectedCount = nonNegativeInteger(entry.expectedCount);
+    if (entry.done !== true || expectedCount === null || !digest(entry.checksum) || !digest(entry.dailyChecksum) || !digest(entry.channelChecksum)) return null;
+    return { done: true, expectedCount, checksum: entry.checksum, dailyChecksum: entry.dailyChecksum, channelChecksum: entry.channelChecksum };
+  };
+  const verify1 = cursor.verify1 === null ? null : verify(cursor.verify1); const verify2 = cursor.verify2 === null ? null : verify(cursor.verify2);
+  const phases: PreparationPhase[] = ['snapshot', 'catchup', 'verify1', 'verify2', 'details', 'ready', 'blocked'];
+  const stage = phases.includes(cursor.stage as PreparationPhase) ? cursor.stage as PreparationPhase : null;
+  const rawProgress = cursor.progress;
+  let progress: PreparationProgress | null = null;
+  if (rawProgress !== null && rawProgress !== undefined) {
+    if (!rawProgress || typeof rawProgress !== 'object' || Array.isArray(rawProgress)) return null;
+    const p = rawProgress as Record<string, unknown>; const phaseKey = phases.includes(p.phaseKey as PreparationPhase) ? p.phaseKey as PreparationPhase : null;
+    const offset = nonNegativeInteger(p.offset); const total = p.total === null ? null : nonNegativeInteger(p.total);
+    if (!phaseKey || typeof p.cycleId !== 'string' || p.cycleId.length < 1 || offset === null || (total === null && p.total !== null) || (total !== null && offset > total)) return null;
+    progress = { phaseKey, cycleId: p.cycleId, offset, total };
+  }
+  if (cursor.version !== 1 || !stage || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(to) || typeof snapshot?.done !== 'boolean' || typeof catchup?.done !== 'boolean' || (catchupCompletedAt === null && catchup?.completedAt !== null) || (cursor.verify1 !== null && !verify1) || (cursor.verify2 !== null && !verify2)) return null;
+  if (!['snapshot', 'blocked'].includes(stage) && snapshot.done !== true) return null;
+  if (!['snapshot', 'catchup', 'blocked'].includes(stage) && (catchup.done !== true || !catchupCompletedAt)) return null;
+  if (catchup.done === false && catchupCompletedAt !== null) return null;
+  if (stage === 'verify2' && !verify1) return null;
+  if (stage === 'details' && (!verify1 || !verify2 || JSON.stringify(verify1) !== JSON.stringify(verify2))) return null;
+  if (stage === 'ready' && (progress !== null || typeof cursor.reason === 'string')) return null;
+  if (progress && !['snapshot', 'catchup', 'verify1', 'verify2', 'blocked'].includes(stage)) return null;
+  if (progress && stage !== 'blocked' && progress.phaseKey !== stage) return null;
+  if (stage === 'blocked' && typeof cursor.reason !== 'string') return null;
+  if (stage === 'ready' && (!verify1 || !verify2 || verify1.expectedCount !== verify2.expectedCount || verify1.checksum !== verify2.checksum || verify1.dailyChecksum !== verify2.dailyChecksum || verify1.channelChecksum !== verify2.channelChecksum)) return null;
+  return { version: 1, stage, sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: snapshot.done }, catchup: { done: catchup.done, completedAt: catchupCompletedAt }, verify1, verify2, ...(rawProgress === undefined ? {} : { progress }), ...(typeof cursor.reason === 'string' ? { reason: cursor.reason } : {}) } as PreparationCursor;
 }

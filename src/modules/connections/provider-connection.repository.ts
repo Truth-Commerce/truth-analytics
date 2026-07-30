@@ -10,7 +10,7 @@ import {
 } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { connections, organizations } from '@/db/schema';
+import { connectionSyncState, connections, organizations } from '@/db/schema';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import {
   decryptConnectionSecret,
@@ -18,6 +18,7 @@ import {
 } from '@/modules/connections/connection-secrets';
 import type { ErpProviderId, OAuthTokens } from '@/modules/providers/types';
 import type { ErpDataSource } from '@/modules/providers/data.types';
+import { parsePreparationCursor } from '@/modules/connections/sync-state.repository';
 
 export type ProviderConnectionSummary = {
   provider: ErpProviderId;
@@ -319,6 +320,15 @@ export async function touchLastSyncAtForSource(source: ErpDataSource, quando: Da
     eq(connections.data_generation, source.sourceGeneration),
   )).returning({ id: connections.id });
   return updated.length === 1;
+}
+
+/** Frozen, allowlisted Olist sources awaiting shadow preparation. */
+export type FrozenOlistSource = ErpDataSource & { accountFingerprint: string };
+export async function listOlistConnectionsPendingPreparation(input: { orgIds: string[]; limit: number }): Promise<FrozenOlistSource[]> {
+  if (!input.orgIds.length) return [];
+  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 3) throw new Error('olist_preparation_limit_invalid');
+  const rows = await db.select({ orgId: connections.org_id, sourceGeneration: connections.data_generation, accountFingerprint: connections.provider_account_fingerprint, stateFingerprint: connectionSyncState.account_fingerprint, cursor: connectionSyncState.cursor }).from(connections).innerJoin(organizations, eq(organizations.id, connections.org_id)).leftJoin(connectionSyncState, and(eq(connectionSyncState.org_id, connections.org_id), eq(connectionSyncState.provider, 'olist'), eq(connectionSyncState.resource, 'orders_prepare'), eq(connectionSyncState.source_generation, connections.data_generation))).where(and(eq(connections.provider, 'olist'), inArray(connections.org_id, input.orgIds), inArray(connections.status, ['configurado', 'ok']), eq(organizations.status, 'active'), isNotNull(connections.access_token), isNotNull(connections.refresh_token), isNotNull(connections.provider_account_fingerprint))).orderBy(sql`${connectionSyncState.updated_at} ASC NULLS FIRST`);
+  return rows.filter((row) => row.accountFingerprint && !(row.stateFingerprint === row.accountFingerprint && parsePreparationCursor(row.cursor, row.sourceGeneration, row.accountFingerprint)?.stage === 'ready')).slice(0, input.limit).map((row) => ({ orgId: row.orgId, provider: 'olist' as const, sourceGeneration: row.sourceGeneration, accountFingerprint: row.accountFingerprint! }));
 }
 
 /** Reads freshness from the same provider/generation fence used for publishing it. */

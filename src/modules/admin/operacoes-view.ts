@@ -30,6 +30,7 @@ type CadenciaRota = { tipo: TipoCadencia; toleranciaMs: number; label: string };
 
 /** As 6 rotas que chamam `registrarHeartbeat` hoje (api/cron/*\/route.ts). */
 export const CADENCIA_POR_ROTA: Record<string, CadenciaRota> = {
+  'preparar-olist': { tipo: 'bihorario', toleranciaMs: TOLERANCIA_BIHORARIA_MS, label: 'Preparar Olist shadow (a cada 2h)' },
   'renovar-conexoes': {
     tipo: 'bihorario',
     toleranciaMs: TOLERANCIA_BIHORARIA_MS,

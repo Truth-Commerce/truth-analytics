@@ -22,10 +22,11 @@ function hb(rota: string, horasAtras: number, overrides: Partial<CronHeartbeatRe
   };
 }
 
-describe('CADENCIA_POR_ROTA — mapa de cadência conhece as 7 rotas registradas', () => {
-  it('tem as 5 rotas diárias/semanal + watchdog + renovação Olist', () => {
+describe('CADENCIA_POR_ROTA — mapa de cadência conhece as 8 rotas registradas', () => {
+  it('tem as 5 rotas diárias/semanal + watchdog + duas rotas Olist biorárias', () => {
     expect(Object.keys(CADENCIA_POR_ROTA).sort()).toEqual(
       [
+        'preparar-olist',
         'sincronizar-pedidos',
         'sincronizar-estoque',
         'gerar-relatorios',
@@ -41,6 +42,14 @@ describe('CADENCIA_POR_ROTA — mapa de cadência conhece as 7 rotas registradas
     expect(CADENCIA_POR_ROTA['renovar-conexoes']).toMatchObject({
       tipo: 'bihorario',
       toleranciaMs: 150 * MINUTO_MS,
+    });
+  });
+
+  it('preparar-olist usa cadência biorária, tolerância de 150 minutos e label específico', () => {
+    expect(CADENCIA_POR_ROTA['preparar-olist']).toEqual({
+      tipo: 'bihorario',
+      toleranciaMs: 150 * MINUTO_MS,
+      label: 'Preparar Olist shadow (a cada 2h)',
     });
   });
 });
@@ -101,13 +110,13 @@ describe('statusDosCrons — frescor por rota (puro)', () => {
     expect(status.ok).toBeNull();
   });
 
-  it('array vazio ainda retorna as 7 rotas do mapa', () => {
-    expect(statusDosCrons([], AGORA)).toHaveLength(7);
+  it('array vazio ainda retorna as 8 rotas do mapa', () => {
+    expect(statusDosCrons([], AGORA)).toHaveLength(8);
   });
 
   it('heartbeat de rota fora do mapa é ignorado (nunca lança, não aparece)', () => {
     const status = statusDosCrons([hb('rota-legada-desconhecida', 0)], AGORA);
-    expect(status).toHaveLength(7);
+    expect(status).toHaveLength(8);
     expect(status.find((s) => s.rota === 'rota-legada-desconhecida')).toBeUndefined();
   });
 

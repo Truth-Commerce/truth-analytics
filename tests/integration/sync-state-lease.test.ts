@@ -12,6 +12,7 @@ import {
   failSyncLease,
   getSyncLeaseRemainingMs,
   renewSyncLease,
+  yieldSyncLease,
 } from '@/modules/connections/sync-state.repository';
 
 const url = process.env.DATABASE_URL_TEST;
@@ -109,5 +110,27 @@ describe.skipIf(!url)('sync state lease — integração PostgreSQL', () => {
     await sql`UPDATE connection_sync_state SET lease_expires_at = clock_timestamp() - interval '1 second' WHERE lease_token = ${expired!.token}`;
     expect(await completeSyncLease(expired!)).toBe(false);
     expect(await failSyncLease({ ...expired!, errorCode: 'late_worker' })).toBe(false);
+  });
+
+  it('cede lease sem publicar resultado e mantém fencing contra donos inválidos', async () => {
+    const owner = await acquireSyncLease({ source: source(), resource: 'orders_prepare', ttlMs: 270_000 });
+    expect(owner).not.toBeNull();
+    await advanceSyncCursor({ ...owner!, cursor: { stage: 'preparing' }, processedDelta: 7 });
+    await sql`UPDATE connection_sync_state SET succeeded_at=clock_timestamp(), failed_at=clock_timestamp() WHERE lease_token=${owner!.token}`;
+    expect(await yieldSyncLease(owner!)).toBe(true);
+    const [yielded] = await sql`SELECT cursor, succeeded_at, failed_at, lease_token, lease_expires_at FROM connection_sync_state WHERE org_id=${orgId} AND resource='orders_prepare'`;
+    expect(yielded).toMatchObject({ cursor: { stage: 'preparing' }, lease_token: null, lease_expires_at: null });
+    expect(yielded.succeeded_at).toBeTruthy(); expect(yielded.failed_at).toBeTruthy();
+
+    const active = await acquireSyncLease({ source: source(), resource: 'orders_prepare', ttlMs: 270_000 });
+    const [before] = await sql`SELECT cursor, lease_token, lease_expires_at FROM connection_sync_state WHERE lease_token=${active!.token}`;
+    expect(await yieldSyncLease({ ...active!, token: 'wrong-token' })).toBe(false);
+    expect(await yieldSyncLease({ ...active!, fencingVersion: active!.fencingVersion + 1n })).toBe(false);
+    const [afterInvalid] = await sql`SELECT cursor, lease_token, lease_expires_at FROM connection_sync_state WHERE lease_token=${active!.token}`;
+    expect(afterInvalid).toEqual(before);
+    await sql`UPDATE connection_sync_state SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE lease_token=${active!.token}`;
+    expect(await yieldSyncLease(active!)).toBe(false);
+    const [expired] = await sql`SELECT cursor, lease_token, lease_expires_at FROM connection_sync_state WHERE org_id=${orgId} AND resource='orders_prepare'`;
+    expect(expired.cursor).toEqual(before.cursor); expect(expired.lease_token).toBe(active!.token); expect(expired.lease_expires_at).toBeTruthy();
   });
 });
