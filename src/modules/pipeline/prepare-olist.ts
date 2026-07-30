@@ -136,9 +136,9 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
       if (verified.yielded || cursor.stage === 'blocked') { if (cursor.stage === 'blocked' && !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
       const evidence = await facts(source, cursor);
       if (verified.remoteTotal !== evidence.expectedCount) { cursor.progress = null; cursor.reason = 'verification_count_mismatch'; }
-      else if (phase === 'verify1') { cursor.verify1 = { done: true, ...evidence }; cursor.stage = 'verify2'; }
+      else if (phase === 'verify1') { cursor.verify1 = { done: true, ...evidence }; cursor.stage = 'verify2'; delete cursor.reason; }
       else if (!cursor.verify1 || JSON.stringify(cursor.verify1) !== JSON.stringify({ done: true, ...evidence })) { cursor.verify1 = { done: true, ...evidence }; cursor.verify2 = null; cursor.progress = null; cursor.stage = 'verify2'; cursor.reason = 'verification_unstable'; }
-      else { cursor.verify2 = { done: true, ...evidence }; cursor.stage = 'details'; }
+      else { cursor.verify2 = { done: true, ...evidence }; cursor.stage = 'details'; delete cursor.reason; }
       if (!await save(active, cursor)) throw new Error('prepare_lease_lost'); if (!await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window);
     }
     if (cursor.stage === 'details') {
@@ -148,7 +148,7 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
       if (result.incompleto || result.quarentenados > 0) { if (result.quarentenados > 0) { cursor.stage = 'blocked'; cursor.reason = 'details_quarantined'; if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); } else { if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); } return outcome(cursor, window, result.quarentenados > 0 ? 'details_quarantined' : 'details_pending'); }
       const readiness = await reconcileOrderReadiness({ ...source, accountFingerprint: fingerprint });
       if (!readiness.ready) { cursor.stage = 'blocked'; cursor.reason = readiness.reasons[0] ?? 'reconciliation_failed'; if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
-      cursor.stage = 'ready';
+      cursor.stage = 'ready'; delete cursor.reason;
     }
     if (cursor.stage === 'ready') {
       const completedAt = cursor.catchup.completedAt; if (!completedAt || !await current(source, fingerprint)) throw new Error('prepare_source_stale');
