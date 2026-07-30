@@ -70,7 +70,9 @@ const schema = z
     if (!value) return [] as string[];
     const ids = value.split(',').map((id) => id.trim());
     if (ids.some((id) => !z.string().uuid().safeParse(id).success)) { ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'OLIST_DATA_SYNC_ORG_IDS deve conter UUIDs CSV' }); return z.NEVER; }
-    return [...new Set(ids)];
+    const unique = [...new Set(ids)];
+    if (unique.length > 50) { ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'OLIST_DATA_SYNC_ORG_IDS suporta no máximo 50 organizações' }); return z.NEVER; }
+    return unique;
   }),
   SENTRY_DSN: z.string().url().optional(),
   })
