@@ -19,7 +19,7 @@ describe('Olist shadow preparation window', () => {
   const evidence = { expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) };
   it('retries verification when remote count diverges', () => expect(applyVerificationResult(verificationCursor(), 'verify2', evidence, 2)).toMatchObject({ stage: 'verify2', reason: 'verification_count_mismatch' }));
   it('promotes divergent verify2 evidence for a retry', () => expect(applyVerificationResult(verificationCursor(), 'verify2', { ...evidence, checksum: 'd'.repeat(32) }, 1)).toMatchObject({ stage: 'verify2', reason: 'verification_unstable' }));
-  it('advances matching verify2 evidence to details without stale reason', () => expect(applyVerificationResult(verificationCursor(), 'verify2', evidence, 1)).toMatchObject({ stage: 'details', reason: undefined }));
+  it('advances matching verify2 evidence to details without stale reason', () => { const next = applyVerificationResult(verificationCursor(), 'verify2', evidence, 1); expect(next.stage).toBe('details'); expect(next).not.toHaveProperty('reason'); });
   beforeEach(() => {
     vi.clearAllMocks();
     execute.mockResolvedValue([{ now: '2026-07-30T19:42:10.123Z' }]);
