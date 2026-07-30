@@ -12,7 +12,7 @@ vi.mock('@/lib/env', async (importOriginal) => {
 
 import { db } from '@/db/client';
 import { connections, orders, organizations } from '@/db/schema';
-import { blingProvider } from '@/modules/providers/bling/provider';
+import { blingDataProvider } from '@/modules/providers/bling/provider';
 import type { RawOrder } from '@/modules/providers/types';
 
 const url = process.env.DATABASE_URL_TEST;
@@ -123,10 +123,23 @@ describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
       itens: [],
     };
     const fetchSpy = vi
-      .spyOn(blingProvider, 'fetchOrders')
-      .mockImplementation(async (oid, _periodo, onPage) => {
-        if (oid === orgId && onPage) await onPage([pedidoFake]);
-        return [];
+      .spyOn(blingDataProvider, 'fetchOrders')
+      .mockImplementation(async (oid, request, onPage) => {
+        if (oid === orgId) await onPage({
+          orders: [{
+            providerOrderId: pedidoFake.blingOrderId,
+            providerStatus: '',
+            canal: pedidoFake.canal,
+            data: pedidoFake.data,
+            valorTotal: pedidoFake.valorTotal,
+            frete: pedidoFake.frete,
+            itens: pedidoFake.itens,
+          }],
+          offset: request.offset,
+          nextOffset: request.offset + 1,
+          total: 1,
+          done: true,
+        });
       });
 
     try {
@@ -137,7 +150,9 @@ describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
       expect(result.processados).toBe(1);
 
       // Janela: inicio = agora - 2 dias, fim = agora
-      const periodo = fetchSpy.mock.calls[0][1];
+      const request = fetchSpy.mock.calls[0][1];
+      if (request.mode !== 'created') throw new Error('expected_created_request');
+      const periodo = request.periodo;
       expect(periodo.fim.getTime()).toBe(agora.getTime());
       expect(periodo.inicio.getTime()).toBe(agora.getTime() - JANELA_SYNC_DIAS * 86_400_000);
 

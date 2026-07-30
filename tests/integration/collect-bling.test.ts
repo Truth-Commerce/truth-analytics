@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
@@ -18,13 +18,19 @@ function mockFetchOrdersOnce(
   pedidos: RawOrder[],
 ) {
   return vi
-    .spyOn(provider.blingProvider, 'fetchOrders')
-    .mockImplementationOnce(async (_orgId, _periodo, onPage) => {
-      if (onPage) {
-        await onPage(pedidos);
-        return [];
-      }
-      return pedidos;
+    .spyOn(provider.blingDataProvider, 'fetchOrders')
+    .mockImplementationOnce(async (_orgId, _request, onPage) => {
+      await onPage({
+        orders: pedidos.map(({ blingOrderId, ...order }) => ({
+          ...order,
+          providerOrderId: blingOrderId,
+          providerStatus: '',
+        })),
+        offset: 0,
+        nextOffset: pedidos.length,
+        total: pedidos.length,
+        done: true,
+      });
     });
 }
 
@@ -82,6 +88,10 @@ describe.skipIf(!url)('collect-bling — integração', () => {
       .values({ name: `ta-test-collect-iso-${RUN}`, status: 'active' })
       .returning({ id: organizations.id });
     orgId2 = o2.id;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   afterAll(async () => {
@@ -309,5 +319,72 @@ describe.skipIf(!url)('collect-bling — integração', () => {
       .where(eq(orders.org_id, orgId));
     expect(rowsOrg1.length).toBe(2);
     expect(rowsOrg1.every((r) => r.org_id === orgId)).toBe(true);
+  });
+
+  it('resolve e rejeita geração Bling incompatível com a unique legada', async () => {
+    const provider = await import('@/modules/providers/bling/provider');
+    const generatedOrder = {
+      ...MOCK_ORDERS[0],
+      blingOrderId: `bling-order-${RUN}-generation-4`,
+    };
+    await tdb.update(connections).set({ data_generation: 4 }).where(and(
+      eq(connections.org_id, orgId),
+      eq(connections.provider, 'bling'),
+    ));
+    try {
+      const fetchOrders = mockFetchOrdersOnce(provider, [generatedOrder]);
+      const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
+      await expect(collectBlingOrders(orgId, PERIODO)).rejects.toThrow('bling_source_generation_invalid');
+      expect(fetchOrders).not.toHaveBeenCalled();
+      const rows = await tdb.select().from(orders).where(and(
+        eq(orders.org_id, orgId),
+        eq(orders.provider_order_id, generatedOrder.blingOrderId),
+      ));
+      expect(rows).toHaveLength(0);
+    } finally {
+      await tdb.update(connections).set({ data_generation: 1 }).where(and(
+        eq(connections.org_id, orgId),
+        eq(connections.provider, 'bling'),
+      ));
+    }
+  });
+
+  it('atualiza last_sync_at somente após coleta bem-sucedida', async () => {
+    const provider = await import('@/modules/providers/bling/provider');
+    const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
+    await tdb.update(connections).set({ last_sync_at: null }).where(and(
+      eq(connections.org_id, orgId),
+      eq(connections.provider, 'bling'),
+    ));
+
+    mockFetchOrdersOnce(provider, []);
+    await collectBlingOrders(orgId, PERIODO);
+    let [connection] = await tdb.select({ lastSyncAt: connections.last_sync_at }).from(connections).where(and(
+      eq(connections.org_id, orgId),
+      eq(connections.provider, 'bling'),
+    ));
+    expect(connection.lastSyncAt).not.toBeNull();
+
+    await tdb.update(connections).set({ last_sync_at: null }).where(and(
+      eq(connections.org_id, orgId),
+      eq(connections.provider, 'bling'),
+    ));
+    vi.spyOn(provider.blingDataProvider, 'fetchOrders').mockRejectedValueOnce(new Error('bling_indisponivel'));
+    await expect(collectBlingOrders(orgId, PERIODO)).rejects.toThrow('bling_indisponivel');
+    [connection] = await tdb.select({ lastSyncAt: connections.last_sync_at }).from(connections).where(and(
+      eq(connections.org_id, orgId),
+      eq(connections.provider, 'bling'),
+    ));
+    expect(connection.lastSyncAt).toBeNull();
+  });
+
+  it('não derruba coleta concluída quando touchLastSyncAt falha', async () => {
+    const provider = await import('@/modules/providers/bling/provider');
+    const connectionRepository = await import('@/modules/connections/connection.repository');
+    mockFetchOrdersOnce(provider, []);
+    const touch = vi.spyOn(connectionRepository, 'touchLastSyncAt').mockRejectedValueOnce(new Error('metadata_write_failed'));
+    const { collectBlingOrders } = await import('@/modules/pipeline/steps/collect-bling');
+    await expect(collectBlingOrders(orgId, PERIODO)).resolves.toMatchObject({ processados: 0, total: 0 });
+    expect(touch).toHaveBeenCalledWith(orgId);
   });
 });
