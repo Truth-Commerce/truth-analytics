@@ -84,7 +84,7 @@ async function fetchPhase(source: ErpDataSource, lease: SyncLease, cursor: Prepa
   const provider = getErpDataProvider('olist'); const progress = cursor.progress?.phaseKey === phase ? cursor.progress : null;
   let offset = progress?.offset ?? 0; const cycleId = progress?.cycleId ?? crypto.randomUUID(); let active = lease;
   while (offset < cap) {
-    if (Date.now() + WORST_CASE_OLIST_REQUEST_MS > deadlineAt) { cursor.progress = { phaseKey: phase, cycleId, offset, total: progress?.total ?? null }; await save(active, cursor); await yieldSyncLease(active); return { cursor, lease: active, yielded: true }; }
+    if (Date.now() + WORST_CASE_OLIST_REQUEST_MS > deadlineAt) { cursor.progress = { phaseKey: phase, cycleId, offset, total: progress?.total ?? null }; if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return { cursor, lease: active, yielded: true }; }
     const renewed = await renew(active); if (!renewed) throw new Error('prepare_lease_lost'); active = renewed;
     if (!await current(source, cursor.accountFingerprint)) throw new Error('prepare_source_stale');
     let page: OrderPage | undefined;

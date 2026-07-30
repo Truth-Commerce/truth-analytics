@@ -54,6 +54,12 @@ describe('Olist shadow preparation window', () => {
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { maxOrders: limit })).rejects.toThrow('prepare_olist_limit_invalid');
     expect(acquire).not.toHaveBeenCalled();
   });
+  it.each(['save', 'yield'] as const)('fails closed when deadline %s release fails', async (which) => {
+    if (which === 'save') save.mockResolvedValue(false); else yieldLease.mockResolvedValue(false);
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { deadlineAt: Date.now() })).resolves.toMatchObject({ stage: 'blocked', reason: 'prepare_failed' });
+    expect(fetchOrders).not.toHaveBeenCalled(); expect(fail).toHaveBeenCalled();
+  });
 
   it('fails closed and releases the outer lease when a remote page makes no progress', async () => {
     fetchOrders.mockImplementation(async (_org: string, _request: unknown, onPage: (page: unknown) => Promise<void>) => onPage({ orders: [], offset: 0, nextOffset: 0, total: 2, done: false }));
