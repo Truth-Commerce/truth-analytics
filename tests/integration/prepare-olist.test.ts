@@ -25,10 +25,10 @@ describe.skipIf(!url)('Olist prepare persistPage — PostgreSQL fence', () => {
     const [state] = await db.select().from(connectionSyncState).where(eq(connectionSyncState.org_id, orgId)); expect(state.cursor).toMatchObject({ progress: { offset: 1 } });
     await db.delete(orders).where(eq(orders.org_id, orgId));
     expect(await __test.persistPage({ ...lease!, token: 'wrong' }, source(), page, cursor())).toBe(false);
-    expect((await db.select().from(orders).where(eq(orders.org_id, orgId))).toHaveLength(0);
+    expect(await db.select().from(orders).where(eq(orders.org_id, orgId))).toHaveLength(0);
     expect(await __test.persistPage({ ...lease!, fencingVersion: lease!.fencingVersion + 1n }, source(), page, cursor())).toBe(false);
     await sql`UPDATE connection_sync_state SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=${state.id}`;
     expect(await __test.persistPage(lease!, source(), page, cursor())).toBe(false);
-    expect((await db.select().from(orders).where(eq(orders.org_id, orgId))).toHaveLength(0);
+    expect(await db.select().from(orders).where(eq(orders.org_id, orgId))).toHaveLength(0);
   });
 });
