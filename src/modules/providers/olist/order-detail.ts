@@ -9,7 +9,7 @@ const channelSchema = z.object({ canalVenda: z.string().nullable().optional(), n
 
 export const OlistOrderDetailSchema = z.object({
   itens: z.array(z.object({
-    produto: z.object({ id: z.union([z.string(), z.number()]), sku: z.string(), descricao: z.string() }).passthrough(),
+    produto: z.object({ id: z.union([z.string(), z.number()]).nullable().optional(), sku: z.string(), descricao: z.string() }).passthrough(),
     quantidade: finiteNumber,
     valorUnitario: finiteNumber,
   }).passthrough()),

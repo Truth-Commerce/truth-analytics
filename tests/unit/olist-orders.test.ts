@@ -35,6 +35,8 @@ describe('fetchOlistOrders', () => {
   it.each([
     [{ itens: [{ ...pageFixture.itens[0], id: undefined }], paginacao: pageFixture.paginacao }],
     [{ itens: [{ ...pageFixture.itens[0], dataCriacao: 'nao-e-data' }], paginacao: pageFixture.paginacao }],
+    [{ itens: [{ ...pageFixture.itens[0], dataCriacao: '0' }], paginacao: pageFixture.paginacao }],
+    [{ itens: [{ ...pageFixture.itens[0], dataCriacao: '2026-02-30T00:00:00Z' }], paginacao: pageFixture.paginacao }],
     [{ itens: [{ ...pageFixture.itens[0], valor: 'infinito' }], paginacao: pageFixture.paginacao }],
     [{ itens: pageFixture.itens, paginacao: { limit: 2, offset: 0 } }],
   ])('rejeita campos usados invalidos em vez de gravar valores corrompidos', async (payload) => {

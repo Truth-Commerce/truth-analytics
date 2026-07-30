@@ -27,6 +27,16 @@ describe('fetchOlistOrderDetail', () => {
     expect(fetchJson).toHaveBeenCalledWith(expect.objectContaining({ path: '/pedidos/a%2Fb' }));
   });
 
+  it('aceita produto.id anulavel do contrato oficial sem perder os campos usados', async () => {
+    fetchJson.mockResolvedValue({
+      ...detailFixture,
+      itens: [{ ...detailFixture.itens[0], produto: { ...detailFixture.itens[0].produto, id: null } }],
+    });
+    await expect(fetchOlistOrderDetail('org-1', '6201')).resolves.toMatchObject({
+      itens: [{ sku: 'SKU-1', nome: 'Produto 1', quantidade: 2, valor: 49.95 }],
+    });
+  });
+
   it.each([
     [{ ...detailFixture, itens: [{ ...detailFixture.itens[0], produto: { id: 1, descricao: 'Sem SKU' } }] }],
     [{ ...detailFixture, itens: [{ ...detailFixture.itens[0], quantidade: 'x' }] }],

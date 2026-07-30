@@ -30,9 +30,26 @@ function formatDateTime(date: Date): string {
 
 function invalidOrdersResponse(): never { throw new Error('olist_pedidos_resposta_invalida'); }
 
+function parseOlistCreationDate(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2})(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?)?$/.exec(value);
+  if (!match) invalidOrdersResponse();
+  const [, yearText, monthText, dayText, hourText = '0', minuteText = '0', secondText = '0', fraction = '', zone] = match;
+  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const milliseconds = fraction ? Number(fraction.slice(1).padEnd(3, '0')) : 0;
+  const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, second, milliseconds));
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day
+    || calendar.getUTCHours() !== hour || calendar.getUTCMinutes() !== minute || calendar.getUTCSeconds() !== second) {
+    invalidOrdersResponse();
+  }
+  if (!match[4]) return calendar;
+  const normalized = `${yearText}-${monthText}-${dayText}T${hourText}:${minuteText}:${secondText}${fraction}${zone ?? 'Z'}`;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) invalidOrdersResponse();
+  return parsed;
+}
+
 function mapOrder(order: z.infer<typeof OlistOrdersPageSchema>['itens'][number]): RawOrder {
-  const data = new Date(order.dataCriacao);
-  if (Number.isNaN(data.getTime())) invalidOrdersResponse();
+  const data = parseOlistCreationDate(order.dataCriacao);
   return {
     providerOrderId: String(order.id), providerStatus: String(order.situacao), canal: resolveOlistChannel(order),
     data, valorTotal: order.valor, frete: 0, itens: [],
