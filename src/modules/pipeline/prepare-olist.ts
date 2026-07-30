@@ -128,16 +128,18 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
     if (cursor.stage === 'snapshot' || cursor.stage === 'catchup') {
       const phase = cursor.stage; const loaded = await fetchPhase(source, active, cursor, phase, deadlineAt, options.maxOrders ?? INITIAL_CAP); cursor = loaded.cursor; active = loaded.lease;
       if (loaded.yielded || cursor.stage === 'blocked') { if (cursor.stage === 'blocked' && !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
+      if (!await yieldSyncLease(active)) throw new Error('prepare_lease_lost');
+      return outcome(cursor, window);
     }
     if (cursor.stage === 'verify1' || cursor.stage === 'verify2') {
       const phase = cursor.stage; const verified = await fetchPhase(source, active, cursor, phase, deadlineAt, options.maxOrders ?? INITIAL_CAP); cursor = verified.cursor; active = verified.lease;
       if (verified.yielded || cursor.stage === 'blocked') { if (cursor.stage === 'blocked' && !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
       const evidence = await facts(source, cursor);
-      if (verified.remoteTotal !== evidence.expectedCount) { cursor.stage = 'blocked'; cursor.reason = 'verification_count_mismatch'; }
+      if (verified.remoteTotal !== evidence.expectedCount) { cursor.progress = null; cursor.reason = 'verification_count_mismatch'; }
       else if (phase === 'verify1') { cursor.verify1 = { done: true, ...evidence }; cursor.stage = 'verify2'; }
-      else if (!cursor.verify1 || JSON.stringify(cursor.verify1) !== JSON.stringify({ done: true, ...evidence })) { cursor.stage = 'blocked'; cursor.reason = 'verification_unstable'; }
+      else if (!cursor.verify1 || JSON.stringify(cursor.verify1) !== JSON.stringify({ done: true, ...evidence })) { cursor.verify1 = { done: true, ...evidence }; cursor.verify2 = null; cursor.progress = null; cursor.stage = 'verify2'; cursor.reason = 'verification_unstable'; }
       else { cursor.verify2 = { done: true, ...evidence }; cursor.stage = 'details'; }
-      if (!await save(active, cursor)) throw new Error('prepare_lease_lost'); if (cursor.stage === 'blocked') { if (!await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
+      if (!await save(active, cursor)) throw new Error('prepare_lease_lost'); if (!await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window);
     }
     if (cursor.stage === 'details') {
       const beforeDetailsLease = await renew(active); if (!beforeDetailsLease) throw new Error('prepare_lease_lost'); active = beforeDetailsLease;
