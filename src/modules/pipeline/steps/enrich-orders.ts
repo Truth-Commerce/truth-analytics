@@ -19,7 +19,7 @@ const LEASE_TTL_MS = 270_000;
 const BLING_INTERVAL_MS = 340;
 const MAX_PERMANENT_ATTEMPTS = 5;
 
-export type EnrichOptions = { maxPedidos: number; prazoMs: number; periodo?: Periodo };
+export type EnrichOptions = { maxPedidos: number; prazoMs?: number; deadlineAt?: number; periodo?: Periodo };
 /** `quarentenados` is optional while Task 8 migrates existing orchestrator mocks. */
 export type EnrichResult = { enriquecidos: number; falhas: number; restantes: number; incompleto: boolean; quarentenados: number };
 type PendingOrder = { id: string; providerOrderId: string; enrichmentAttempts: number };
@@ -98,7 +98,7 @@ async function release(lease: SyncLease, code: string) { try { await failSyncLea
 /** Provider-aware enrichment for one frozen ERP data source. */
 export async function enrichOrders(source: ErpDataSource, opts: EnrichOptions): Promise<EnrichResult> {
   const log = createLogger({ orgId: source.orgId, provider: source.provider });
-  const deadlineAt = Date.now() + opts.prazoMs;
+  const deadlineAt = opts.deadlineAt ?? (Date.now() + (opts.prazoMs ?? 0));
   let enriquecidos = 0; let falhas = 0; let quarentenados = 0;
   let activeLease: SyncLease | null = null;
   try {

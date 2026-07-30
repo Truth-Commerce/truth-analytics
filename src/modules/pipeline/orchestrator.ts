@@ -14,7 +14,7 @@ import { analyzeWithIA } from '@/modules/pipeline/steps/analyze-ia';
 import { buildAnalysisContext } from '@/modules/pipeline/steps/analysis-context';
 import { finalize } from '@/modules/pipeline/steps/finalize';
 import { executarExtrasPosFinalize } from '@/modules/pipeline/steps/pos-finalize-extras';
-import { claimQueuedReport } from '@/modules/reports/report.repository';
+import { claimQueuedReport, markReportFailed } from '@/modules/reports/report.repository';
 import { touchLastSyncAtForSource } from '@/modules/connections/provider-connection.repository';
 import type { ReportEtapa } from '@/modules/reports/report.types';
 
@@ -23,7 +23,8 @@ import type { ReportEtapa } from '@/modules/reports/report.types';
  * cabe no maxDuration=300 junto com coleta, métricas e IA. O resto da fila fica
  * para o cron diário, que tem a execução inteira só para isso.
  */
-const ENRIQUECIMENTO_PIPELINE = { maxPedidos: 350, prazoMs: 120_000 } as const;
+const ENRIQUECIMENTO_PIPELINE_BLING = { maxPedidos: 350, prazoMs: 120_000 } as const;
+const ENRIQUECIMENTO_PIPELINE_OLIST = { maxPedidos: 100, prazoMs: 240_000 } as const;
 
 /** Limita o erro persistido a 2000 chars para legibilidade no painel. */
 function truncateErro(msg: string, maxLen = 2000): string {
@@ -60,6 +61,11 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     claim = await claimQueuedReport(reportId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // claimQueuedReport itself persists this one expected business failure.
+    // Any other claim error needs a queued-only CAS: return `failed` only if
+    // the report was really terminalized; otherwise it was claimed elsewhere
+    // and must propagate instead of reporting a false result.
+    if (message !== 'sem_conexao_erp' && !await markReportFailed(reportId, truncateErro(message))) throw err;
     const [failedReport] = await db.select({ orgId: reports.org_id }).from(reports).where(eq(reports.id, reportId)).limit(1);
     if (failedReport) {
       createLogger({ orgId: failedReport.orgId, reportId }).error('pipeline falhou', { erro: truncateErro(message) }, err);
@@ -82,8 +88,11 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     if (!plano) throw new Error('sem_plano');
     const orgName = org.name;
     // Coleta da fonte congelada ∥ mercado (allSettled: nenhuma promessa solta escreve depois do retorno).
+    const olistDeadlineAt = source.provider === 'olist'
+      ? Date.now() + ENRIQUECIMENTO_PIPELINE_OLIST.prazoMs
+      : undefined;
     const [ordersOutcome, marketOutcome] = await Promise.allSettled([
-      collectOrders(source, periodo),
+      collectOrders(source, periodo, olistDeadlineAt === undefined ? undefined : { deadlineAt: olistDeadlineAt }),
       collectMarket(orgId, reportId),
     ]);
 
@@ -109,9 +118,11 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     // a uma requisição por pedido. Enriquece o período do relatório dentro de um
     // orçamento que cabe no maxDuration; o que sobrar fica para o cron diário.
     // Best-effort: enrichOrders nunca lança (relatório com item parcial > nenhum).
+    const enrichmentBudget = source.provider === 'olist' ? ENRIQUECIMENTO_PIPELINE_OLIST : ENRIQUECIMENTO_PIPELINE_BLING;
     const enriquecimento = await enrichOrders(source, {
-      maxPedidos: ENRIQUECIMENTO_PIPELINE.maxPedidos,
-      prazoMs: ENRIQUECIMENTO_PIPELINE.prazoMs,
+      maxPedidos: enrichmentBudget.maxPedidos,
+      prazoMs: enrichmentBudget.prazoMs,
+      ...(olistDeadlineAt === undefined ? {} : { deadlineAt: olistDeadlineAt }),
       periodo,
     });
     if (enriquecimento.incompleto) {

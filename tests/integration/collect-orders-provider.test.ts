@@ -213,6 +213,30 @@ describe.skipIf(!url)('collect-orders provider-aware — integração', () => {
     })]);
   });
 
+  it('resumes an incremental cursor only for its exact watermark', async () => {
+    const registry = await import('@/modules/providers/registry');
+    const oldWatermark = '2024-01-20T10:00:00.000Z';
+    const newWatermark = new Date('2024-01-20T10:05:00.000Z');
+    const offsets: number[] = [];
+    const seeded = await acquireSyncLease({ source: { ...sourceB(), accountFingerprint: 'b'.repeat(64) }, resource: 'orders_list', ttlMs: 270_000 });
+    await sql`UPDATE connection_sync_state SET cursor=${JSON.stringify({ pass: 'updated', from: periodo.inicio.toISOString(), to: periodo.fim.toISOString(), updatedAfter: oldWatermark, offset: 7, total: 9, sourceGeneration: 1 })}::jsonb, lease_token=NULL, lease_expires_at=NULL WHERE lease_token=${seeded!.token}`;
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'olist', fetchOrderDetail: vi.fn(),
+      fetchOrders: async (_org, request, onPage) => {
+        offsets.push(request.offset);
+        await onPage({ orders: [], offset: request.offset, nextOffset: request.offset, total: request.offset, done: true });
+      },
+    });
+    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
+    await collectOrders(sourceB(), periodo, { updatedAfter: newWatermark });
+    expect(offsets).toEqual([0]);
+
+    const resumed = await acquireSyncLease({ source: { ...sourceB(), accountFingerprint: 'b'.repeat(64) }, resource: 'orders_list', ttlMs: 270_000 });
+    await sql`UPDATE connection_sync_state SET cursor=${JSON.stringify({ pass: 'updated', from: periodo.inicio.toISOString(), to: periodo.fim.toISOString(), updatedAfter: newWatermark.toISOString(), offset: 8, total: 9, sourceGeneration: 1 })}::jsonb, lease_token=NULL, lease_expires_at=NULL WHERE lease_token=${resumed!.token}`;
+    await collectOrders(sourceB(), periodo, { updatedAfter: newWatermark });
+    expect(offsets).toEqual([0, 8]);
+  });
+
   it('releases the lease after provider and persistence failures', async () => {
     const registry = await import('@/modules/providers/registry');
     const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');

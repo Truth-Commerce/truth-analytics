@@ -120,11 +120,11 @@ async function releaseOrdersLease(lease: SyncLease, errorCode: string): Promise<
   }
 }
 
-export async function collectOrders(source: ErpDataSource, periodo: Periodo, options: { deadlineMs?: number; startOffset?: number; updatedAfter?: Date } = {}): Promise<CollectResult & { expectedTotal?: number; incompleto?: boolean }> {
+export async function collectOrders(source: ErpDataSource, periodo: Periodo, options: { deadlineMs?: number; deadlineAt?: number; startOffset?: number; updatedAfter?: Date } = {}): Promise<CollectResult & { expectedTotal?: number; incompleto?: boolean }> {
   if (options.startOffset !== undefined && (!Number.isSafeInteger(options.startOffset) || options.startOffset < 0)) {
     throw new Error('orders_start_offset_invalid');
   }
-  const deadlineAt = Date.now() + (options.deadlineMs ?? 240_000);
+  const deadlineAt = options.deadlineAt ?? (Date.now() + (options.deadlineMs ?? 240_000));
   const provider = getErpDataProvider(source.provider);
   if (source.provider === 'bling') {
     if (source.sourceGeneration !== 1) throw new Error('bling_source_generation_invalid');
@@ -138,8 +138,10 @@ export async function collectOrders(source: ErpDataSource, periodo: Periodo, opt
   if (!acquired) return { processados: 0, total: 0, incompleto: true };
   const savedCursor = parseOrdersCursor(acquired.cursor, source.sourceGeneration);
   const incremental = options.updatedAfter !== undefined;
+  // A cursor belongs to one exact incremental snapshot.  A new watermark must
+  // start at page zero; only a crash retry with that same watermark may resume.
   const resumeCursor = incremental
-    ? (savedCursor?.pass === 'updated' ? savedCursor : null)
+    ? (savedCursor?.pass === 'updated' && savedCursor.updatedAfter === options.updatedAfter!.toISOString() ? savedCursor : null)
     : (savedCursor?.pass === 'created'
       && savedCursor.from === periodo.inicio.toISOString() && savedCursor.to === periodo.fim.toISOString()
       ? savedCursor : null);
@@ -168,8 +170,8 @@ export async function collectOrders(source: ErpDataSource, periodo: Periodo, opt
     let page: OrderPage | undefined;
     try {
       const request = incremental
-        ? { mode: 'updated' as const, updatedAfter: new Date(updatedAfter), offset, limit: 100 as const }
-        : { mode: 'created' as const, periodo, offset, limit: 100 as const };
+        ? { mode: 'updated' as const, updatedAfter: new Date(updatedAfter), offset, limit: 100 as const, ...(source.provider === 'olist' ? { deadlineAt } : {}) }
+        : { mode: 'created' as const, periodo, offset, limit: 100 as const, ...(source.provider === 'olist' ? { deadlineAt } : {}) };
       await provider.fetchOrders(source.orgId, request, async (value) => { page = value; });
     } catch (error) {
       await releaseOrdersLease(lease, 'olist_orders_list_failed');

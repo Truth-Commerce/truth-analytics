@@ -22,7 +22,7 @@ export const ENRIQUECIMENTO_SYNC = ENRIQUECIMENTO_SYNC_BLING;
 
 const DIA_MS = 86_400_000;
 
-export type SyncResult = CollectResult & { enriquecimento: EnrichResult };
+export type SyncResult = CollectResult & { incompleto?: boolean; enriquecimento: EnrichResult };
 
 /**
  * Sincroniza pedidos recentes de UMA org pela fonte operacional recebida e, em
@@ -46,12 +46,15 @@ export async function sincronizarPedidosDaOrg(source: ErpDataSource, agora: Date
   const updatedAfter = isOlist
     ? new Date(lastSuccessAt!.getTime() - 5 * 60_000)
     : undefined;
+  const olistDeadlineAt = isOlist ? Date.now() + ENRIQUECIMENTO_SYNC_OLIST.prazoMs : undefined;
   const coleta = isOlist
-    ? await collectOrders(source, periodoBling, { updatedAfter })
+    ? await collectOrders(source, periodoBling, { updatedAfter, deadlineAt: olistDeadlineAt })
     : await collectBlingOrders(source.orgId, periodoBling);
   if (isOlist && !('incompleto' in coleta && coleta.incompleto)) await touchLastSyncAtForSource(source, agora);
   // Sem `periodo`: aqui a fila inteira é elegível, para o histórico atrasado
   // também andar todo dia — e não só a janela de 2 dias do sync.
-  const enriquecimento = await enrichOrders(source, isOlist ? ENRIQUECIMENTO_SYNC_OLIST : ENRIQUECIMENTO_SYNC_BLING);
+  const enriquecimento = await enrichOrders(source, isOlist
+    ? { ...ENRIQUECIMENTO_SYNC_OLIST, deadlineAt: olistDeadlineAt }
+    : ENRIQUECIMENTO_SYNC_BLING);
   return { ...coleta, enriquecimento };
 }
