@@ -1,7 +1,7 @@
 import { formatBRL, formatDataCurta, formatDiaMes } from '@/lib/format';
 import { hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
-import { deltaNumero, totalPedidos, totalVendas } from '@/modules/reports/compare';
+import { deltaNumero, fontesRelatorioCompativeis, totalPedidos, totalVendas } from '@/modules/reports/compare';
 import { ordenarAchados } from '@/modules/reports/report-view-model';
 import type { HistoricoDashboardRow } from '@/modules/reports/report.repository';
 import type { ReportDetail } from '@/modules/reports/report.types';
@@ -87,14 +87,24 @@ export function statCardsModel(atual: Metricas, anterior: Metricas | null): Stat
 
 export type LinhaDoTempoScore = { serie: number[]; texto: string | null };
 
+function fonteValida(row: Pick<HistoricoDashboardRow, 'sourceProvider' | 'sourceGeneration'>): boolean {
+  return fontesRelatorioCompativeis(row, row);
+}
+
+function fonteDoDoneMaisRecente(historico: HistoricoDashboardRow[]): HistoricoDashboardRow | null {
+  return historico.find((row) => row.status === 'done' && fonteValida(row)) ?? null;
+}
+
 /**
  * Linha do tempo do Truth Score: todos os scores persistidos (F3a), em ordem
  * cronológica. O histórico chega DESC (query do dashboard) → reverte.
  * Texto só com ≥ 2 pontos ("De 58 para 76 em 4 relatórios").
  */
 export function linhaDoTempoScore(historico: HistoricoDashboardRow[]): LinhaDoTempoScore {
+  const referencia = fonteDoDoneMaisRecente(historico);
+  if (!referencia) return { serie: [], texto: null };
   const serie = historico
-    .filter((r) => r.status === 'done' && r.score !== null)
+    .filter((r) => r.status === 'done' && r.score !== null && fontesRelatorioCompativeis(r, referencia))
     .map((r) => r.score as number)
     .reverse();
   const texto =
@@ -119,9 +129,10 @@ export function historicoComDeltas(historico: HistoricoDashboardRow[]): Historic
   return historico.map((row, i) => {
     let deltaScore: number | null = null;
     let deltaFaturamento: number | null = null;
+    if (row.status !== 'done' || !fonteValida(row)) return { ...row, deltaScore, deltaFaturamento };
     for (let j = i + 1; j < historico.length; j++) {
       const prev = historico[j];
-      if (prev.status !== 'done') continue;
+      if (prev.status !== 'done' || !fontesRelatorioCompativeis(row, prev)) continue;
       if (deltaScore === null && row.score !== null && prev.score !== null) {
         deltaScore = row.score - prev.score;
       }

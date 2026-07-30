@@ -186,11 +186,14 @@ export async function getLatestDoneReport(orgId: string): Promise<ReportDetail |
 }
 
 /** Done mais ANTIGO da org — a "foto de entrada" do cliente na consultoria. */
-export async function getPrimeiroDoneReport(orgId: string): Promise<ReportDetail | null> {
+export async function getPrimeiroDoneReport(
+  orgId: string,
+  source?: ReportSourceFilter,
+): Promise<ReportDetail | null> {
   const [row] = await db
     .select()
     .from(reports)
-    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done')))
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done'), ...(source ? [reportSourceScope(source)] : [])))
     .orderBy(asc(reports.created_at))
     .limit(1);
   return row ? rowToDetail(row) : null;

@@ -51,6 +51,8 @@ function metricas(total: number, score: number): Metricas {
 describe.skipIf(!process.env.DATABASE_URL_TEST)('impacto para renovação — integração', () => {
   let orgId = '';
   let orgUmDoneId = '';
+  let orgCutoverId = '';
+  let orgOlistPairId = '';
   let analistaId = '';
   let rep1Id = '';
   let rep2Id = '';
@@ -65,6 +67,16 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('impacto para renovação — in
       .values({ name: `${PREFIX}org-${RUN}`, status: 'active' })
       .returning({ id: organizations.id });
     orgId = org!.id;
+
+    const [orgCutover, orgOlistPair] = await db
+      .insert(organizations)
+      .values([
+        { name: `${PREFIX}cutover-${RUN}`, status: 'active' },
+        { name: `${PREFIX}olist-pair-${RUN}`, status: 'active' },
+      ])
+      .returning({ id: organizations.id });
+    orgCutoverId = orgCutover!.id;
+    orgOlistPairId = orgOlistPair!.id;
 
     // Org com UM done só — sem comparação possível (primeiro === ultimo).
     const [orgUmDone] = await db
@@ -83,7 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('impacto para renovação — in
     await db
       .update(organizations)
       .set({ analista_id: analistaId })
-      .where(inArray(organizations.id, [orgId, orgUmDoneId]));
+      .where(inArray(organizations.id, [orgId, orgUmDoneId, orgCutoverId, orgOlistPairId]));
 
     const baseReport = { periodo_inicio: PERIODO.inicio, periodo_fim: PERIODO.fim, status: 'done' as const };
 
@@ -130,10 +142,18 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('impacto para renovação — in
     await db
       .insert(reports)
       .values({ ...baseReport, org_id: orgUmDoneId, metricas: metricas(500, 40), created_at: REP1_CREATED });
+
+    await db.insert(reports).values([
+      { ...baseReport, org_id: orgCutoverId, metricas: metricas(100, 10), created_at: REP1_CREATED },
+      { ...baseReport, org_id: orgCutoverId, metricas: metricas(500, 50), source_provider: 'olist', source_generation: 3, created_at: REP2_CREATED },
+      { ...baseReport, org_id: orgOlistPairId, metricas: metricas(100, 10), created_at: REP1_CREATED },
+      { ...baseReport, org_id: orgOlistPairId, metricas: metricas(400, 40), source_provider: 'olist', source_generation: 3, created_at: REP2_CREATED },
+      { ...baseReport, org_id: orgOlistPairId, metricas: metricas(600, 60), source_provider: 'olist', source_generation: 3, created_at: new Date('2026-08-01T00:00:00.000Z') },
+    ]);
   });
 
   afterAll(async () => {
-    const orgIds = [orgId, orgUmDoneId].filter(Boolean);
+    const orgIds = [orgId, orgUmDoneId, orgCutoverId, orgOlistPairId].filter(Boolean);
     if (taskIds.length) {
       await db.delete(taskActivities).where(inArray(taskActivities.task_id, taskIds));
       await db.delete(tasks).where(inArray(tasks.id, taskIds));
@@ -189,6 +209,24 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('impacto para renovação — in
     expect(org.deltaFaturamentoPct).toBeNull();
     expect(org.deltaScore).toBeNull();
     expect(org.tasksConcluidas).toBe(0);
+  });
+
+  it('não compara o último Olist com o histórico Bling de antes do cutover', async () => {
+    const { getImpactoPorOrg } = await import('@/modules/analista/analista.repository');
+    const lista = await getImpactoPorOrg({ id: analistaId, orgId, role: 'analista' } as UserAccess);
+    const org = lista.find((o) => o.orgId === orgCutoverId)!;
+    expect(org.primeiro).toBeNull();
+    expect(org.ultimo).toBeNull();
+    expect(org.deltaFaturamentoPct).toBeNull();
+  });
+
+  it('ancora impacto Olist no primeiro done da mesma geração', async () => {
+    const { getImpactoPorOrg } = await import('@/modules/analista/analista.repository');
+    const lista = await getImpactoPorOrg({ id: analistaId, orgId, role: 'analista' } as UserAccess);
+    const org = lista.find((o) => o.orgId === orgOlistPairId)!;
+    expect(org.primeiro?.total).toBe(400);
+    expect(org.ultimo?.total).toBe(600);
+    expect(org.deltaFaturamentoPct).toBe(50);
   });
 
   it('getTaskImpact para task SEM report_id usa o done mais próximo da criação como baseline', async () => {
