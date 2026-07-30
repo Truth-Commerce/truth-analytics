@@ -158,3 +158,6 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
     return { stage: stale ? 'stale' : 'blocked', ready: false, blocked: !stale, stale, window, reason: stale ? 'source_stale' : 'prepare_failed' };
   }
 }
+
+/** Narrow integration seam; not part of the production pipeline API. */
+export const __test = { persistPage, publishReady };
