@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getOrgPrimaryUser: vi.fn(),
   getTotalVendasMesCorrente: vi.fn(),
   getTotalVendasMesAnterior: vi.fn(),
+  getActiveErpConnection: vi.fn(),
 }));
 
 // Fake db: toda query termina em .where() → devolve o próximo item da fila.
@@ -43,6 +44,10 @@ vi.mock('@/modules/organizations/organization-settings.repository', () => ({
   getTotalVendasMesAnterior: (...args: unknown[]) => mocks.getTotalVendasMesAnterior(...args),
 }));
 
+vi.mock('@/modules/connections/active-provider.repository', () => ({
+  getActiveErpConnection: (...args: unknown[]) => mocks.getActiveErpConnection(...args),
+}));
+
 import { linhaResumo, processarDigestSemanal } from '@/modules/tasks/digest-semanal';
 
 describe('linhaResumo', () => {
@@ -70,6 +75,7 @@ describe('processarDigestSemanal — varredura global (db mockado)', () => {
     mocks.dbQueue.length = 0;
     mocks.getTotalVendasMesCorrente.mockResolvedValue(1000.5);
     mocks.getTotalVendasMesAnterior.mockResolvedValue(800);
+    mocks.getActiveErpConnection.mockImplementation((orgId: string) => Promise.resolve({ orgId, provider: 'bling', sourceGeneration: 1 }));
   });
 
   it('envia 1 e-mail por org COM tasks e pula org sem nenhuma task', async () => {

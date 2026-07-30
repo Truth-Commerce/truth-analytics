@@ -5,7 +5,7 @@ import { orders, organizations, reports, trackedProducts } from '@/db/schema';
 import type { Metricas } from '@/modules/pipeline/contracts';
 import type { RawOrderItem } from '@/modules/providers/types';
 import type { ErpDataSource } from '@/modules/providers/data.types';
-import { legacyBlingSource, orderScope } from '@/modules/orders/order-scope';
+import { orderScope } from '@/modules/orders/order-scope';
 
 /**
  * Orgs `active` com pelo menos um relatório `done` criado nos últimos `dias`
@@ -32,10 +32,9 @@ export async function listOrgsComRelatorioRecente(dias: number, agora: Date): Pr
  * 7 dias, mais recente primeiro). Escopado por org_id.
  */
 export async function getTotaisSemanais(
-  source: ErpDataSource | string,
+  source: ErpDataSource,
   agora: Date,
 ): Promise<{ total7dias: number; totaisSemanasAnteriores: number[] }> {
-  source = legacyBlingSource(source);
   const inicio = new Date(agora.getTime() - 35 * 86_400_000);
   const rows = await db
     .select({ data: orders.data, valor_total: orders.valor_total })
@@ -73,11 +72,10 @@ export async function getPosicaoPrecoUltimoDone(
  * [agora - diasHistorico, agora]. Escopado por org_id (produtos e pedidos).
  */
 export async function getUltimaVendaPorSku(
-  source: ErpDataSource | string,
+  source: ErpDataSource,
   diasHistorico: number,
   agora: Date,
 ): Promise<{ produtos: { sku: string; nome: string }[]; ultimaVendaPorSku: Map<string, Date> }> {
-  source = legacyBlingSource(source);
   const produtosRows = await db
     .select({ sku: trackedProducts.sku, nome: trackedProducts.nome })
     .from(trackedProducts)
@@ -109,8 +107,7 @@ export async function getUltimaVendaPorSku(
  * Data do pedido mais recente da org (MAX(orders.data)) — o "agora efetivo"
  * das janelas dos detectores. Null = org sem nenhum pedido.
  */
-export async function getUltimaDataPedido(source: ErpDataSource | string): Promise<Date | null> {
-  source = legacyBlingSource(source);
+export async function getUltimaDataPedido(source: ErpDataSource): Promise<Date | null> {
   const [row] = await db
     .select({ ultima: sql<Date | string | null>`max(${orders.data})` })
     .from(orders)

@@ -31,6 +31,7 @@ import { sendAlertasDigestEmail } from '@/modules/notifications/email';
 import { notify } from '@/modules/notifications/notification.repository';
 import { getOrgPrimaryUser } from '@/modules/notifications/recipients';
 import { processarLembretesDePrazo } from '@/modules/tasks/lembretes-prazo';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -68,17 +69,19 @@ export async function GET(req: Request): Promise<Response> {
 
   for (const orgId of orgIds) {
     try {
-      const agoraEfetivo = await getUltimaDataPedido(orgId);
+      const source = await getActiveErpConnection(orgId);
+      if (!source) continue;
+      const agoraEfetivo = await getUltimaDataPedido(source);
 
       const [semanais, posicao, parado, dedupBase, stockRows, vendas30d] = await Promise.all([
-        agoraEfetivo ? getTotaisSemanais(orgId, agoraEfetivo) : Promise.resolve(null),
+        agoraEfetivo ? getTotaisSemanais(source, agoraEfetivo) : Promise.resolve(null),
         getPosicaoPrecoUltimoDone(orgId),
         agoraEfetivo
-          ? getUltimaVendaPorSku(orgId, PRODUTO_HISTORICO_DIAS, agoraEfetivo)
+          ? getUltimaVendaPorSku(source, PRODUTO_HISTORICO_DIAS, agoraEfetivo)
           : Promise.resolve(null),
         listAlertasParaDedup(orgId, agora),
-        getStockRows(orgId),
-        agoraEfetivo ? getVendas30dPorSku(orgId, agoraEfetivo) : Promise.resolve(new Map<string, number>()),
+        getStockRows(source),
+        agoraEfetivo ? getVendas30dPorSku(source, agoraEfetivo) : Promise.resolve(new Map<string, number>()),
       ]);
 
       const queda = semanais ? detectarQuedaVendas(semanais) : null;

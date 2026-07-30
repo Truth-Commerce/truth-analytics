@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { getUltimaDataPedido } from '@/modules/alerts/alert-data.repository';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import { montarCobertura } from '@/modules/estoque/stock-coverage';
 import { getStockRows, getVendas30dPorSku } from '@/modules/estoque/stock.repository';
 import { resumoEstoque } from '@/modules/estoque/estoque-view-model';
@@ -9,11 +10,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 
 /** Card compacto de estoque no dashboard — some quando não há snapshot. */
 export async function EstoqueResumo({ orgId }: { orgId: string }) {
-  const stockRows = await getStockRows(orgId);
+  const source = await getActiveErpConnection(orgId);
+  if (!source) return null;
+  const stockRows = await getStockRows(source);
   if (stockRows.length === 0) return null;
 
-  const agoraEfetivo = await getUltimaDataPedido(orgId);
-  const vendas = agoraEfetivo ? await getVendas30dPorSku(orgId, agoraEfetivo) : new Map<string, number>();
+  const agoraEfetivo = await getUltimaDataPedido(source);
+  const vendas = agoraEfetivo ? await getVendas30dPorSku(source, agoraEfetivo) : new Map<string, number>();
   const resumo = resumoEstoque(montarCobertura(stockRows, vendas));
 
   return (

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getUltimaDataPedido } from '@/modules/alerts/alert-data.repository';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import { montarCobertura } from '@/modules/estoque/stock-coverage';
 import { getStockRows, getVendas30dPorSku } from '@/modules/estoque/stock.repository';
 import { badgeDoEstado, labelCobertura, resumoEstoque } from '@/modules/estoque/estoque-view-model';
@@ -15,13 +16,14 @@ export const metadata: Metadata = { title: 'Estoque' };
 
 export default async function EstoquePage() {
   const access = await requireActiveOrg();
+  const source = await getActiveErpConnection(access.orgId);
 
   const [stockRows, agoraEfetivo] = await Promise.all([
-    getStockRows(access.orgId),
-    getUltimaDataPedido(access.orgId),
+    source ? getStockRows(source) : Promise.resolve([]),
+    source ? getUltimaDataPedido(source) : Promise.resolve(null),
   ]);
   const vendas = agoraEfetivo
-    ? await getVendas30dPorSku(access.orgId, agoraEfetivo)
+    ? await getVendas30dPorSku(source!, agoraEfetivo)
     : new Map<string, number>();
   const produtos = montarCobertura(stockRows, vendas);
   const resumo = resumoEstoque(produtos);

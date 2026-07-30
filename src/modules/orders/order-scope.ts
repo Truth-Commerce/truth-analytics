@@ -2,7 +2,7 @@ import { and, eq, isNull, ne, or, type SQL } from 'drizzle-orm';
 
 import { orders } from '@/db/schema';
 import type { ErpProviderId } from '@/modules/providers/types';
-import type { ErpDataSource } from '@/modules/providers/data.types';
+export const MAX_ACTIVE_ERP_BATCH = 200;
 
 export type ActiveErpRef = {
   orgId: string;
@@ -22,11 +22,7 @@ export function orderScope(ref: Pick<ActiveErpRef, 'orgId' | 'provider' | 'sourc
 }
 
 export function orderScopes(refs: readonly ActiveErpRef[]): SQL | undefined {
+  if (refs.length > MAX_ACTIVE_ERP_BATCH) throw new Error('active_erp_batch_limit_exceeded');
   if (refs.length === 0) return undefined;
   return or(...refs.map(orderScope));
-}
-
-/** Compatibility boundary for pre-provider-aware callers. New readers must receive ErpDataSource. */
-export function legacyBlingSource(ref: ErpDataSource | string): ErpDataSource {
-  return typeof ref === 'string' ? { orgId: ref, provider: 'bling', sourceGeneration: 1 } : ref;
 }

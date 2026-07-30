@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { hojeBrt } from '@/lib/timezone';
 import { sendDigestSemanalEmail } from '@/modules/notifications/email';
 import { getOrgPrimaryUser } from '@/modules/notifications/recipients';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import {
   getTotalVendasMesAnterior,
   getTotalVendasMesCorrente,
@@ -44,6 +45,8 @@ export async function montarDigestOrg(
   org: { id: string; name: string },
   agora: Date,
 ): Promise<DigestOrg | null> {
+  const source = await getActiveErpConnection(org.id);
+  if (!source) return null;
   const hoje = hojeBrt(agora);
   const corte7d = new Date(agora.getTime() - 7 * DIA_MS);
   const [[total], [concluidas], [atrasadas], [andamento], vendasMes, vendasMesAnterior] = await Promise.all([
@@ -68,8 +71,8 @@ export async function montarDigestOrg(
       .select({ n: count() })
       .from(tasks)
       .where(and(eq(tasks.org_id, org.id), eq(tasks.status, 'em_andamento'))),
-    getTotalVendasMesCorrente(org.id, agora),
-    getTotalVendasMesAnterior(org.id, agora),
+    getTotalVendasMesCorrente(source, agora),
+    getTotalVendasMesAnterior(source, agora),
   ]);
   if (Number(total?.n ?? 0) === 0) return null;
   return {

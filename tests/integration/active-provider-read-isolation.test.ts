@@ -31,7 +31,7 @@ describe.skipIf(!url)('active provider order read isolation', () => {
   afterAll(async () => { await tdb.delete(orders).where(eq(orders.org_id, orgId)); await tdb.delete(connections).where(eq(connections.org_id, orgId)); await tdb.delete(organizations).where(eq(organizations.id, orgId)); await sql.end(); });
 
   it('selects only the active source and changes atomically after cutover', async () => {
-    const { getActiveErpConnection } = await import('@/modules/connections/active-provider.repository');
+    const { getActiveErpConnection, getActiveErpConnectionsForOrgIds, MAX_ACTIVE_ERP_BATCH } = await import('@/modules/connections/active-provider.repository');
     const { getTotaisSemanais } = await import('@/modules/alerts/alert-data.repository');
     const bling = await getActiveErpConnection(orgId);
     expect(bling).toMatchObject({ provider: 'bling', sourceGeneration: 1 });
@@ -43,5 +43,9 @@ describe.skipIf(!url)('active provider order read isolation', () => {
     const olist = await getActiveErpConnection(orgId);
     expect(olist).toMatchObject({ provider: 'olist', sourceGeneration: 3 });
     expect((await getTotaisSemanais(olist!, agora)).total7dias).toBe(900);
+    expect(await getActiveErpConnectionsForOrgIds([orgId, orgId])).toEqual([
+      expect.objectContaining({ orgId, provider: 'olist', sourceGeneration: 3 }),
+    ]);
+    await expect(getActiveErpConnectionsForOrgIds(Array.from({ length: MAX_ACTIVE_ERP_BATCH + 1 }, (_, i) => `org-${i}`))).rejects.toThrow('active_erp_batch_limit_exceeded');
   });
 });

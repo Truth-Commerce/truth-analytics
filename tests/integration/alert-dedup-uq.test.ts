@@ -73,6 +73,6 @@ describe.skipIf(!url)('dedup de alertas — índice único + cooldown', () => {
 
   it('getUltimaDataPedido devolve null para org sem pedidos', async () => {
     const { getUltimaDataPedido } = await import('@/modules/alerts/alert-data.repository');
-    expect(await getUltimaDataPedido(orgId)).toBeNull();
+    expect(await getUltimaDataPedido({ orgId, provider: 'bling', sourceGeneration: 1 })).toBeNull();
   });
 });

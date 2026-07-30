@@ -5,6 +5,7 @@ import postgres from 'postgres';
 
 import { orders, organizations } from '@/db/schema';
 import { hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
+import type { ErpDataSource } from '@/modules/providers/data.types';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -97,6 +98,7 @@ describe.skipIf(!url)('organization-settings.repository — integração', () =>
       },
     ]);
 
-    expect(await getTotalVendasMesCorrente(orgId, agora)).toBe(300.5);
+    const source: ErpDataSource = { orgId, provider: 'bling', sourceGeneration: 1 };
+    expect(await getTotalVendasMesCorrente(source, agora)).toBe(300.5);
   });
 });
