@@ -52,6 +52,7 @@ async function persistPage(lease: SyncLease, source: ErpDataSource, list: RawOrd
 }
 async function databaseNow(): Promise<string> { const row = rows<{ now: Date | string }>(await db.execute(sql`SELECT clock_timestamp() AS now`))[0]; if (!row) throw new Error('prepare_database_clock_unavailable'); return new Date(row.now).toISOString(); }
 async function publishReady(lease: SyncLease, source: ErpDataSource, cursor: PreparationCursor): Promise<boolean> {
+  if (source.provider !== 'olist' || lease.resource !== 'orders_prepare' || lease.orgId !== source.orgId || lease.provider !== source.provider || lease.sourceGeneration !== source.sourceGeneration || lease.accountFingerprint !== cursor.accountFingerprint || cursor.sourceGeneration !== source.sourceGeneration || cursor.stage !== 'ready' || !cursor.catchup.completedAt || new Date(cursor.window.from) >= new Date(cursor.window.to) || new Date(cursor.catchUpFrom) < new Date(cursor.window.from) || new Date(cursor.catchUpFrom) > new Date(cursor.window.to)) return false;
   const baseline = cursor.catchUpFrom;
   return db.transaction(async (tx) => {
     const owned = rows<{ id: string }>(await tx.execute(sql`SELECT id FROM connection_sync_state WHERE org_id=${lease.orgId} AND provider='olist' AND source_generation=${lease.sourceGeneration} AND account_fingerprint=${lease.accountFingerprint} AND resource='orders_prepare' AND lease_token=${lease.token} AND fencing_version=${lease.fencingVersion} AND lease_expires_at > clock_timestamp() FOR UPDATE`));

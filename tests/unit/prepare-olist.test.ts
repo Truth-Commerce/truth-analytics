@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const execute = vi.fn();
-  return { execute, transaction: vi.fn(async (work: (tx: { execute: typeof execute }) => Promise<unknown>) => work({ execute })), acquire: vi.fn(), save: vi.fn(), yieldLease: vi.fn(), complete: vi.fn(), fail: vi.fn(), fetchOrders: vi.fn(), parse: vi.fn(() => null) };
+  return { execute, transaction: vi.fn(async (work: (tx: { execute: typeof execute }) => Promise<unknown>) => work({ execute })), acquire: vi.fn(), save: vi.fn(), yieldLease: vi.fn(), complete: vi.fn(), fail: vi.fn(), fetchOrders: vi.fn(), parse: vi.fn<() => unknown>(() => null) };
 });
 const { execute, transaction, acquire, save, yieldLease, complete, fail, fetchOrders } = mocks;
 vi.mock('@/db/client', () => ({ db: { execute: mocks.execute, transaction: mocks.transaction } }));
@@ -79,8 +79,9 @@ describe('Olist shadow preparation window', () => {
     expect(complete).not.toHaveBeenCalled();
   });
 
+  const readyCursor = () => ({ version: 1 as const, stage: 'ready' as const, sourceGeneration: 1, accountFingerprint: 'a'.repeat(64), window: { from: '2026-05-01T00:00:00.000Z', to: '2026-07-30T00:00:00.000Z' }, catchUpFrom: '2026-07-30T19:42:10.123Z', snapshot: { done: true }, catchup: { done: true, completedAt: '2026-07-30T19:42:11.000Z' }, verify1: { done: true, expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, verify2: { done: true, expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) } });
   it('fails ready revalidation without completing the outer lease', async () => {
-    mocks.parse.mockReturnValue({ stage: 'ready' });
+    mocks.parse.mockReturnValue(readyCursor());
     const reconciliation = await import('@/modules/pipeline/order-reconciliation');
     vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: false, reasons: ['count_mismatch'], expectedCount: 1, actualCount: 0, pendingDetails: 0, quarantined: 0 });
     const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
@@ -89,10 +90,10 @@ describe('Olist shadow preparation window', () => {
   });
 
   it('completes only after ready revalidation and exact publication succeeds', async () => {
-    mocks.parse.mockReturnValue({ stage: 'ready' });
+    mocks.parse.mockReturnValue(readyCursor());
     const reconciliation = await import('@/modules/pipeline/order-reconciliation');
     vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: true, reasons: [], expectedCount: 1, actualCount: 1, pendingDetails: 0, quarantined: 0 });
-    execute.mockResolvedValue([{ id: 'published' }]);
+    execute.mockResolvedValueOnce([{ now: '2026-07-30T19:42:10.123Z' }]).mockResolvedValue([{ id: 'published' }]);
     const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'ready', ready: true });
     expect(complete).toHaveBeenCalled();
