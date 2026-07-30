@@ -49,7 +49,7 @@ describe.skipIf(!url)('Olist account binding — PostgreSQL real', () => {
     expect(result.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
     expect(result.filter((entry) => entry.status === 'rejected')).toHaveLength(1);
     const [row] = await tdb.select({ status: connections.status, generation: connections.data_generation, fingerprint: connections.provider_account_fingerprint }).from(connections).where(eq(connections.org_id, orgId));
-    expect(row.status).toBe('ok');
+    expect(row.status).toBe('configurado');
     expect(row.generation).toBe(publication.dataGeneration + 1);
     expect(row.fingerprint).toMatch(/^[a-f0-9]{64}$/);
     fetchSpy.mockRestore();
