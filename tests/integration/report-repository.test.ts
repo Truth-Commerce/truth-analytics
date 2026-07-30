@@ -179,7 +179,7 @@ describe.skipIf(!url)('report.repository — integração', () => {
     expect(lista).toHaveLength(50);
     // summary não expõe métricas — shape estrito
     expect(Object.keys(lista[0]!).sort()).toEqual(
-      ['createdAt', 'id', 'periodoFim', 'periodoInicio', 'status'].sort(),
+      ['createdAt', 'id', 'periodoFim', 'periodoInicio', 'sourceGeneration', 'sourceProvider', 'status'].sort(),
     );
   });
 
