@@ -253,11 +253,18 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     const highBarrier = afterInsertBarrier(drizzle(sqlB));
     const stockPending = createOlistRateGovernor(stockBarrier.client).reserve({ accountFingerprint: account, priority: 'stock' });
     const highPending = createOlistRateGovernor(highBarrier.client).reserve({ accountFingerprint: account, priority: 'details' });
-    await Promise.all([stockBarrier.inserted, highBarrier.inserted]);
-    stockBarrier.release();
-    highBarrier.release();
-    const [stock, high] = await Promise.all([stockPending, highPending]);
-    expect(stock.startAt.getTime()).toBeLessThan(high.startAt.getTime());
+    try {
+      await Promise.all([stockBarrier.inserted, highBarrier.inserted]);
+      stockBarrier.release();
+      const stock = await stockPending;
+      highBarrier.release();
+      const high = await highPending;
+      expect(stock.startAt.getTime()).toBeLessThan(high.startAt.getTime());
+    } finally {
+      stockBarrier.release();
+      highBarrier.release();
+      await Promise.allSettled([stockPending, highPending]);
+    }
   });
 
   it('cancels a waiter aborted after insertion without exposing a usable grant', async () => {
