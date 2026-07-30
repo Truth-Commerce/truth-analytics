@@ -45,8 +45,8 @@ export type ErpDataSource = {
 };
 
 export type OrderPageRequest =
-  | { mode: 'created'; periodo: Periodo; offset: number; limit: 100 }
-  | { mode: 'updated'; updatedAfter: Date; offset: number; limit: 100 };
+  | { mode: 'created'; periodo: Periodo; offset: number; limit: 100; deadlineAt?: number }
+  | { mode: 'updated'; updatedAfter: Date; offset: number; limit: 100; deadlineAt?: number };
 
 export type OrderPage = {
   orders: RawOrder[];

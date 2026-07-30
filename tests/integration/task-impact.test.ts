@@ -109,6 +109,19 @@ describe.skipIf(!url)('task-impact — integração', () => {
       .set({ created_at: new Date('2026-07-01T00:00:00.000Z') })
       .where(eq(reports.id, reportAtualId));
 
+    // Mais novo, porém de outra fonte: não pode virar o "atual" de uma
+    // task originada no Bling nem produzir delta enganoso.
+    await tdb.insert(reports).values({
+      org_id: orgId,
+      periodo_inicio: PERIODO.inicio,
+      periodo_fim: PERIODO.fim,
+      status: 'done',
+      source_provider: 'olist',
+      source_generation: 3,
+      metricas: metricas(9000),
+      created_at: new Date('2026-08-01T00:00:00.000Z'),
+    });
+
     // Report de origem SEM sucessor, em org isolada — nada é posterior a ele.
     const [origemSemSucessor] = await tdb
       .insert(reports)

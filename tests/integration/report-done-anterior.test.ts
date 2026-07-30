@@ -33,7 +33,7 @@ describe.skipIf(!url)('report.repository — getDoneAnterior', () => {
     await sql.end();
   });
 
-  it('retorna o done imediatamente anterior por created_at (pula o failed), null quando não há anterior, e isola por org', async () => {
+  it('retorna o done anterior da mesma fonte, pula incompatíveis/failed e isola por org', async () => {
     let orgId = '';
     let outraOrgId = '';
 
@@ -65,23 +65,30 @@ describe.skipIf(!url)('report.repository — getDoneAnterior', () => {
       await tdb
         .insert(reports)
         .values({ ...base, status: 'failed', erro: 'falha_geracao', created_at: new Date('2026-06-12T00:00:00.000Z') });
+      await tdb
+        .insert(reports)
+        .values({ ...base, status: 'done', source_provider: 'olist', source_generation: 3, metricas: metricas(9999), created_at: new Date('2026-06-13T00:00:00.000Z') });
       const [terceiro] = await tdb
         .insert(reports)
         .values({ ...base, status: 'done', metricas: metricas(1500), created_at: new Date('2026-06-15T00:00:00.000Z') })
         .returning({ id: reports.id, created_at: reports.created_at });
 
-      const { getDoneAnterior } = await import('@/modules/reports/report.repository');
+      const { getDoneAnterior, getUltimosDoneDetalhados } = await import('@/modules/reports/report.repository');
 
       // Anterior ao terceiro: pula o failed (mais recente) → segundo done.
-      const anterior = await getDoneAnterior(orgId, terceiro.created_at, terceiro.id);
+      const fonteBling = { sourceProvider: 'bling' as const, sourceGeneration: 1 };
+      const anterior = await getDoneAnterior(orgId, terceiro.created_at, terceiro.id, fonteBling);
       expect(anterior?.id).toBe(segundo.id);
 
+      const historicoBling = await getUltimosDoneDetalhados(orgId, 10, fonteBling);
+      expect(historicoBling.map((r) => r.id)).toEqual([terceiro.id, segundo.id, primeiro.id]);
+
       // Nada anterior ao primeiro.
-      const nenhum = await getDoneAnterior(orgId, primeiro.created_at, primeiro.id);
+      const nenhum = await getDoneAnterior(orgId, primeiro.created_at, primeiro.id, fonteBling);
       expect(nenhum).toBeNull();
 
       // Isolamento multi-tenant: outra org não enxerga.
-      const outra = await getDoneAnterior(outraOrgId, terceiro.created_at, terceiro.id);
+      const outra = await getDoneAnterior(outraOrgId, terceiro.created_at, terceiro.id, fonteBling);
       expect(outra).toBeNull();
     } finally {
       if (orgId) await tdb.delete(reports).where(eq(reports.org_id, orgId));

@@ -9,6 +9,7 @@ import {
 } from '@/modules/organizations/organization-settings.repository';
 import { listTaskTitulosAbertos } from '@/modules/tasks/task.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { fontesRelatorioCompativeis } from '@/modules/reports/compare';
 
 import {
   getUltimosDoneDetalhados,
@@ -41,12 +42,12 @@ export type DashboardData = {
  */
 export async function getDashboardData(orgId: string): Promise<DashboardData> {
   const source = await getActiveErpConnection(orgId);
-  const [historico, conn, org, donesRecentes, produtos, alertas, settings, totalMes, ultimaDataPedido] =
+  const [historico, conn, org, doneMaisRecente, produtos, alertas, settings, totalMes, ultimaDataPedido] =
     await Promise.all([
       listHistoricoDashboard(orgId),
       getConnection(orgId),
       getOrganizationById(orgId),
-      getUltimosDoneDetalhados(orgId, 2),
+      getUltimosDoneDetalhados(orgId, 1),
       listTrackedProducts(orgId),
       listAlertasAbertos(orgId),
       getOrgSettings(orgId),
@@ -54,7 +55,12 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
       source ? getUltimaDataPedido(source) : Promise.resolve(null),
     ]);
 
-  const latestDone = donesRecentes[0] ?? null;
+  const latestDone = doneMaisRecente[0] ?? null;
+  // O cartão atual/anterior nunca mistura gerações de ERP. A fonte é a do
+  // relatório atual, não a conexão ativa (que pode ter trocado depois dele).
+  const donesRecentes = latestDone !== null && fontesRelatorioCompativeis(latestDone, latestDone)
+    ? await getUltimosDoneDetalhados(orgId, 2, latestDone)
+    : latestDone ? [latestDone] : [];
   // Dependente do latestDone — fora do Promise.all de propósito.
   const titulosTasksUltimoDone = latestDone?.analiseIa
     ? await listTaskTitulosAbertos(orgId)
@@ -65,6 +71,8 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     ? {
         id: primeiro.id,
         status: primeiro.status,
+        sourceProvider: primeiro.sourceProvider,
+        sourceGeneration: primeiro.sourceGeneration,
         periodoInicio: primeiro.periodoInicio,
         periodoFim: primeiro.periodoFim,
         createdAt: primeiro.createdAt,

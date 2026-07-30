@@ -67,7 +67,7 @@ export async function getVisao360(orgId: string, _agora: Date = new Date()): Pro
   const source = await getActiveErpConnection(orgId);
   const [donesDetalhados, stockRows, agoraEfetivo, kitsRows, sugestoesRows, alertas, todasTasks, briefingRow] =
     await Promise.all([
-      getUltimosDoneDetalhados(orgId, SCORE_HISTORICO_LIMITE),
+      source ? getUltimosDoneDetalhados(orgId, SCORE_HISTORICO_LIMITE, source) : Promise.resolve([]),
       source ? getStockRows(source) : Promise.resolve([]),
       source ? getUltimaDataPedido(source) : Promise.resolve(null),
       listKitsUltimoCiclo(orgId),

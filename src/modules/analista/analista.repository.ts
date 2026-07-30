@@ -451,13 +451,13 @@ export async function getImpactoPorOrg(access: UserAccess): Promise<ImpactoOrg[]
 
   return Promise.all(
     orgs.map(async (org) => {
-      const [primeiroRep, ultimoRep] = await Promise.all([
-        getPrimeiroDoneReport(org.id),
-        getLatestDoneReport(org.id),
-      ]);
-      const doisDones = primeiroRep !== null && ultimoRep !== null && primeiroRep.id !== ultimoRep.id;
+      const ultimoRep = await getLatestDoneReport(org.id);
+      const primeiroRep = ultimoRep
+        ? await getPrimeiroDoneReport(org.id, ultimoRep)
+        : null;
+      const doisDones = Boolean(primeiroRep && ultimoRep && primeiroRep.id !== ultimoRep.id);
       let tasksConcluidas = 0;
-      if (doisDones) {
+      if (doisDones && primeiroRep && ultimoRep) {
         const [row] = await db
           .select({ n: sql<number>`count(distinct ${taskActivities.task_id})::int` })
           .from(taskActivities)

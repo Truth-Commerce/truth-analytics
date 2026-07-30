@@ -1,4 +1,23 @@
 import type { Metricas } from '@/modules/pipeline/contracts';
+import { isErpProviderId } from '@/modules/providers/provider-catalog';
+
+type FonteRelatorio = { sourceProvider: string | null; sourceGeneration: number | null };
+
+/** Só compara relatórios cuja fonte congelada seja válida e idêntica. */
+export function fontesRelatorioCompativeis(a: FonteRelatorio, b: FonteRelatorio): boolean {
+  return a.sourceProvider !== null
+    && a.sourceGeneration !== null
+    && b.sourceProvider !== null
+    && b.sourceGeneration !== null
+    && isErpProviderId(a.sourceProvider)
+    && isErpProviderId(b.sourceProvider)
+    && Number.isInteger(a.sourceGeneration)
+    && a.sourceGeneration > 0
+    && Number.isInteger(b.sourceGeneration)
+    && b.sourceGeneration > 0
+    && a.sourceProvider === b.sourceProvider
+    && a.sourceGeneration === b.sourceGeneration;
+}
 
 export type ProgressoMeta = { percentual: number; restante: number; atingida: boolean };
 

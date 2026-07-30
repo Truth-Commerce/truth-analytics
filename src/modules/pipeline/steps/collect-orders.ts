@@ -120,11 +120,11 @@ async function releaseOrdersLease(lease: SyncLease, errorCode: string): Promise<
   }
 }
 
-export async function collectOrders(source: ErpDataSource, periodo: Periodo, options: { deadlineMs?: number; startOffset?: number } = {}): Promise<CollectResult & { expectedTotal?: number; incompleto?: boolean }> {
+export async function collectOrders(source: ErpDataSource, periodo: Periodo, options: { deadlineMs?: number; deadlineAt?: number; startOffset?: number; updatedAfter?: Date } = {}): Promise<CollectResult & { expectedTotal?: number; incompleto?: boolean }> {
   if (options.startOffset !== undefined && (!Number.isSafeInteger(options.startOffset) || options.startOffset < 0)) {
     throw new Error('orders_start_offset_invalid');
   }
-  const deadlineAt = Date.now() + (options.deadlineMs ?? 240_000);
+  const deadlineAt = options.deadlineAt ?? (Date.now() + (options.deadlineMs ?? 240_000));
   const provider = getErpDataProvider(source.provider);
   if (source.provider === 'bling') {
     if (source.sourceGeneration !== 1) throw new Error('bling_source_generation_invalid');
@@ -132,15 +132,22 @@ export async function collectOrders(source: ErpDataSource, periodo: Periodo, opt
     await provider.fetchOrders(source.orgId, { mode: 'created', periodo, offset: options.startOffset ?? 0, limit: 100 }, async (page) => { total += page.orders.length; processados += await upsertOrders(source, page.orders); });
     return { processados, total };
   }
-  const fingerprint = await getOlistAccountFingerprint(source.orgId);
+  const fingerprint = await getOlistAccountFingerprint(source.orgId, source.sourceGeneration);
   if (!fingerprint) return { processados: 0, total: 0, incompleto: true };
   const acquired = await acquireSyncLease({ source: { ...source, accountFingerprint: fingerprint }, resource: 'orders_list', ttlMs: LEASE_TTL_MS });
   if (!acquired) return { processados: 0, total: 0, incompleto: true };
   const savedCursor = parseOrdersCursor(acquired.cursor, source.sourceGeneration);
-  const resumeCursor = savedCursor?.pass === 'created' && savedCursor.from === periodo.inicio.toISOString() && savedCursor.to === periodo.fim.toISOString() ? savedCursor : null;
+  const incremental = options.updatedAfter !== undefined;
+  // A cursor belongs to one exact incremental snapshot.  A new watermark must
+  // start at page zero; only a crash retry with that same watermark may resume.
+  const resumeCursor = incremental
+    ? (savedCursor?.pass === 'updated' && savedCursor.updatedAfter === options.updatedAfter!.toISOString() ? savedCursor : null)
+    : (savedCursor?.pass === 'created'
+      && savedCursor.from === periodo.inicio.toISOString() && savedCursor.to === periodo.fim.toISOString()
+      ? savedCursor : null);
   let updatedAfter: string;
   try {
-    updatedAfter = resumeCursor?.updatedAfter ?? await databaseNowIso();
+    updatedAfter = resumeCursor?.updatedAfter ?? options.updatedAfter?.toISOString() ?? await databaseNowIso();
   } catch (error) {
     await releaseOrdersLease(acquired, 'olist_database_clock_failed');
     throw error;
@@ -162,7 +169,10 @@ export async function collectOrders(source: ErpDataSource, periodo: Periodo, opt
     }
     let page: OrderPage | undefined;
     try {
-      await provider.fetchOrders(source.orgId, { mode: 'created', periodo, offset, limit: 100 }, async (value) => { page = value; });
+      const request = incremental
+        ? { mode: 'updated' as const, updatedAfter: new Date(updatedAfter), offset, limit: 100 as const, ...(source.provider === 'olist' ? { deadlineAt } : {}) }
+        : { mode: 'created' as const, periodo, offset, limit: 100 as const, ...(source.provider === 'olist' ? { deadlineAt } : {}) };
+      await provider.fetchOrders(source.orgId, request, async (value) => { page = value; });
     } catch (error) {
       await releaseOrdersLease(lease, 'olist_orders_list_failed');
       throw error;
@@ -172,7 +182,7 @@ export async function collectOrders(source: ErpDataSource, periodo: Periodo, opt
       throw new Error('orders_page_missing');
     }
     total += page.orders.length; expectedTotal = page.total;
-    const persisted = await persistOrdersPageWithLease({ lease, source, page, nextCursor: cursorFor(source, periodo, updatedAfter, page.nextOffset, page.total) });
+    const persisted = await persistOrdersPageWithLease({ lease, source, page, nextCursor: { ...cursorFor(source, periodo, updatedAfter, page.nextOffset, page.total), pass: incremental ? 'updated' : 'created' } });
     if (!persisted) {
       await releaseOrdersLease(lease, 'olist_orders_persist_failed');
       return { processados, total, expectedTotal, incompleto: true };

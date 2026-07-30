@@ -25,7 +25,7 @@ export async function buildAnalysisContext(input: {
   const [settings, totalMesCorrente, anteriores] = await Promise.all([
     getOrgSettings(input.orgId),
     getTotalVendasMesCorrente(input.source),
-    getUltimosDoneDetalhados(input.orgId, 1),
+    getUltimosDoneDetalhados(input.orgId, 1, input.source),
   ]);
   const anterior = anteriores[0];
   return {

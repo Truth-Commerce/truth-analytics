@@ -1,4 +1,5 @@
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
+import type { ErpProviderId } from '@/modules/providers/types';
 
 export type ReportStatus = 'queued' | 'running' | 'done' | 'failed';
 
@@ -11,6 +12,9 @@ export type ReportEtapa =
 export type ReportSummary = {
   id: string;
   status: ReportStatus;
+  /** Fonte congelada; done legado sem fonte é lido como bling/1. */
+  sourceProvider: ErpProviderId | null;
+  sourceGeneration: number | null;
   periodoInicio: Date;
   periodoFim: Date;
   createdAt: Date;

@@ -62,7 +62,7 @@ export async function fetchOlistOrders(orgId: string, request: OrderPageRequest,
     : { dataAtualizacao: formatDateTime(request.updatedAfter), orderBy: 'asc', limit: '100', offset: String(request.offset) };
   let payload: unknown;
   try {
-    payload = await fetchOlistJson({ orgId, priority: 'orders', path: '/pedidos', query, schema: OlistOrdersPageSchema });
+    payload = await fetchOlistJson({ orgId, priority: 'orders', path: '/pedidos', query, schema: OlistOrdersPageSchema, deadlineAt: request.deadlineAt });
   } catch (error) {
     if (error instanceof OlistDataError && error.code === 'olist_payload_invalido') invalidOrdersResponse();
     throw error;

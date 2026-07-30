@@ -86,6 +86,8 @@ function detail(over: Partial<ReportDetail>): ReportDetail {
   return {
     id: 'r-1',
     status: 'done',
+    sourceProvider: 'bling',
+    sourceGeneration: 1,
     periodoInicio: new Date('2026-06-01T00:00:00Z'),
     periodoFim: new Date('2026-06-30T23:59:59Z'),
     createdAt: new Date('2026-07-01T12:00:00Z'),
@@ -174,6 +176,8 @@ function linha(over: Partial<HistoricoDashboardRow>): HistoricoDashboardRow {
   return {
     id: `r-${Math.random()}`,
     status: 'done',
+    sourceProvider: 'bling',
+    sourceGeneration: 1,
     periodoInicio: new Date('2026-06-01T00:00:00Z'),
     periodoFim: new Date('2026-06-07T23:59:59Z'),
     createdAt: new Date('2026-06-08T12:00:00Z'),
@@ -203,6 +207,15 @@ describe('linhaDoTempoScore', () => {
     expect(linhaDoTempoScore([linha({})])).toEqual({ serie: [], texto: null });
     expect(linhaDoTempoScore([])).toEqual({ serie: [], texto: null });
   });
+
+  it('usa apenas a fonte válida do done mais recente', () => {
+    const historico = [
+      linha({ id: 'novo', sourceProvider: 'olist', sourceGeneration: 3, score: 80 }),
+      linha({ id: 'antigo-outro', sourceProvider: 'bling', sourceGeneration: 1, score: 30 }),
+      linha({ id: 'antigo-mesma', sourceProvider: 'olist', sourceGeneration: 3, score: 70 }),
+    ];
+    expect(linhaDoTempoScore(historico)).toEqual({ serie: [70, 80], texto: 'De 70 para 80 em 2 relatórios' });
+  });
 });
 
 describe('historicoComDeltas', () => {
@@ -228,6 +241,18 @@ describe('historicoComDeltas', () => {
     ];
     const r = historicoComDeltas(historico);
     expect(r[0]).toMatchObject({ deltaScore: 10, deltaFaturamento: 200 }); // 'c' vs 'a'
+  });
+
+  it('não calcula delta entre fontes distintas ou inválidas', () => {
+    const historico = [
+      linha({ id: 'novo', sourceProvider: 'olist', sourceGeneration: 3, score: 70, totalPeriodo: 900 }),
+      linha({ id: 'outro', sourceProvider: 'bling', sourceGeneration: 1, score: 60, totalPeriodo: 700 }),
+      linha({ id: 'mesma', sourceProvider: 'olist', sourceGeneration: 3, score: 50, totalPeriodo: 500 }),
+      linha({ id: 'invalida', sourceProvider: null, sourceGeneration: null, score: 40, totalPeriodo: 400 }),
+    ];
+    const r = historicoComDeltas(historico);
+    expect(r[0]).toMatchObject({ deltaScore: 20, deltaFaturamento: 400 });
+    expect(r[1]).toMatchObject({ deltaScore: null, deltaFaturamento: null });
   });
 
   it('lista vazia → []', () => {

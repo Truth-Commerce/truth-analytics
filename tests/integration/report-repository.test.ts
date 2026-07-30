@@ -105,8 +105,10 @@ describe.skipIf(!url)('report.repository — integração', () => {
     // done foi inserido por último → deve ser o primeiro (mais recente)
     expect(list[0].id).toBe(doneReportId);
     expect(list[0].status).toBe('done');
+    expect(list[0]).toMatchObject({ sourceProvider: 'bling', sourceGeneration: 1 });
     expect(list[1].id).toBe(failedReportId);
     expect(list[1].status).toBe('failed');
+    expect(list[1]).toMatchObject({ sourceProvider: null, sourceGeneration: null });
   });
 
   it('getLatestReport retorna o relatório mais recente', async () => {
@@ -177,7 +179,7 @@ describe.skipIf(!url)('report.repository — integração', () => {
     expect(lista).toHaveLength(50);
     // summary não expõe métricas — shape estrito
     expect(Object.keys(lista[0]!).sort()).toEqual(
-      ['createdAt', 'id', 'periodoFim', 'periodoInicio', 'status'].sort(),
+      ['createdAt', 'id', 'periodoFim', 'periodoInicio', 'sourceGeneration', 'sourceProvider', 'status'].sort(),
     );
   });
 
