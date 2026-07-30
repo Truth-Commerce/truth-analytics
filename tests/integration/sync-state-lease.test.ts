@@ -1,12 +1,17 @@
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { connectionSyncState, organizations } from '@/db/schema';
 import {
-  acquireSyncLease, advanceSyncCursor, completeSyncLease,
-  failSyncLease, getSyncLeaseRemainingMs, renewSyncLease,
+  acquireSyncLease,
+  advanceSyncCursor,
+  completeSyncLease,
+  createSyncStateRepository,
+  failSyncLease,
+  getSyncLeaseRemainingMs,
+  renewSyncLease,
 } from '@/modules/connections/sync-state.repository';
 
 const url = process.env.DATABASE_URL_TEST;
@@ -14,7 +19,10 @@ const RUN = Date.now();
 
 describe.skipIf(!url)('sync state lease — integração PostgreSQL', () => {
   const sql = postgres(url ?? '', { prepare: false });
+  const secondSql = postgres(url ?? '', { prepare: false });
   const db = drizzle(sql);
+  const firstRepository = createSyncStateRepository(db);
+  const secondRepository = createSyncStateRepository(drizzle(secondSql));
   let orgId = '';
   const source = () => ({ orgId, provider: 'olist' as const, sourceGeneration: 3, accountFingerprint: 'a'.repeat(64) });
 
@@ -22,10 +30,30 @@ describe.skipIf(!url)('sync state lease — integração PostgreSQL', () => {
     const [organization] = await db.insert(organizations).values({ name: `ta-test-sync-lease-${RUN}`, status: 'active' }).returning({ id: organizations.id });
     orgId = organization.id;
   });
+  afterEach(async () => {
+    if (orgId) await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
+  });
   afterAll(async () => {
-    await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
-    await db.delete(organizations).where(eq(organizations.id, orgId));
+    if (orgId) await db.delete(organizations).where(eq(organizations.id, orgId));
+    await secondSql.end();
     await sql.end();
+  });
+
+  it('serializa cursor JSON e concede uma única lease entre dois clientes concorrentes', async () => {
+    const [first, second] = await Promise.all([
+      firstRepository.acquireSyncLease({ source: source(), resource: 'orders_list', ttlMs: 270_000 }),
+      secondRepository.acquireSyncLease({ source: source(), resource: 'orders_list', ttlMs: 270_000 }),
+    ]);
+    const winner = first ?? second;
+    expect([first, second].filter(Boolean)).toHaveLength(1);
+    expect(winner).not.toBeNull();
+    expect(await firstRepository.advanceSyncCursor({
+      ...winner!,
+      cursor: { pass: 'created', offset: 100 },
+      processedDelta: 100,
+    })).toBe(true);
+    const [row] = await sql`SELECT cursor FROM connection_sync_state WHERE lease_token = ${winner!.token}`;
+    expect(row.cursor).toEqual({ pass: 'created', offset: 100 });
   });
 
   it('concede uma única lease por fonte e recurso e bloqueia escritor cercado', async () => {
@@ -67,5 +95,19 @@ describe.skipIf(!url)('sync state lease — integração PostgreSQL', () => {
     const renewed = await renewSyncLease(lease!, 270_000);
     expect(renewed?.fencingVersion).toBe(lease!.fencingVersion);
     expect(renewed!.expiresAt.getTime()).toBeGreaterThan(lease!.expiresAt.getTime());
+  });
+
+  it('somente o proprietário ativo pode concluir ou falhar', async () => {
+    const completed = await acquireSyncLease({ source: source(), resource: 'orders_list', ttlMs: 270_000 });
+    expect(await completeSyncLease(completed!)).toBe(true);
+    expect(await completeSyncLease(completed!)).toBe(false);
+
+    const failed = await acquireSyncLease({ source: source(), resource: 'orders_list', ttlMs: 270_000 });
+    expect(await failSyncLease({ ...failed!, errorCode: 'olist_http_500' })).toBe(true);
+
+    const expired = await acquireSyncLease({ source: source(), resource: 'order_details', ttlMs: 270_000 });
+    await sql`UPDATE connection_sync_state SET lease_expires_at = clock_timestamp() - interval '1 second' WHERE lease_token = ${expired!.token}`;
+    expect(await completeSyncLease(expired!)).toBe(false);
+    expect(await failSyncLease({ ...expired!, errorCode: 'late_worker' })).toBe(false);
   });
 });

@@ -23,6 +23,20 @@ type LeaseRow = { org_id: string; provider: ErpProviderId; source_generation: nu
 
 function rows(result: unknown): unknown[] { return Array.isArray(result) ? result : (result as { rows?: unknown[] }).rows ?? []; }
 function assertTtl(ttlMs: number): void { if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) throw new Error('sync_lease_ttl_invalid'); }
+function assertSourceGeneration(sourceGeneration: number): void {
+  if (!Number.isSafeInteger(sourceGeneration) || sourceGeneration < 1) {
+    throw new Error('sync_source_generation_invalid');
+  }
+}
+function serializeCursor(cursor: unknown): string {
+  try {
+    const serialized = JSON.stringify(cursor);
+    if (serialized === undefined) throw new Error('sync_cursor_invalid');
+    return serialized;
+  } catch {
+    throw new Error('sync_cursor_invalid');
+  }
+}
 function toLease(row: LeaseRow): SyncLease {
   return { orgId: row.org_id, provider: row.provider, sourceGeneration: row.source_generation, accountFingerprint: row.account_fingerprint, resource: row.resource, token: row.lease_token, fencingVersion: BigInt(row.fencing_version), runId: row.run_id, expiresAt: new Date(row.lease_expires_at), cursor: row.cursor };
 }
@@ -39,6 +53,7 @@ export function createSyncStateRepository(client: SqlExecutor = db) {
   return {
     async acquireSyncLease(input: { source: SyncSource; resource: SyncResource; ttlMs: number }): Promise<SyncLease | null> {
       assertTtl(input.ttlMs);
+      assertSourceGeneration(input.source.sourceGeneration);
       const result = rows(await client.execute(sql`
         INSERT INTO connection_sync_state (
           org_id, provider, source_generation, account_fingerprint, resource, run_id,
@@ -76,8 +91,9 @@ export function createSyncStateRepository(client: SqlExecutor = db) {
     },
     async advanceSyncCursor(input: SyncLease & { cursor: unknown; processedDelta: number; backlogCount?: number | null }): Promise<boolean> {
       if (!Number.isSafeInteger(input.processedDelta) || input.processedDelta < 0) throw new Error('sync_processed_delta_invalid');
+      const serializedCursor = serializeCursor(input.cursor);
       const result = rows(await client.execute(sql`
-        UPDATE connection_sync_state SET cursor = ${input.cursor}::jsonb, processed_count = processed_count + ${input.processedDelta},
+        UPDATE connection_sync_state SET cursor = ${serializedCursor}::jsonb, processed_count = processed_count + ${input.processedDelta},
           backlog_count = ${input.backlogCount ?? null}, updated_at = clock_timestamp()
         WHERE ${ownerPredicate(input)} RETURNING id
       `));
