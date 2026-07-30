@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { orders } from '@/db/schema';
+import { createLogger } from '@/lib/logger';
 import {
   acquireSyncLease,
   completeSyncLease,
@@ -21,6 +22,7 @@ import { getErpDataProvider } from '@/modules/providers/registry';
 export type CollectResult = { processados: number; total: number };
 export { WORST_CASE_OLIST_REQUEST_MS } from '@/modules/providers/olist/http';
 const LEASE_TTL_MS = 270_000;
+const logger = createLogger({ modulo: 'collect-orders' });
 
 function resultRows<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
@@ -82,16 +84,20 @@ export async function persistOrdersPageWithLease(input: { lease: SyncLease; sour
     || parsedCursor.total !== input.page.total) return false;
   try {
     return await db.transaction(async (tx) => {
-      const expiryUpperBound = new Date(input.lease.expiresAt.getTime() + 1);
-      const ownedResult = await tx.execute(sql`SELECT id FROM connection_sync_state WHERE org_id=${input.lease.orgId} AND provider=${input.lease.provider} AND source_generation=${input.lease.sourceGeneration} AND account_fingerprint IS NOT DISTINCT FROM ${input.lease.accountFingerprint} AND resource='orders_list' AND lease_token=${input.lease.token} AND fencing_version=${input.lease.fencingVersion} AND lease_expires_at >= ${input.lease.expiresAt} AND lease_expires_at < ${expiryUpperBound} AND lease_expires_at > clock_timestamp() FOR UPDATE`);
+      const ownedResult = await tx.execute(sql`SELECT id FROM connection_sync_state WHERE org_id=${input.lease.orgId} AND provider=${input.lease.provider} AND source_generation=${input.lease.sourceGeneration} AND account_fingerprint IS NOT DISTINCT FROM ${input.lease.accountFingerprint} AND resource='orders_list' AND lease_token=${input.lease.token} AND fencing_version=${input.lease.fencingVersion} AND date_trunc('milliseconds', lease_expires_at) = date_trunc('milliseconds', ${input.lease.expiresAt}::timestamptz) AND lease_expires_at > clock_timestamp() FOR UPDATE`);
       const owned = resultRows<{ id: string }>(ownedResult);
       if (!owned.length) return false;
       const values = orderValues(input.source, input.page.orders);
       if (values.length) await tx.insert(orders).values(values).onConflictDoUpdate({ target: [orders.org_id, orders.provider, orders.source_generation, orders.provider_order_id], set: { provider_status: sql`EXCLUDED.provider_status`, canal: sql`CASE WHEN EXCLUDED.canal = ${CANAL_DESCONHECIDO} THEN ${orders.canal} ELSE EXCLUDED.canal END`, data: sql`EXCLUDED.data`, valor_total: sql`EXCLUDED.valor_total` } });
-      const advancedResult = await tx.execute(sql`UPDATE connection_sync_state SET cursor=${JSON.stringify(parsedCursor)}::jsonb, processed_count=processed_count + ${values.length}, backlog_count=${Math.max(0, input.page.total - input.page.nextOffset)}, updated_at=clock_timestamp() WHERE id=${owned[0].id} AND org_id=${input.lease.orgId} AND provider=${input.lease.provider} AND source_generation=${input.lease.sourceGeneration} AND account_fingerprint IS NOT DISTINCT FROM ${input.lease.accountFingerprint} AND resource='orders_list' AND lease_token=${input.lease.token} AND fencing_version=${input.lease.fencingVersion} AND lease_expires_at >= ${input.lease.expiresAt} AND lease_expires_at < ${expiryUpperBound} AND lease_expires_at > clock_timestamp() RETURNING id`);
+      const advancedResult = await tx.execute(sql`UPDATE connection_sync_state SET cursor=${JSON.stringify(parsedCursor)}::jsonb, processed_count=processed_count + ${values.length}, backlog_count=${Math.max(0, input.page.total - input.page.nextOffset)}, updated_at=clock_timestamp() WHERE id=${owned[0].id} AND org_id=${input.lease.orgId} AND provider=${input.lease.provider} AND source_generation=${input.lease.sourceGeneration} AND account_fingerprint IS NOT DISTINCT FROM ${input.lease.accountFingerprint} AND resource='orders_list' AND lease_token=${input.lease.token} AND fencing_version=${input.lease.fencingVersion} AND date_trunc('milliseconds', lease_expires_at) = date_trunc('milliseconds', ${input.lease.expiresAt}::timestamptz) AND lease_expires_at > clock_timestamp() RETURNING id`);
       return resultRows(advancedResult).length === 1;
     });
-  } catch {
+  } catch (error) {
+    logger.error('falha ao persistir página cercada', {
+      orgId: input.source.orgId,
+      provider: input.source.provider,
+      sourceGeneration: input.source.sourceGeneration,
+    }, error);
     return false;
   }
 }

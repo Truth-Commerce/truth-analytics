@@ -2,7 +2,7 @@
  * Teste de integração fim-a-fim do orquestrador generateReport.
  *
  * Todos os externos são mockados:
- * - blingProvider.fetchOrders  → vi.spyOn (sem chamada real ao Bling)
+ * - blingDataProvider.fetchOrders → vi.spyOn (sem chamada real ao Bling)
  * - serpapiProvider.search / mlPublicoProvider.search → vi.spyOn (sem chamada real à API)
  * - analyzeWithIA (módulo analyze-ia) → vi.spyOn (sem chamada real ao Claude)
  * - email (sendReportReadyEmail / sendPipelineFailedEmail) → vi.spyOn (no-op spy)
@@ -28,6 +28,7 @@ import {
   users,
 } from '@/db/schema';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
+import type { OrderPageHandler } from '@/modules/providers/data.types';
 import { createQueuedReport } from '@/modules/reports/report.repository';
 
 const url = process.env.DATABASE_URL_TEST;
@@ -49,6 +50,22 @@ const MOCK_ORDERS = [
     itens: [{ sku: `SKU-ORCH-${RUN}`, nome: 'Produto Orq', quantidade: 3, valor: 90.0 }],
   },
 ];
+
+async function emitMockBlingOrders(
+  onPage: OrderPageHandler,
+): Promise<void> {
+  await onPage({
+    orders: MOCK_ORDERS.map(({ blingOrderId, ...order }) => ({
+      ...order,
+      providerOrderId: blingOrderId,
+      providerStatus: '',
+    })),
+    offset: 0,
+    nextOffset: MOCK_ORDERS.length,
+    total: MOCK_ORDERS.length,
+    done: true,
+  });
+}
 
 const MOCK_MARKET_RESULT = {
   precos: [85.0, 95.0],
@@ -153,7 +170,8 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
   it('happy path: retorna done, report persiste metricas+analise_ia, trava setada', async () => {
     // Mock Bling
     const blingMod = await import('@/modules/providers/bling/provider');
-    vi.spyOn(blingMod.blingProvider, 'fetchOrders').mockResolvedValueOnce(MOCK_ORDERS);
+    vi.spyOn(blingMod.blingDataProvider, 'fetchOrders')
+      .mockImplementationOnce(async (_orgId, _request, onPage) => emitMockBlingOrders(onPage));
 
     // Mock provedores de mercado
     const serpapiMod = await import('@/modules/market/serpapi');
@@ -252,7 +270,7 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
 
     // Mock Bling lançando erro (falha dura)
     const blingMod = await import('@/modules/providers/bling/provider');
-    vi.spyOn(blingMod.blingProvider, 'fetchOrders').mockRejectedValueOnce(
+    vi.spyOn(blingMod.blingDataProvider, 'fetchOrders').mockRejectedValueOnce(
       new Error('bling_indisponivel_503'),
     );
 
@@ -332,7 +350,7 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
   it('re-executar generateReport de um report não-queued retorna ignorado', async () => {
     // Mock Bling rejeitando: 1ª execução falha rápido (sem chamada real), consome o queued
     const blingMod = await import('@/modules/providers/bling/provider');
-    vi.spyOn(blingMod.blingProvider, 'fetchOrders').mockRejectedValue(
+    vi.spyOn(blingMod.blingDataProvider, 'fetchOrders').mockRejectedValue(
       new Error('bling_indisponivel_503'),
     );
 
