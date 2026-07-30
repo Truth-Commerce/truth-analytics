@@ -34,11 +34,16 @@ type SummaryRow = {
 };
 
 function frozenSource(provider: string | null, generation: number | null): Pick<ReportSummary, 'sourceProvider' | 'sourceGeneration'> {
-  const candidate = provider ?? '';
-  return {
-    sourceProvider: isErpProviderId(candidate) ? candidate : 'bling',
-    sourceGeneration: generation ?? 1,
-  };
+  // Somente o par integralmente ausente é legado. Uma fonte parcial ou um
+  // provider desconhecido não pode ser reinterpretado como Bling: escondemos
+  // ambos para que leitores não consumam uma fonte errada.
+  if (provider === null && generation === null) {
+    return { sourceProvider: 'bling', sourceGeneration: 1 };
+  }
+  if (provider !== null && generation !== null && isErpProviderId(provider)) {
+    return { sourceProvider: provider, sourceGeneration: generation };
+  }
+  return {};
 }
 
 function summaryRowToSummary(row: SummaryRow): ReportSummary {

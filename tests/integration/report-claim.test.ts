@@ -73,4 +73,15 @@ describe.skipIf(!url)('claimQueuedReport — integração', () => {
     const [legacy] = await tdb.insert(reports).values({ org_id: noSourceOrgId, status: 'done', periodo_inicio: periodo.inicio, periodo_fim: periodo.fim }).returning({ id: reports.id });
     await expect(getReportById(legacy.id, noSourceOrgId)).resolves.toMatchObject({ sourceProvider: 'bling', sourceGeneration: 1 });
   });
+
+  it('não reinterpreta uma fonte parcial ou desconhecida como legado bling', async () => {
+    const { getReportById } = await import('@/modules/reports/report.repository');
+    const [partial, unknown] = await tdb.insert(reports).values([
+      { org_id: noSourceOrgId, status: 'done', source_provider: 'olist', periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
+      { org_id: noSourceOrgId, status: 'done', source_provider: 'desconhecido', source_generation: 4, periodo_inicio: periodo.inicio, periodo_fim: periodo.fim },
+    ]).returning({ id: reports.id });
+
+    await expect(getReportById(partial.id, noSourceOrgId)).resolves.not.toHaveProperty('sourceProvider');
+    await expect(getReportById(unknown.id, noSourceOrgId)).resolves.not.toHaveProperty('sourceProvider');
+  });
 });
