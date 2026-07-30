@@ -19,7 +19,7 @@ export const blingDataProvider: ErpDataProvider = {
     } catch (error) {
       if (!(error instanceof BlingDataError) || error.status !== 401) throw error;
       const state = context?.blingState;
-      if (state?.token !== token) token = state.token;
+      if (state && state.token !== token) token = state.token;
       else if (state) {
         const refresh = state.refreshPromise ?? getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt })
           .then(refreshed => { state.token = refreshed; return refreshed; })
