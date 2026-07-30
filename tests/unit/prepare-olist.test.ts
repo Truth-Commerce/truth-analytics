@@ -93,7 +93,7 @@ describe('Olist shadow preparation window', () => {
     mocks.parse.mockReturnValue(readyCursor());
     const reconciliation = await import('@/modules/pipeline/order-reconciliation');
     vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: true, reasons: [], expectedCount: 1, actualCount: 1, pendingDetails: 0, quarantined: 0 });
-    execute.mockResolvedValueOnce([{ now: '2026-07-30T19:42:10.123Z' }]).mockResolvedValue([{ id: 'published' }]);
+    execute.mockResolvedValue([{ id: 'published' }]);
     const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'ready', ready: true });
     expect(complete).toHaveBeenCalled();
