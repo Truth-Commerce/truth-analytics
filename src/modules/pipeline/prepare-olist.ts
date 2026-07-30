@@ -115,6 +115,7 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
   const clock = rows<{ now: Date | string }>(await db.execute(sql`SELECT clock_timestamp() AS now`))[0]; if (!clock) throw new Error('prepare_database_clock_unavailable');
   const window = preparationWindow(new Date(clock.now).toISOString()); const deadlineAt = options.deadlineAt ?? Date.now() + 240_000;
   const fingerprint = await getOlistAccountFingerprint(source.orgId, source.sourceGeneration);
+  if ('accountFingerprint' in source && source.accountFingerprint !== fingerprint) return { stage: 'stale', ready: false, blocked: false, stale: true, window, reason: 'source_stale' };
   if (!fingerprint) return { stage: 'stale', ready: false, blocked: false, stale: true, window, reason: 'source_stale' };
   const lease = await acquireSyncLease({ source: { ...source, accountFingerprint: fingerprint }, resource: 'orders_prepare', ttlMs: LEASE_TTL_MS });
   if (!lease) return { stage: 'blocked', ready: false, blocked: true, stale: false, window, reason: 'lease_busy' };

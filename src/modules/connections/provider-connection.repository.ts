@@ -10,7 +10,7 @@ import {
 } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { connections, organizations } from '@/db/schema';
+import { connectionSyncState, connections, organizations } from '@/db/schema';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import {
   decryptConnectionSecret,
@@ -322,10 +322,12 @@ export async function touchLastSyncAtForSource(source: ErpDataSource, quando: Da
 }
 
 /** Frozen, allowlisted Olist sources awaiting shadow preparation. */
-export async function listOlistConnectionsPendingPreparation(input: { orgIds: string[]; limit: number }): Promise<ErpDataSource[]> {
+export type FrozenOlistSource = ErpDataSource & { accountFingerprint: string };
+export async function listOlistConnectionsPendingPreparation(input: { orgIds: string[]; limit: number }): Promise<FrozenOlistSource[]> {
   if (!input.orgIds.length) return [];
-  const rows = await db.select({ orgId: connections.org_id, sourceGeneration: connections.data_generation }).from(connections).innerJoin(organizations, eq(organizations.id, connections.org_id)).where(and(eq(connections.provider, 'olist'), inArray(connections.org_id, input.orgIds), inArray(connections.status, ['configurado', 'ok']), eq(organizations.status, 'active'), isNotNull(connections.access_token), isNotNull(connections.refresh_token), isNotNull(connections.provider_account_fingerprint), sql`NOT EXISTS (SELECT 1 FROM connection_sync_state css WHERE css.org_id=${connections.org_id} AND css.provider='olist' AND css.resource='orders_prepare' AND css.source_generation=${connections.data_generation} AND css.account_fingerprint=${connections.provider_account_fingerprint} AND (css.cursor->>'stage')='ready')`)).orderBy(sql`(SELECT css.updated_at FROM connection_sync_state css WHERE css.org_id=${connections.org_id} AND css.provider='olist' AND css.resource='orders_prepare' ORDER BY css.updated_at ASC NULLS FIRST LIMIT 1) ASC NULLS FIRST`).limit(Math.min(3, Math.max(1, input.limit)));
-  return rows.map((row) => ({ orgId: row.orgId, provider: 'olist' as const, sourceGeneration: row.sourceGeneration }));
+  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 3) throw new Error('olist_preparation_limit_invalid');
+  const rows = await db.select({ orgId: connections.org_id, sourceGeneration: connections.data_generation, accountFingerprint: connections.provider_account_fingerprint, stateUpdatedAt: connectionSyncState.updated_at, cursor: connectionSyncState.cursor }).from(connections).innerJoin(organizations, eq(organizations.id, connections.org_id)).leftJoin(connectionSyncState, and(eq(connectionSyncState.org_id, connections.org_id), eq(connectionSyncState.provider, 'olist'), eq(connectionSyncState.resource, 'orders_prepare'), eq(connectionSyncState.source_generation, connections.data_generation))).where(and(eq(connections.provider, 'olist'), inArray(connections.org_id, input.orgIds), inArray(connections.status, ['configurado', 'ok']), eq(organizations.status, 'active'), isNotNull(connections.access_token), isNotNull(connections.refresh_token), isNotNull(connections.provider_account_fingerprint))).orderBy(sql`${connectionSyncState.updated_at} ASC NULLS FIRST`).limit(input.limit);
+  return rows.filter((row): row is typeof row & { accountFingerprint: string } => Boolean(row.accountFingerprint) && !((row.cursor as { stage?: string } | null)?.stage === 'ready' && (row.cursor as { accountFingerprint?: string } | null)?.accountFingerprint === row.accountFingerprint)).map((row) => ({ orgId: row.orgId, provider: 'olist' as const, sourceGeneration: row.sourceGeneration, accountFingerprint: row.accountFingerprint }));
 }
 
 /** Reads freshness from the same provider/generation fence used for publishing it. */
