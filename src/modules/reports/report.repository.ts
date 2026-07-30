@@ -1,9 +1,11 @@
-import { and, asc, desc, eq, gt, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNotNull, lt, lte, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { hasPostgresErrorCode } from '@/db/postgres-error';
-import { reports } from '@/db/schema';
+import { connections, reports } from '@/db/schema';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
+import { isErpProviderId } from '@/modules/providers/provider-catalog';
+import type { ErpProviderId } from '@/modules/providers/types';
 
 import type { ReportDetail, ReportStatus, ReportSummary } from './report.types';
 
@@ -14,6 +16,8 @@ type ReportRow = typeof reports.$inferSelect;
 const summaryColumns = {
   id: reports.id,
   status: reports.status,
+  source_provider: reports.source_provider,
+  source_generation: reports.source_generation,
   periodo_inicio: reports.periodo_inicio,
   periodo_fim: reports.periodo_fim,
   created_at: reports.created_at,
@@ -22,15 +26,26 @@ const summaryColumns = {
 type SummaryRow = {
   id: string;
   status: string;
+  source_provider: string | null;
+  source_generation: number | null;
   periodo_inicio: Date;
   periodo_fim: Date;
   created_at: Date;
 };
 
+function frozenSource(provider: string | null, generation: number | null): Pick<ReportSummary, 'sourceProvider' | 'sourceGeneration'> {
+  const candidate = provider ?? '';
+  return {
+    sourceProvider: isErpProviderId(candidate) ? candidate : 'bling',
+    sourceGeneration: generation ?? 1,
+  };
+}
+
 function summaryRowToSummary(row: SummaryRow): ReportSummary {
   return {
     id: row.id,
     status: row.status as ReportStatus,
+    ...frozenSource(row.source_provider, row.source_generation),
     periodoInicio: row.periodo_inicio,
     periodoFim: row.periodo_fim,
     createdAt: row.created_at,
@@ -43,6 +58,7 @@ function rowToSummary(row: ReportRow): ReportSummary {
   return {
     id: row.id,
     status: row.status as ReportStatus,
+    ...frozenSource(row.source_provider, row.source_generation),
     periodoInicio: row.periodo_inicio,
     periodoFim: row.periodo_fim,
     createdAt: row.created_at,
@@ -272,6 +288,65 @@ export async function createQueuedReport(
     }
     throw e;
   }
+}
+
+export type QueuedReportClaim = {
+  orgId: string;
+  provider: ErpProviderId;
+  sourceGeneration: number;
+  periodo: { inicio: Date; fim: Date };
+};
+
+/**
+ * Assume um relatório queued e fixa a fonte de dados na mesma transação.
+ * O lock da linha do report faz com que exatamente um worker consiga avançar
+ * para running; se não houver uma fonte ERP válida, o report termina failed.
+ */
+export async function claimQueuedReport(reportId: string): Promise<QueuedReportClaim | null> {
+  return db.transaction(async (tx) => {
+    const [report] = await tx
+      .select({
+        orgId: reports.org_id,
+        periodoInicio: reports.periodo_inicio,
+        periodoFim: reports.periodo_fim,
+      })
+      .from(reports)
+      .where(and(eq(reports.id, reportId), eq(reports.status, 'queued')))
+      .for('update')
+      .limit(1);
+    if (!report) return null;
+
+    const [source] = await tx
+      .select({ provider: connections.provider, sourceGeneration: connections.data_generation })
+      .from(connections)
+      .where(and(
+        eq(connections.org_id, report.orgId),
+        eq(connections.status, 'ok'),
+        isNotNull(connections.access_token),
+      ))
+      .for('update')
+      .limit(1);
+
+    if (!source || !isErpProviderId(source.provider)) {
+      await tx.update(reports).set({ status: 'failed', erro: 'sem_conexao_erp' })
+        .where(and(eq(reports.id, reportId), eq(reports.status, 'queued')));
+      return null;
+    }
+
+    await tx.update(reports).set({
+      status: 'running',
+      source_provider: source.provider,
+      source_generation: source.sourceGeneration,
+      erro: null,
+    }).where(and(eq(reports.id, reportId), eq(reports.status, 'queued')));
+
+    return {
+      orgId: report.orgId,
+      provider: source.provider,
+      sourceGeneration: source.sourceGeneration,
+      periodo: { inicio: report.periodoInicio, fim: report.periodoFim },
+    };
+  });
 }
 
 /**
