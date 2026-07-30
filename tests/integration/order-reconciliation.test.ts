@@ -18,11 +18,11 @@ describe.skipIf(!url)('order readiness — integração PostgreSQL', () => {
   let orgId = '';
   const source = (overrides = {}) => ({ orgId, provider: 'olist' as const, sourceGeneration: 3, accountFingerprint: fingerprint, ...overrides });
   const cursor = (overrides = {}) => ({
-    version: 1, sourceGeneration: 3, accountFingerprint: fingerprint,
+    version: 1, stage: 'ready', sourceGeneration: 3, accountFingerprint: fingerprint,
     window: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-02T00:00:00.000Z' },
     catchUpFrom: '2026-07-01T00:00:00.000Z', snapshot: { done: true }, catchup: { done: true },
-    expectedCount: 1, checksum: createHash('md5').update('ready-order||10.00').digest('hex'),
-    verification: { dailyTotals: { expectedChecksum: 'b'.repeat(32), actualChecksum: 'b'.repeat(32) }, channelSamples: { expectedChecksum: 'c'.repeat(32), actualChecksum: 'c'.repeat(32) } }, ...overrides,
+    verify1: { done: true, expectedCount: 1, checksum: createHash('md5').update('ready-order||10.00').digest('hex'), dailyChecksum: createHash('md5').update('2026-07-01|10.00').digest('hex'), channelChecksum: createHash('md5').update('Olist|10.00').digest('hex') },
+    verify2: { done: true, expectedCount: 1, checksum: createHash('md5').update('ready-order||10.00').digest('hex'), dailyChecksum: createHash('md5').update('2026-07-01|10.00').digest('hex'), channelChecksum: createHash('md5').update('Olist|10.00').digest('hex') }, ...overrides,
   });
 
   beforeAll(async () => {
@@ -53,8 +53,17 @@ describe.skipIf(!url)('order readiness — integração PostgreSQL', () => {
     await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({ ready: false, reasons: ['source_stale'] });
   });
 
+  it('recusa verify1/verify2 instáveis e fatos de status, valor, dia e canal divergentes', async () => {
+    await seed(cursor({ verify2: { ...cursor().verify2, checksum: 'a'.repeat(32) } }));
+    await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({ ready: false, reasons: ['verification_unstable'] });
+    await tdb.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
+    await seed();
+    await sql`UPDATE orders SET provider_status='novo', valor_total='11.00', data='2026-07-01T13:00:00.000Z', canal='Outro' WHERE org_id=${orgId}`;
+    await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({ ready: false, reasons: ['checksum_mismatch', 'daily_total_mismatch', 'channel_mismatch'] });
+  });
+
   it('bloqueia pendência, quarentena e divergências de reconciliação', async () => {
-    await seed(cursor({ expectedCount: 2, checksum: 'a'.repeat(32) }), { attempts: 5, pending: true });
+    await seed(cursor({ verify1: { ...cursor().verify1, expectedCount: 2, checksum: 'a'.repeat(32) }, verify2: { ...cursor().verify2, expectedCount: 2, checksum: 'a'.repeat(32) } }), { attempts: 5, pending: true });
     await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({
       ready: false,
       reasons: ['count_mismatch', 'checksum_mismatch', 'details_quarantined'],
