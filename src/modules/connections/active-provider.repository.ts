@@ -2,16 +2,11 @@ import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { connections, organizations } from '@/db/schema';
-import { getErpDataProvider } from '@/modules/providers/registry';
 import { MAX_ACTIVE_ERP_BATCH, type ActiveErpRef } from '@/modules/orders/order-scope';
-import type { ErpProviderId } from '@/modules/providers/types';
-
-function registered(provider: string): provider is ErpProviderId {
-  try { getErpDataProvider(provider as ErpProviderId); return true; } catch { return false; }
-}
+import { isErpProviderId } from '@/modules/providers/provider-catalog';
 
 function toRef(row: { orgId: string; provider: string; sourceGeneration: number; accountFingerprint: string | null; lastSyncAt: Date | null }): ActiveErpRef | null {
-  if (!registered(row.provider)) return null;
+  if (!isErpProviderId(row.provider)) return null;
   return { ...row, provider: row.provider };
 }
 
