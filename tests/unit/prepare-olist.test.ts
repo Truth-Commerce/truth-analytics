@@ -55,4 +55,20 @@ describe('Olist shadow preparation window', () => {
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'blocked', reason: 'prepare_failed' });
     expect(fail).toHaveBeenCalledWith(expect.objectContaining({ errorCode: 'prepare_page_no_progress' }));
   });
+
+  it('does not issue HTTP after an already-expired deadline and yields its lease', async () => {
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { deadlineAt: Date.now() - 1 })).resolves.toMatchObject({ blocked: true });
+    expect(fetchOrders).not.toHaveBeenCalled();
+    expect(yieldLease).toHaveBeenCalled();
+  });
+
+  it('fails closed when the source fingerprint is absent before publishing readiness', async () => {
+    const connection = await import('@/modules/connections/provider-connection.repository');
+    vi.mocked(connection.getOlistAccountFingerprint).mockResolvedValueOnce(null);
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'stale', ready: false });
+    expect(fetchOrders).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+  });
 });
