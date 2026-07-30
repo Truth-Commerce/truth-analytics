@@ -4,6 +4,8 @@ import { db } from '@/db/client';
 import { orders, productStock } from '@/db/schema';
 import { JANELA_VELOCIDADE_DIAS } from '@/modules/estoque/stock-coverage';
 import type { RawOrderItem, RawStockItem } from '@/modules/providers/types';
+import type { ErpDataSource } from '@/modules/providers/data.types';
+import { legacyBlingSource, orderScope, orderScopes, type ActiveErpRef } from '@/modules/orders/order-scope';
 
 const CHUNK = 500;
 
@@ -57,12 +59,13 @@ export async function getStockRows(
  * orders.itens (jsonb iterado em JS — mesmo padrão de getUltimaVendaPorSku).
  * Escopado por org_id.
  */
-export async function getVendas30dPorSku(orgId: string, agora: Date): Promise<Map<string, number>> {
+export async function getVendas30dPorSku(source: ErpDataSource | string, agora: Date): Promise<Map<string, number>> {
+  source = legacyBlingSource(source);
   const desde = new Date(agora.getTime() - JANELA_VELOCIDADE_DIAS * 86_400_000);
   const rows = await db
     .select({ itens: orders.itens })
     .from(orders)
-    .where(and(eq(orders.org_id, orgId), gte(orders.data, desde)));
+    .where(and(orderScope(source), gte(orders.data, desde)));
 
   const mapa = new Map<string, number>();
   for (const o of rows) {
@@ -109,15 +112,18 @@ export async function getStockRowsBatch(
  * usada pelo mesmo cenário cross-org de `getStockRowsBatch`.
  */
 export async function getVendas30dPorSkuBatch(
-  orgIds: string[],
+  refs: readonly ActiveErpRef[] | string[],
   agora: Date,
 ): Promise<Map<string, Map<string, number>>> {
-  if (orgIds.length === 0) return new Map();
+  if (refs.length === 0) return new Map();
+  const scopedRefs: readonly ActiveErpRef[] = typeof refs[0] === 'string'
+    ? (refs as string[]).map((orgId) => ({ orgId, provider: 'bling', sourceGeneration: 1, accountFingerprint: null, lastSyncAt: null }))
+    : refs as readonly ActiveErpRef[];
   const desde = new Date(agora.getTime() - JANELA_VELOCIDADE_DIAS * 86_400_000);
   const rows = await db
     .select({ orgId: orders.org_id, itens: orders.itens })
     .from(orders)
-    .where(and(inArray(orders.org_id, orgIds), gte(orders.data, desde)));
+    .where(and(orderScopes(scopedRefs), gte(orders.data, desde)));
 
   const map = new Map<string, Map<string, number>>();
   for (const o of rows) {

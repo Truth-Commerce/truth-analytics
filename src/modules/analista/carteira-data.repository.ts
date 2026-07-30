@@ -18,6 +18,8 @@ import {
 import { diasDoPlano } from '@/modules/pipeline/plan-lock';
 import { deltaNumero, paceMeta } from '@/modules/reports/compare';
 import { diasDesde } from '@/modules/tasks/sla';
+import { orderScopes, type ActiveErpRef } from '@/modules/orders/order-scope';
+import { listActiveErpConnections } from '@/modules/connections/active-provider.repository';
 
 // ---------------------------------------------------------------------------
 // Command center da carteira (H4 T3) — agrega TODOS os insumos do score de
@@ -106,7 +108,8 @@ type TotaisMensais = { atual: number; anterior: number };
  * já registrada em report.repository.ts/tempoMedioConclusaoDias) — mais
  * seguro comparar em JS com os operadores tipados (`gte`/`lte`) só no WHERE.
  */
-async function getTotaisMensaisBatch(orgIds: string[], agora: Date): Promise<Map<string, TotaisMensais>> {
+async function getTotaisMensaisBatch(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisMensais>> {
+  if (refs.length === 0) return new Map();
   const hoje = hojeBrt(agora);
   const inicioMesAtual = inicioDeDiaUtc(`${hoje.slice(0, 7)}-01`);
   const fimHoje = fimDeDiaUtc(hoje);
@@ -117,7 +120,7 @@ async function getTotaisMensaisBatch(orgIds: string[], agora: Date): Promise<Map
   const rows = await db
     .select({ orgId: orders.org_id, data: orders.data, valor_total: orders.valor_total })
     .from(orders)
-    .where(and(inArray(orders.org_id, orgIds), gte(orders.data, inicioMesAnterior), lte(orders.data, fimHoje)));
+    .where(and(orderScopes(refs), gte(orders.data, inicioMesAnterior), lte(orders.data, fimHoje)));
 
   const acc = new Map<string, TotaisMensais>();
   for (const o of rows) {
@@ -139,12 +142,13 @@ type TotaisSemanais = { total7dias: number; totaisSemanasAnteriores: number[] };
  * por-org. Mesma matemática de buckets (idade em janelas de 7 dias), só que
  * acumulada por orgId em vez de um total só.
  */
-async function getTotaisSemanaisBatch(orgIds: string[], agora: Date): Promise<Map<string, TotaisSemanais>> {
+async function getTotaisSemanaisBatch(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisSemanais>> {
+  if (refs.length === 0) return new Map();
   const inicio = new Date(agora.getTime() - 35 * 86_400_000);
   const rows = await db
     .select({ orgId: orders.org_id, data: orders.data, valor_total: orders.valor_total })
     .from(orders)
-    .where(and(inArray(orders.org_id, orgIds), gte(orders.data, inicio), lte(orders.data, agora)));
+    .where(and(orderScopes(refs), gte(orders.data, inicio), lte(orders.data, agora)));
 
   const buckets = new Map<string, number[]>();
   for (const o of rows) {
@@ -156,7 +160,7 @@ async function getTotaisSemanaisBatch(orgIds: string[], agora: Date): Promise<Ma
   }
 
   const result = new Map<string, TotaisSemanais>();
-  for (const orgId of orgIds) {
+  for (const { orgId } of refs) {
     const arr = buckets.get(orgId) ?? [0, 0, 0, 0, 0];
     result.set(orgId, { total7dias: round2(arr[0]!), totaisSemanasAnteriores: arr.slice(1).map(round2) });
   }
@@ -320,12 +324,13 @@ export async function carteiraResumo(access: UserAccess, agora: Date): Promise<O
   const carteira = await getCarteira(access);
   if (carteira.length === 0) return [];
   const orgIds = carteira.map((c) => c.orgId);
+  const activeRefs = (await listActiveErpConnections({ limit: orgIds.length * 2 })).filter((ref) => orgIds.includes(ref.orgId));
   const hoje = hojeBrt(agora);
 
   const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticosMap] = await Promise.all([
     getOrgDetalhesBatch(orgIds),
-    getTotaisMensaisBatch(orgIds, agora),
-    getTotaisSemanaisBatch(orgIds, agora),
+    getTotaisMensaisBatch(activeRefs, agora),
+    getTotaisSemanaisBatch(activeRefs, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
     contarSkusCriticosBatch(orgIds, agora),
@@ -355,11 +360,12 @@ export async function orgResumoUnico(
   if (!c) return null;
   const hoje = hojeBrt(agora);
   const orgIds = [orgId];
+  const activeRefs = (await listActiveErpConnections({ limit: 2 })).filter((ref) => ref.orgId === orgId);
 
   const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos] = await Promise.all([
     getOrgDetalhesBatch(orgIds),
-    getTotaisMensaisBatch(orgIds, agora),
-    getTotaisSemanaisBatch(orgIds, agora),
+    getTotaisMensaisBatch(activeRefs, agora),
+    getTotaisSemanaisBatch(activeRefs, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
     contarSkusCriticos(orgId, agora),

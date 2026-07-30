@@ -9,6 +9,8 @@ import { gerarCalendarioComIA } from '@/modules/calendario/calendario-ia';
 import { insertSugestoes, setCalendarIaUsage } from '@/modules/calendario/calendario.repository';
 import { inicioDoDiaUtc } from '@/modules/calendario/calendario-view-model';
 import type { RawOrderItem } from '@/modules/providers/types';
+import type { ErpDataSource } from '@/modules/providers/data.types';
+import { orderScope } from '@/modules/orders/order-scope';
 
 /** Janela de evidência (dias) — mesma janela usada para as datas comerciais. */
 export const JANELA_CALENDARIO_DIAS = 90;
@@ -21,6 +23,8 @@ export type GerarCalendarioInput = {
   reportId: string;
   orgName: string;
   nicho: string | null;
+  provider?: ErpDataSource['provider'];
+  sourceGeneration?: number;
 };
 
 /**
@@ -38,14 +42,15 @@ export async function gerarCalendarioDoCiclo(
   }));
   if (datas.length === 0) return null;
 
-  const ancora = await getUltimaDataPedido(input.orgId);
+  const source = { orgId: input.orgId, provider: input.provider ?? 'bling', sourceGeneration: input.sourceGeneration ?? 1 } as const;
+  const ancora = await getUltimaDataPedido(source);
   if (!ancora) return null;
 
   const desde = new Date(ancora.getTime() - JANELA_CALENDARIO_DIAS * 86_400_000);
   const rows = await db
     .select({ itens: orders.itens })
     .from(orders)
-    .where(and(eq(orders.org_id, input.orgId), gte(orders.data, desde)));
+    .where(and(orderScope(source), gte(orders.data, desde)));
 
   const porSku = new Map<string, { nome: string; unidades: number }>();
   for (const o of rows) {
