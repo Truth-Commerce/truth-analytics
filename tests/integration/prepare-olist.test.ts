@@ -48,4 +48,17 @@ describe.skipIf(!url)('Olist prepare persistPage — PostgreSQL fence', () => {
     await rejected(() => Promise.resolve(), { ...ready, sourceGeneration: 2 });
     await rejected(() => db.update(connections).set({ status: 'expirado' }).where(eq(connections.org_id, orgId)));
   });
+
+  it('rolls back last_sync_at when the fenced cursor update fails', async () => {
+    const fingerprint = 'a'.repeat(64); const trigger = `ta_prepare_fail_${RUN}`;
+    await db.insert(connections).values({ org_id: orgId, provider: 'olist', status: 'configurado', data_generation: 1, provider_account_fingerprint: fingerprint, access_token: 'token', refresh_token: 'refresh' });
+    const lease = await acquireSyncLease({ source: { ...source(), accountFingerprint: fingerprint }, resource: 'orders_prepare', ttlMs: 60_000 });
+    const ready = { ...cursor(), stage: 'ready' as const, snapshot: { done: true }, catchup: { done: true, completedAt: '2026-07-30T19:01:00.000Z' }, verify1: { done: true as const, expectedCount: 0, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, verify2: { done: true as const, expectedCount: 0, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, progress: null };
+    await sql.unsafe(`CREATE FUNCTION ${trigger}_fn() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.org_id='${orgId}' THEN RAISE EXCEPTION 'test cursor failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER ${trigger} BEFORE UPDATE ON connection_sync_state FOR EACH ROW EXECUTE FUNCTION ${trigger}_fn();`);
+    try {
+      await expect(__test.publishReady(lease!, source(), ready)).rejects.toThrow('test cursor failure');
+      const [connection] = await db.select().from(connections).where(eq(connections.org_id, orgId)); const [state] = await db.select().from(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
+      expect(connection.last_sync_at).toBeNull(); expect(state.cursor).toBeNull();
+    } finally { await sql.unsafe(`DROP TRIGGER IF EXISTS ${trigger} ON connection_sync_state; DROP FUNCTION IF EXISTS ${trigger}_fn();`); }
+  });
 });
