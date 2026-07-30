@@ -11,7 +11,9 @@ const db = drizzle(sql);
 const RUN = Date.now();
 const periodo = { inicio: new Date('2026-06-01T00:00:00Z'), fim: new Date('2026-06-30T23:59:59Z') };
 
-describe.skipIf(!url)('pipeline Olist — fonte congelada e falhas de coleta', () => {
+// Também demonstra isolamento do provider ativo: trocar a conexão durante a coleta
+// não altera a fonte congelada no claim.
+describe.skipIf(!url)('pipeline Olist — fonte congelada no claim e falhas de coleta', () => {
   let orgId = '';
 
   beforeAll(async () => {
