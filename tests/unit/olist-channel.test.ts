@@ -16,4 +16,9 @@ describe('resolveOlistChannel', () => {
     expect(resolveOlistChannel({})).toBe('Olist ERP');
     expect(resolveOlistChannel({ ecommerce: { canalVenda: 'x'.repeat(33) } })).toBe('x'.repeat(32));
   });
+
+  it('remove espacos externos e ignora nomes vazios', () => {
+    expect(resolveOlistChannel({ ecommerce: { canalVenda: '  Mercado Livre  ' } })).toBe('Mercado Livre');
+    expect(resolveOlistChannel({ ecommerce: { canalVenda: '   ', nome: '  Loja Olist  ' } })).toBe('Loja Olist');
+  });
 });

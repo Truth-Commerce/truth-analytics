@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import pageFixture from '../fixtures/olist/orders-page.json';
 
-const { fetchJson } = vi.hoisted(() => ({ fetchJson: vi.fn() }));
-vi.mock('@/modules/providers/olist/http', () => ({ fetchOlistJson: fetchJson }));
+const { fetchJson, MockOlistDataError } = vi.hoisted(() => ({
+  fetchJson: vi.fn(),
+  MockOlistDataError: class extends Error {
+    constructor(public readonly code: string, public readonly kind: string, public readonly status?: number) { super(code); }
+  },
+}));
+vi.mock('@/modules/providers/olist/http', () => ({ fetchOlistJson: fetchJson, OlistDataError: MockOlistDataError }));
 
 import { fetchOlistOrders } from '@/modules/providers/olist/orders';
 
@@ -34,6 +39,11 @@ describe('fetchOlistOrders', () => {
     [{ itens: pageFixture.itens, paginacao: { limit: 2, offset: 0 } }],
   ])('rejeita campos usados invalidos em vez de gravar valores corrompidos', async (payload) => {
     fetchJson.mockResolvedValue(payload);
+    await expect(fetchOlistOrders('org-1', { mode: 'created', periodo: { inicio: new Date(), fim: new Date() }, offset: 0, limit: 100 }, async () => undefined)).rejects.toThrow('olist_pedidos_resposta_invalida');
+  });
+
+  it('converte falha de schema do cliente HTTP para o codigo especifico de pedidos', async () => {
+    fetchJson.mockRejectedValue(new MockOlistDataError('olist_payload_invalido', 'permanent', 200));
     await expect(fetchOlistOrders('org-1', { mode: 'created', periodo: { inicio: new Date(), fim: new Date() }, offset: 0, limit: 100 }, async () => undefined)).rejects.toThrow('olist_pedidos_resposta_invalida');
   });
 });

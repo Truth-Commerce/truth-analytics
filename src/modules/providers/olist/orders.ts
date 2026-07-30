@@ -4,13 +4,14 @@ import { resolveOlistChannel } from '@/modules/providers/olist/channel';
 import { fetchOlistJson, OlistDataError } from '@/modules/providers/olist/http';
 import type { OrderPage, OrderPageHandler, OrderPageRequest, RawOrder } from '@/modules/providers/data.types';
 
-const finiteNumber = z.number().finite();
+const finiteNumber = z.union([z.number(), z.string().trim().min(1)]).transform(Number).pipe(z.number().finite());
+const remoteIdentifier = z.union([z.number().finite(), z.string().trim().min(1)]);
 const channelSchema = z.object({ canalVenda: z.string().nullable().optional(), nome: z.string().nullable().optional() }).passthrough();
 
 export const OlistOrdersPageSchema = z.object({
   itens: z.array(z.object({
-    id: z.union([z.string(), z.number()]),
-    situacao: z.union([z.string(), z.number()]),
+    id: remoteIdentifier,
+    situacao: remoteIdentifier,
     dataCriacao: z.string().min(1),
     valor: finiteNumber,
     ecommerce: channelSchema.nullable().optional(),

@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import detailFixture from '../fixtures/olist/order-detail.json';
 
-const { fetchJson } = vi.hoisted(() => ({ fetchJson: vi.fn() }));
-vi.mock('@/modules/providers/olist/http', () => ({ fetchOlistJson: fetchJson }));
+const { fetchJson, MockOlistDataError } = vi.hoisted(() => ({
+  fetchJson: vi.fn(),
+  MockOlistDataError: class extends Error {
+    constructor(public readonly code: string, public readonly kind: string, public readonly status?: number) { super(code); }
+  },
+}));
+vi.mock('@/modules/providers/olist/http', () => ({ fetchOlistJson: fetchJson, OlistDataError: MockOlistDataError }));
 
 import { fetchOlistOrderDetail } from '@/modules/providers/olist/order-detail';
 
@@ -28,6 +33,11 @@ describe('fetchOlistOrderDetail', () => {
     [{ ...detailFixture, valorFrete: 'gratis' }],
   ])('rejeita campos de detalhe usados invalidos', async (payload) => {
     fetchJson.mockResolvedValue(payload);
+    await expect(fetchOlistOrderDetail('org-1', '6201')).rejects.toThrow('olist_detalhe_resposta_invalida');
+  });
+
+  it('converte falha de schema do cliente HTTP para o codigo especifico de detalhe', async () => {
+    fetchJson.mockRejectedValue(new MockOlistDataError('olist_payload_invalido', 'permanent', 200));
     await expect(fetchOlistOrderDetail('org-1', '6201')).rejects.toThrow('olist_detalhe_resposta_invalida');
   });
 });
