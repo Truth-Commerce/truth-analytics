@@ -107,7 +107,9 @@ export async function enrichOrders(source: ErpDataSource, opts: EnrichOptions): 
       const restantes = await pendingCount(source);
       return { enriquecidos, falhas, quarentenados, restantes, incompleto: restantes > 0 };
     }
-    const fingerprint = source.provider === 'olist' ? await getOlistAccountFingerprint(source.orgId) : null;
+    const fingerprint = source.provider === 'olist'
+      ? await getOlistAccountFingerprint(source.orgId, source.sourceGeneration)
+      : null;
     if (source.provider === 'olist' && !fingerprint) return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true };
     const acquired = await acquireSyncLease({ source: { ...source, accountFingerprint: fingerprint }, resource: 'order_details', ttlMs: LEASE_TTL_MS });
     if (!acquired) return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true };

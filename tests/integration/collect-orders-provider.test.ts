@@ -195,6 +195,24 @@ describe.skipIf(!url)('collect-orders provider-aware — integração', () => {
     expect(new Date(persistedUpdatedAfter!).getTime()).toBeLessThanOrEqual(after);
   });
 
+  it('uses the incremental updated cursor for Olist instead of a creation-period filter', async () => {
+    const registry = await import('@/modules/providers/registry');
+    const updatedAfter = new Date('2024-01-20T10:00:00.000Z');
+    const requests: unknown[] = [];
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'olist', fetchOrderDetail: vi.fn(),
+      fetchOrders: async (_org, request, onPage) => {
+        requests.push(request);
+        await onPage({ orders: [], offset: request.offset, nextOffset: request.offset, total: 0, done: true });
+      },
+    });
+    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
+    await collectOrders(sourceA(), periodo, { updatedAfter });
+    expect(requests).toEqual([expect.objectContaining({
+      mode: 'updated', updatedAfter, offset: 0, limit: 100,
+    })]);
+  });
+
   it('releases the lease after provider and persistence failures', async () => {
     const registry = await import('@/modules/providers/registry');
     const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');

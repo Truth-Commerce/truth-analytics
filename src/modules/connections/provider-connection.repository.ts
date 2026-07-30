@@ -17,6 +17,7 @@ import {
   encryptConnectionSecret,
 } from '@/modules/connections/connection-secrets';
 import type { ErpProviderId, OAuthTokens } from '@/modules/providers/types';
+import type { ErpDataSource } from '@/modules/providers/data.types';
 
 export type ProviderConnectionSummary = {
   provider: ErpProviderId;
@@ -297,13 +298,37 @@ export async function getOlistPublicationContext(orgId: string): Promise<OlistPu
 }
 
 /** The account fingerprint is a required binding, never caller supplied request state. */
-export async function getOlistAccountFingerprint(orgId: string): Promise<string | null> {
+export async function getOlistAccountFingerprint(orgId: string, expectedGeneration?: number): Promise<string | null> {
   const [row] = await db
     .select({ fingerprint: connections.provider_account_fingerprint })
     .from(connections)
-    .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'olist')))
+    .where(and(
+      eq(connections.org_id, orgId),
+      eq(connections.provider, 'olist'),
+      ...(expectedGeneration === undefined ? [] : [eq(connections.data_generation, expectedGeneration)]),
+    ))
     .limit(1);
   return row?.fingerprint ?? null;
+}
+
+/** Exact source CAS used by provider-neutral collectors to publish freshness. */
+export async function touchLastSyncAtForSource(source: ErpDataSource, quando: Date = new Date()): Promise<boolean> {
+  const updated = await db.update(connections).set({ last_sync_at: quando }).where(and(
+    eq(connections.org_id, source.orgId),
+    eq(connections.provider, source.provider),
+    eq(connections.data_generation, source.sourceGeneration),
+  )).returning({ id: connections.id });
+  return updated.length === 1;
+}
+
+/** Reads freshness from the same provider/generation fence used for publishing it. */
+export async function getLastSyncAtForSource(source: ErpDataSource): Promise<Date | null> {
+  const [row] = await db.select({ lastSyncAt: connections.last_sync_at }).from(connections).where(and(
+    eq(connections.org_id, source.orgId),
+    eq(connections.provider, source.provider),
+    eq(connections.data_generation, source.sourceGeneration),
+  )).limit(1);
+  return row?.lastSyncAt ?? null;
 }
 
 export async function getProviderRefreshContext(
