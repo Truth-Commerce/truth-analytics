@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const execute = vi.fn();
-  return { execute, transaction: vi.fn(async (work: (tx: { execute: typeof execute }) => Promise<unknown>) => work({ execute })), acquire: vi.fn(), save: vi.fn(), yieldLease: vi.fn(), complete: vi.fn(), fail: vi.fn(), fetchOrders: vi.fn() };
+  return { execute, transaction: vi.fn(async (work: (tx: { execute: typeof execute }) => Promise<unknown>) => work({ execute })), acquire: vi.fn(), save: vi.fn(), yieldLease: vi.fn(), complete: vi.fn(), fail: vi.fn(), fetchOrders: vi.fn(), parse: vi.fn(() => null) };
 });
 const { execute, transaction, acquire, save, yieldLease, complete, fail, fetchOrders } = mocks;
 vi.mock('@/db/client', () => ({ db: { execute: mocks.execute, transaction: mocks.transaction } }));
 vi.mock('@/modules/connections/provider-connection.repository', () => ({ getOlistAccountFingerprint: vi.fn(async () => 'a'.repeat(64)) }));
-vi.mock('@/modules/connections/sync-state.repository', () => ({ acquireSyncLease: mocks.acquire, completeSyncLease: mocks.complete, failSyncLease: mocks.fail, getSyncLeaseRemainingMs: vi.fn(async () => 999_999), renewSyncLease: vi.fn(), parsePreparationCursor: vi.fn(() => null), savePreparationCursor: mocks.save, yieldSyncLease: mocks.yieldLease }));
+vi.mock('@/modules/connections/sync-state.repository', () => ({ acquireSyncLease: mocks.acquire, completeSyncLease: mocks.complete, failSyncLease: mocks.fail, getSyncLeaseRemainingMs: vi.fn(async () => 999_999), renewSyncLease: vi.fn(), parsePreparationCursor: mocks.parse, savePreparationCursor: mocks.save, yieldSyncLease: mocks.yieldLease }));
 vi.mock('@/modules/providers/registry', () => ({ getErpDataProvider: () => ({ fetchOrders: mocks.fetchOrders }) }));
 vi.mock('@/modules/pipeline/steps/enrich-orders', () => ({ enrichOrders: vi.fn() }));
 vi.mock('@/modules/pipeline/order-reconciliation', () => ({ reconcileOrderReadiness: vi.fn() }));
@@ -47,5 +47,12 @@ describe('Olist shadow preparation window', () => {
     const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { maxOrders: limit })).rejects.toThrow('prepare_olist_limit_invalid');
     expect(acquire).not.toHaveBeenCalled();
+  });
+
+  it('fails closed and releases the outer lease when a remote page makes no progress', async () => {
+    fetchOrders.mockImplementation(async (_org: string, _request: unknown, onPage: (page: unknown) => Promise<void>) => onPage({ orders: [], offset: 0, nextOffset: 0, total: 2, done: false }));
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'blocked', reason: 'prepare_failed' });
+    expect(fail).toHaveBeenCalledWith(expect.objectContaining({ errorCode: 'prepare_page_no_progress' }));
   });
 });
