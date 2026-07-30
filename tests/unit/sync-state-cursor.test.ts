@@ -63,7 +63,7 @@ describe('parsePreparationCursor', () => {
       sourceGeneration: 3,
       accountFingerprint: 'a'.repeat(64),
       window: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-02T00:00:00.000Z' },
-      catchUpFrom: '2026-07-01T00:00:00.000Z',
+      catchUpFrom: '2026-07-02T00:00:00.000Z',
       snapshot: { done: true },
       catchup: { done: true, completedAt: '2026-07-02T00:00:00.000Z' },
       verify1: { done: true, expectedCount: 2, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) },
@@ -81,7 +81,7 @@ describe('parsePreparationCursor', () => {
     const cursor = {
       version: 1, stage: 'snapshot', sourceGeneration: 3, accountFingerprint: 'a'.repeat(64),
       window: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-02T00:00:00.000Z' },
-      catchUpFrom: '2026-07-01T12:00:00.000Z', snapshot: { done: false }, catchup: { done: false, completedAt: null },
+      catchUpFrom: '2026-07-02T12:00:00.000Z', snapshot: { done: false }, catchup: { done: false, completedAt: null },
       verify1: null, verify2: null, progress: { phaseKey: 'snapshot', cycleId: 'cycle-a', offset: 100, total: 250 },
     };
     expect(parsePreparationCursor(cursor, 3, 'a'.repeat(64))).toEqual(cursor);
