@@ -169,6 +169,13 @@
       "when": 1785347435922,
       "tag": "0023_olist_provider_rate_limit_waiters",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785406882176,
+      "tag": "0024_famous_doorman",
+      "breakpoints": true
     }
   ]
 }
