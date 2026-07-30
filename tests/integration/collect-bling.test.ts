@@ -18,13 +18,19 @@ function mockFetchOrdersOnce(
   pedidos: RawOrder[],
 ) {
   return vi
-    .spyOn(provider.blingProvider, 'fetchOrders')
-    .mockImplementationOnce(async (_orgId, _periodo, onPage) => {
-      if (onPage) {
-        await onPage(pedidos);
-        return [];
-      }
-      return pedidos;
+    .spyOn(provider.blingDataProvider, 'fetchOrders')
+    .mockImplementationOnce(async (_orgId, _request, onPage) => {
+      await onPage({
+        orders: pedidos.map(({ blingOrderId, ...order }) => ({
+          ...order,
+          providerOrderId: blingOrderId,
+          providerStatus: '',
+        })),
+        offset: 0,
+        nextOffset: pedidos.length,
+        total: pedidos.length,
+        done: true,
+      });
     });
 }
 
