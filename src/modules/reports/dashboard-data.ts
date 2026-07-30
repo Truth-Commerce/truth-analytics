@@ -9,6 +9,7 @@ import {
 } from '@/modules/organizations/organization-settings.repository';
 import { listTaskTitulosAbertos } from '@/modules/tasks/task.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
+import { fontesRelatorioCompativeis } from '@/modules/reports/compare';
 
 import {
   getUltimosDoneDetalhados,
@@ -57,7 +58,7 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
   const latestDone = doneMaisRecente[0] ?? null;
   // O cartão atual/anterior nunca mistura gerações de ERP. A fonte é a do
   // relatório atual, não a conexão ativa (que pode ter trocado depois dele).
-  const donesRecentes = latestDone?.sourceProvider !== null && latestDone.sourceGeneration !== null
+  const donesRecentes = latestDone !== null && fontesRelatorioCompativeis(latestDone, latestDone)
     ? await getUltimosDoneDetalhados(orgId, 2, latestDone)
     : latestDone ? [latestDone] : [];
   // Dependente do latestDone — fora do Promise.all de propósito.
