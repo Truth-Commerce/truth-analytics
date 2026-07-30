@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
@@ -27,11 +27,14 @@ describe.skipIf(!url)('collect-orders provider-aware — integração', () => {
       { org_id: orgB, provider: 'olist', provider_account_fingerprint: 'b'.repeat(64), data_generation: 1, status: 'configurado' },
     ]);
   });
-  afterAll(async () => {
+  afterEach(async () => {
     await tdb.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgA));
     await tdb.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgB));
     await tdb.delete(orders).where(eq(orders.org_id, orgA));
     await tdb.delete(orders).where(eq(orders.org_id, orgB));
+    vi.restoreAllMocks();
+  });
+  afterAll(async () => {
     await tdb.delete(connections).where(eq(connections.org_id, orgA));
     await tdb.delete(connections).where(eq(connections.org_id, orgB));
     await tdb.delete(organizations).where(eq(organizations.id, orgA));
@@ -76,14 +79,13 @@ describe.skipIf(!url)('collect-orders provider-aware — integração', () => {
   });
 
   it('renews from the PostgreSQL remaining-time authority before the Olist request', async () => {
-    const registry = await import('@/modules/providers/registry');
-    const provider: ErpDataProvider = { name: 'olist', fetchOrders: async (_org, _request, onPage) => onPage({ orders: [], offset: 0, nextOffset: 0, total: 0, done: true }), fetchOrderDetail: vi.fn() };
-    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue(provider);
-    const existing = await acquireSyncLease({ source: { ...sourceB(), accountFingerprint: 'b'.repeat(64) }, resource: 'orders_list', ttlMs: 270_000 });
-    await sql`UPDATE connection_sync_state SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE lease_token=${existing!.token}`;
-    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
-    await collectOrders(sourceB(), periodo);
-    expect(await getSyncLeaseRemainingMs(existing!)).toBeNull();
+    const existing = await acquireSyncLease({ source: { ...sourceB(), accountFingerprint: 'b'.repeat(64) }, resource: 'orders_list', ttlMs: 30_000 });
+    const { renewOrdersLeaseForRequest, WORST_CASE_OLIST_REQUEST_MS } = await import('@/modules/pipeline/steps/collect-orders');
+    const renewed = await renewOrdersLeaseForRequest(existing!);
+    expect(renewed).not.toBeNull();
+    expect(renewed!.fencingVersion).toBe(existing!.fencingVersion);
+    expect(renewed!.expiresAt.getTime()).toBeGreaterThan(existing!.expiresAt.getTime());
+    expect(await getSyncLeaseRemainingMs(renewed!)).toBeGreaterThan(WORST_CASE_OLIST_REQUEST_MS);
   });
 
   it('resumes a compatible saved cursor and lets an explicit startOffset take precedence', async () => {
@@ -91,7 +93,8 @@ describe.skipIf(!url)('collect-orders provider-aware — integração', () => {
     const offsets: number[] = [];
     const provider: ErpDataProvider = { name: 'olist', fetchOrders: async (_org, request, onPage) => { offsets.push(request.offset); await onPage({ orders: [], offset: request.offset, nextOffset: request.offset, total: request.offset, done: true }); }, fetchOrderDetail: vi.fn() };
     vi.spyOn(registry, 'getErpDataProvider').mockReturnValue(provider);
-    await sql`UPDATE connection_sync_state SET cursor=${JSON.stringify({ pass: 'created', from: periodo.inicio.toISOString(), to: periodo.fim.toISOString(), updatedAfter: periodo.inicio.toISOString(), offset: 7, total: 9, sourceGeneration: 1 })}::jsonb, lease_token=NULL, lease_expires_at=NULL WHERE org_id=${orgB} AND provider='olist' AND source_generation=1 AND resource='orders_list'`;
+    const seeded = await acquireSyncLease({ source: { ...sourceB(), accountFingerprint: 'b'.repeat(64) }, resource: 'orders_list', ttlMs: 270_000 });
+    await sql`UPDATE connection_sync_state SET cursor=${JSON.stringify({ pass: 'created', from: periodo.inicio.toISOString(), to: periodo.fim.toISOString(), updatedAfter: periodo.inicio.toISOString(), offset: 7, total: 9, sourceGeneration: 1 })}::jsonb, lease_token=NULL, lease_expires_at=NULL WHERE lease_token=${seeded!.token}`;
     const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
     await collectOrders(sourceB(), periodo);
     await collectOrders(sourceB(), periodo, { startOffset: 2 });
@@ -111,14 +114,115 @@ describe.skipIf(!url)('collect-orders provider-aware — integração', () => {
       predecessor!,
       { ...successor!, sourceGeneration: 2 },
       { ...successor!, accountFingerprint: 'c'.repeat(64) },
+      { ...successor!, accountFingerprint: null },
       { ...successor!, token: 'invalid-token' },
       { ...successor!, fencingVersion: successor!.fencingVersion + 1n },
       { ...successor!, expiresAt: new Date(0) },
+      { ...successor!, resource: 'stock' as const },
     ];
     for (const lease of variants) expect(await persistOrdersPageWithLease({ lease, source, page, nextCursor: cursor })).toBe(false);
+    expect(await persistOrdersPageWithLease({
+      lease: successor!, source, page, nextCursor: { ...cursor, sourceGeneration: 2 },
+    })).toBe(false);
     const rows = await tdb.select().from(orders).where(and(eq(orders.org_id, orgB), eq(orders.provider_order_id, `fenced-${RUN}`)));
     expect(rows).toHaveLength(0);
     const [state] = await sql`SELECT cursor FROM connection_sync_state WHERE lease_token=${successor!.token}`;
     expect(state.cursor).toBeNull();
+  });
+
+  it('does not start a request after the deadline and releases the lease', async () => {
+    const registry = await import('@/modules/providers/registry');
+    const fetchOrders = vi.fn();
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'olist', fetchOrders, fetchOrderDetail: vi.fn(),
+    });
+    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
+    await expect(collectOrders(sourceA(), periodo, { startOffset: -1 })).rejects.toThrow('orders_start_offset_invalid');
+    const result = await collectOrders(sourceA(), periodo, { deadlineMs: 0 });
+    expect(result.incompleto).toBe(true);
+    expect(fetchOrders).not.toHaveBeenCalled();
+    const [state] = await sql`SELECT lease_token, lease_expires_at, last_error_code FROM connection_sync_state WHERE org_id=${orgA} AND provider='olist' AND source_generation=3 AND resource='orders_list'`;
+    expect(state).toMatchObject({ lease_token: null, lease_expires_at: null, last_error_code: 'olist_deadline_exceeded' });
+  });
+
+  it('rejects unsupported Bling shadow generations at the public collector boundary', async () => {
+    const registry = await import('@/modules/providers/registry');
+    const fetchOrders = vi.fn();
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'bling', fetchOrders, fetchOrderDetail: vi.fn(),
+    });
+    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
+    await expect(collectOrders({ orgId: orgA, provider: 'bling', sourceGeneration: 4 }, periodo))
+      .rejects.toThrow('bling_source_generation_invalid');
+    expect(fetchOrders).not.toHaveBeenCalled();
+  });
+
+  it('releases the lease when the provider violates the page callback contract', async () => {
+    const registry = await import('@/modules/providers/registry');
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'olist', fetchOrders: async () => undefined, fetchOrderDetail: vi.fn(),
+    });
+    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
+    await expect(collectOrders(sourceA(), periodo)).rejects.toThrow('orders_page_missing');
+    const [state] = await sql`SELECT lease_token, lease_expires_at, last_error_code FROM connection_sync_state WHERE org_id=${orgA} AND provider='olist' AND source_generation=3 AND resource='orders_list'`;
+    expect(state).toMatchObject({ lease_token: null, lease_expires_at: null, last_error_code: 'orders_page_missing' });
+  });
+
+  it('captures updatedAfter before page one and preserves it while paging', async () => {
+    const registry = await import('@/modules/providers/registry');
+    let persistedUpdatedAfter: string | undefined;
+    const before = Date.now();
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'olist',
+      fetchOrderDetail: vi.fn(),
+      fetchOrders: async (_org, request, onPage) => {
+        if (request.offset === 0) {
+          await onPage({ orders: [], offset: 0, nextOffset: 1, total: 2, done: false });
+          return;
+        }
+        const [state] = await sql`SELECT cursor FROM connection_sync_state WHERE org_id=${orgA} AND provider='olist' AND source_generation=3 AND resource='orders_list'`;
+        persistedUpdatedAfter = state.cursor.updatedAfter as string;
+        await onPage({ orders: [], offset: 1, nextOffset: 2, total: 2, done: true });
+      },
+    });
+    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
+    const result = await collectOrders(sourceA(), periodo);
+    expect(result.incompleto).toBeUndefined();
+    const after = Date.now();
+    const [state] = await sql`SELECT cursor FROM connection_sync_state WHERE org_id=${orgA} AND provider='olist' AND source_generation=3 AND resource='orders_list'`;
+    expect(state.cursor.updatedAfter).toBe(persistedUpdatedAfter);
+    expect(new Date(persistedUpdatedAfter!).getTime()).toBeGreaterThanOrEqual(before);
+    expect(new Date(persistedUpdatedAfter!).getTime()).toBeLessThanOrEqual(after);
+  });
+
+  it('releases the lease after provider and persistence failures', async () => {
+    const registry = await import('@/modules/providers/registry');
+    const { collectOrders } = await import('@/modules/pipeline/steps/collect-orders');
+
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'olist',
+      fetchOrderDetail: vi.fn(),
+      fetchOrders: async () => { throw new Error('olist_network_failure'); },
+    });
+    await expect(collectOrders(sourceA(), periodo)).rejects.toThrow('olist_network_failure');
+    let [state] = await sql`SELECT lease_token, lease_expires_at, last_error_code FROM connection_sync_state WHERE org_id=${orgA} AND provider='olist' AND source_generation=3 AND resource='orders_list'`;
+    expect(state).toMatchObject({ lease_token: null, lease_expires_at: null, last_error_code: 'olist_orders_list_failed' });
+
+    vi.restoreAllMocks();
+    vi.spyOn(registry, 'getErpDataProvider').mockReturnValue({
+      name: 'olist',
+      fetchOrderDetail: vi.fn(),
+      fetchOrders: async (_org, _request, onPage) => onPage({
+        orders: [{ providerOrderId: `invalid-page-${RUN}`, providerStatus: 'open', canal: 'Loja', data: new Date(), valorTotal: 1, frete: 0, itens: [] }],
+        offset: 0, nextOffset: -1, total: 1, done: false,
+      }),
+    });
+    await expect(collectOrders(sourceA(), periodo)).resolves.toMatchObject({ incompleto: true });
+    [state] = await sql`SELECT lease_token, lease_expires_at, last_error_code FROM connection_sync_state WHERE org_id=${orgA} AND provider='olist' AND source_generation=3 AND resource='orders_list'`;
+    expect(state).toMatchObject({ lease_token: null, lease_expires_at: null, last_error_code: 'olist_orders_persist_failed' });
+    const invalidRows = await tdb.select().from(orders).where(and(
+      eq(orders.org_id, orgA), eq(orders.provider_order_id, `invalid-page-${RUN}`),
+    ));
+    expect(invalidRows).toHaveLength(0);
   });
 });
