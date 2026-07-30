@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { compararMetricas, deltaNumero } from '@/modules/reports/compare';
+import { compararMetricas, deltaNumero, fontesRelatorioCompativeis } from '@/modules/reports/compare';
 import type { Metricas, TruthScore } from '@/modules/pipeline/contracts';
 
 const mA: Metricas = {
@@ -65,5 +65,33 @@ describe('compararMetricas', () => {
     const a = { ...mA, truth_score: { ...scoreStub, score: 80 } };
     const b = { ...mB, truth_score: { ...scoreStub, score: 60 } };
     expect(compararMetricas(a, b).truthScore).toEqual({ atual: 80, anterior: 60, deltaAbs: 20, deltaPct: 33.3 });
+  });
+});
+
+describe('fontesRelatorioCompativeis', () => {
+  it('aceita somente provider e geração válidos e idênticos', () => {
+    expect(fontesRelatorioCompativeis(
+      { sourceProvider: 'olist', sourceGeneration: 3 },
+      { sourceProvider: 'olist', sourceGeneration: 3 },
+    )).toBe(true);
+    expect(fontesRelatorioCompativeis(
+      { sourceProvider: 'olist', sourceGeneration: 3 },
+      { sourceProvider: 'bling', sourceGeneration: 1 },
+    )).toBe(false);
+  });
+
+  it('recusa fontes ausentes, parciais ou inválidas', () => {
+    expect(fontesRelatorioCompativeis(
+      { sourceProvider: null, sourceGeneration: null },
+      { sourceProvider: 'bling', sourceGeneration: 1 },
+    )).toBe(false);
+    expect(fontesRelatorioCompativeis(
+      { sourceProvider: 'olist', sourceGeneration: null },
+      { sourceProvider: 'olist', sourceGeneration: 3 },
+    )).toBe(false);
+    expect(fontesRelatorioCompativeis(
+      { sourceProvider: 'desconhecido' as never, sourceGeneration: 3 },
+      { sourceProvider: 'desconhecido' as never, sourceGeneration: 3 },
+    )).toBe(false);
   });
 });

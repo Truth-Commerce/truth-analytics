@@ -42,7 +42,7 @@ export default async function RelatorioDetalhePage(props: { params: Promise<{ id
 
   const anterior =
     rel.status === 'done' && rel.metricas
-      ? await getDoneAnterior(access.orgId, rel.createdAt, rel.id)
+      ? await getDoneAnterior(access.orgId, rel.createdAt, rel.id, rel)
       : null;
 
   const titulosExistentes = rel.analiseIa

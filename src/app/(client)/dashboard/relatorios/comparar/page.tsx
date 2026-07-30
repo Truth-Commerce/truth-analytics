@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDoneAnterior, getReportById, listDoneReports } from '@/modules/reports/report.repository';
-import { compararMetricas, compararTopProdutos, leituraComparacao } from '@/modules/reports/compare';
+import { compararMetricas, compararTopProdutos, fontesRelatorioCompativeis, leituraComparacao } from '@/modules/reports/compare';
 import { formatBRL, formatPeriodo } from '@/lib/format';
 import { CanalDot } from '@/components/ui/CanalDot';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -70,15 +70,19 @@ export default async function CompararPage(
       relB =
         searchParams.b && searchParams.b !== searchParams.a
           ? await getReportById(searchParams.b, access.orgId)
-          : await getDoneAnterior(access.orgId, relA.createdAt, relA.id);
+          : await getDoneAnterior(access.orgId, relA.createdAt, relA.id, relA);
     }
   }
 
   const usouDefaultAnterior = !searchParams.b || searchParams.b === searchParams.a;
-  const comp =
-    relA?.metricas && relB?.metricas ? compararMetricas(relA.metricas, relB.metricas) : null;
-  const produtos =
-    relA?.metricas && relB?.metricas ? compararTopProdutos(relA.metricas, relB.metricas) : [];
+  const fontesCompativeis = relA !== null && relB !== null && fontesRelatorioCompativeis(relA, relB);
+  const fontesIncompativeis = relA !== null && relB !== null && !fontesCompativeis;
+  const comp = relA?.metricas && relB?.metricas && fontesCompativeis
+    ? compararMetricas(relA.metricas, relB.metricas)
+    : null;
+  const produtos = relA?.metricas && relB?.metricas && fontesCompativeis
+    ? compararTopProdutos(relA.metricas, relB.metricas)
+    : [];
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
@@ -203,7 +207,9 @@ export default async function CompararPage(
         <Card>
           <CardContent>
             <p className="text-muted">
-              {searchParams.a && relA && !relB && usouDefaultAnterior
+              {fontesIncompativeis
+                ? 'relatorios_fontes_incompativeis'
+                : searchParams.a && relA && !relB && usouDefaultAnterior
                 ? 'Este é o primeiro relatório concluído — não há período anterior para comparar.'
                 : dones.length < 2
                   ? 'Você precisa de pelo menos 2 relatórios concluídos para comparar.'

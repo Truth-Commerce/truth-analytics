@@ -43,7 +43,7 @@ export async function getTaskImpact(taskId: string, orgId: string): Promise<Task
   const origemParsed = MetricasSchema.safeParse(origem.metricas);
   if (!origemParsed.success) return null;
 
-  const atual = await getLatestDoneReportAfter(orgId, origem.createdAt, origem.id);
+  const atual = await getLatestDoneReportAfter(orgId, origem.createdAt, origem.id, origem);
   if (!atual) return null;
   const atualParsed = MetricasSchema.safeParse(atual.metricas);
   if (!atualParsed.success) return null;

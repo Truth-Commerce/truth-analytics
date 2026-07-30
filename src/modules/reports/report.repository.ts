@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNotNull, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { hasPostgresErrorCode } from '@/db/postgres-error';
@@ -164,11 +164,12 @@ export async function listDoneReports(orgId: string): Promise<ReportSummary[]> {
 export async function getUltimosDoneDetalhados(
   orgId: string,
   limite = 2,
+  source?: ReportSourceFilter,
 ): Promise<ReportDetail[]> {
   const rows = await db
     .select()
     .from(reports)
-    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done')))
+    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done'), ...(source ? [reportSourceScope(source)] : [])))
     .orderBy(desc(reports.created_at))
     .limit(limite);
   return rows.map(rowToDetail);
@@ -227,6 +228,7 @@ export async function getLatestDoneReportAfter(
   orgId: string,
   afterCreatedAt: Date,
   excludeId: string,
+  source: FrozenReportSource,
 ): Promise<ReportDetail | null> {
   const [row] = await db
     .select()
@@ -237,6 +239,7 @@ export async function getLatestDoneReportAfter(
         eq(reports.status, 'done'),
         gt(reports.created_at, afterCreatedAt),
         ne(reports.id, excludeId),
+        reportSourceScope(source),
       ),
     )
     .orderBy(desc(reports.created_at))
@@ -252,6 +255,7 @@ export async function getDoneAnterior(
   orgId: string,
   beforeCreatedAt: Date,
   excludeId: string,
+  source: FrozenReportSource,
 ): Promise<ReportDetail | null> {
   const [row] = await db
     .select()
@@ -262,6 +266,7 @@ export async function getDoneAnterior(
         eq(reports.status, 'done'),
         lt(reports.created_at, beforeCreatedAt),
         ne(reports.id, excludeId),
+        reportSourceScope(source),
       ),
     )
     .orderBy(desc(reports.created_at))
@@ -303,6 +308,25 @@ export async function createQueuedReport(
     }
     throw e;
   }
+}
+
+export type FrozenReportSource = Pick<ReportSummary, 'sourceProvider' | 'sourceGeneration'>;
+type ReportSourceFilter = FrozenReportSource | { provider: string; sourceGeneration: number };
+
+/** SQL equivalente à fonte normalizada do DTO (done legado NULL,NULL = bling/1). */
+function reportSourceScope(source: ReportSourceFilter) {
+  const provider = 'sourceProvider' in source ? source.sourceProvider : source.provider;
+  const generation = source.sourceGeneration;
+  if (provider === 'bling' && generation === 1) {
+    return or(
+      and(eq(reports.source_provider, 'bling'), eq(reports.source_generation, 1)),
+      and(isNull(reports.source_provider), isNull(reports.source_generation)),
+    );
+  }
+  if (provider !== null && generation !== null && isErpProviderId(provider) && Number.isInteger(generation) && generation > 0) {
+    return and(eq(reports.source_provider, provider), eq(reports.source_generation, generation));
+  }
+  return sql`false`;
 }
 
 export type QueuedReportClaim = {
