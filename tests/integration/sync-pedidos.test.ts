@@ -11,7 +11,7 @@ vi.mock('@/lib/env', async (importOriginal) => {
 });
 
 import { db } from '@/db/client';
-import { connections, orders, organizations } from '@/db/schema';
+import { connectionSyncState, connections, orders, organizations } from '@/db/schema';
 import { blingDataProvider } from '@/modules/providers/bling/provider';
 import type { RawOrder } from '@/modules/providers/types';
 
@@ -63,6 +63,9 @@ describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
   afterAll(async () => {
     try {
       await db.delete(orders).where(eq(orders.org_id, orgId));
+      await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
+      await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgErroId));
+      if (orgNuncaSyncId) await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgNuncaSyncId));
       await db.delete(connections).where(eq(connections.org_id, orgId));
       await db.delete(connections).where(eq(connections.org_id, orgErroId));
       if (orgNuncaSyncId) await db.delete(connections).where(eq(connections.org_id, orgNuncaSyncId));

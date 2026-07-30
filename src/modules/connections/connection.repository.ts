@@ -90,7 +90,10 @@ export async function getValidAccessToken(
 
   // precisa renovar
   try {
-    const refreshed = await blingProvider.refresh(decryptSecret(row.refresh_token), options);
+    const refreshToken = decryptSecret(row.refresh_token);
+    const refreshed = options.deadlineAt === undefined
+      ? await blingProvider.refresh(refreshToken)
+      : await blingProvider.refresh(refreshToken, options);
     await db
       .update(connections)
       .set({
