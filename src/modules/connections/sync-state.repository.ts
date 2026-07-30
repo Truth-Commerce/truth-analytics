@@ -114,6 +114,15 @@ export function createSyncStateRepository(client: SqlExecutor = db) {
       `));
       return result.length === 1;
     },
+    async savePreparationCursor(input: SyncLease & { cursor: unknown }): Promise<boolean> {
+      if (input.resource !== 'orders_prepare') return false;
+      const serializedCursor = serializeCursor(input.cursor);
+      const result = rows(await client.execute(sql`
+        UPDATE connection_sync_state SET cursor=${serializedCursor}::jsonb, updated_at=clock_timestamp()
+        WHERE ${ownerPredicate(input)} RETURNING id
+      `));
+      return result.length === 1;
+    },
     async failSyncLease(input: SyncLease & { errorCode: string }): Promise<boolean> {
       const result = rows(await client.execute(sql`
         UPDATE connection_sync_state SET lease_token = NULL, lease_expires_at = NULL, failed_at = clock_timestamp(), updated_at = clock_timestamp(), last_error_code = ${input.errorCode}
@@ -129,6 +138,7 @@ export const acquireSyncLease = repository.acquireSyncLease;
 export const getSyncLeaseRemainingMs = repository.getSyncLeaseRemainingMs;
 export const renewSyncLease = repository.renewSyncLease;
 export const advanceSyncCursor = repository.advanceSyncCursor;
+export const savePreparationCursor = repository.savePreparationCursor;
 export const completeSyncLease = repository.completeSyncLease;
 export const yieldSyncLease = repository.yieldSyncLease;
 export const failSyncLease = repository.failSyncLease;
