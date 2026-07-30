@@ -9,6 +9,7 @@ const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
 const tdb = drizzle(sql);
 const RUN = Date.now();
+const sourceFor = (orgId: string) => ({ orgId, provider: 'bling' as const, sourceGeneration: 1 });
 
 const PERIODO = {
   inicio: new Date('2026-06-01T00:00:00Z'),
@@ -56,7 +57,7 @@ describe.skipIf(!url)('compute-metrics — séries v2 (integração)', () => {
       ]);
 
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
-      const m = await computeMetrics(orgId, r.id, PERIODO, true);
+      const m = await computeMetrics(sourceFor(orgId), r.id, PERIODO, true);
 
       expect(m.evolucaoDetalhada).toEqual([{ data: '2026-06-01', total: 300, pedidos: 2 }]);
       expect(m.canalPorDia).toEqual([

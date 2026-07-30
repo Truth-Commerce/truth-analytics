@@ -16,6 +16,7 @@ const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
 const tdb = drizzle(sql);
 const RUN = Date.now();
+const sourceFor = (orgId: string) => ({ orgId, provider: 'bling' as const, sourceGeneration: 1 });
 
 describe.skipIf(!url)('compute-metrics — integração', () => {
   let orgId = '';
@@ -146,7 +147,7 @@ describe.skipIf(!url)('compute-metrics — integração', () => {
 
     try {
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
-      const result = await computeMetrics(orgId, reportId, PERIODO);
+      const result = await computeMetrics(sourceFor(orgId), reportId, PERIODO);
 
       // MetricasSchema must parse successfully
       expect(() => MetricasSchema.parse(result)).not.toThrow();
@@ -213,7 +214,7 @@ describe.skipIf(!url)('compute-metrics — integração', () => {
 
     try {
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
-      const result = await computeMetrics(orgId, reportId, PERIODO);
+      const result = await computeMetrics(sourceFor(orgId), reportId, PERIODO);
 
       expect(() => MetricasSchema.parse(result)).not.toThrow();
       expect(result.benchmarkParcial).toBe(true);
@@ -236,10 +237,10 @@ describe.skipIf(!url)('compute-metrics — integração', () => {
 
     try {
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
-      const result = await computeMetrics(orgId, reportId, PERIODO, false);
+      const result = await computeMetrics(sourceFor(orgId), reportId, PERIODO, false);
       expect(result.benchmarkParcial).toBe(false);
 
-      const result2 = await computeMetrics(orgId, reportId, PERIODO, true);
+      const result2 = await computeMetrics(sourceFor(orgId), reportId, PERIODO, true);
       expect(result2.benchmarkParcial).toBe(true);
     } finally {
       await tdb.delete(orders).where(eq(orders.org_id, orgId));
@@ -260,7 +261,7 @@ describe.skipIf(!url)('compute-metrics — integração', () => {
 
     try {
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
-      const result = await computeMetrics(orgId, reportId, PERIODO);
+      const result = await computeMetrics(sourceFor(orgId), reportId, PERIODO);
 
       // no orders in January for this org → ticket 0, empty arrays
       expect(result.ticketMedio).toBe(0);
@@ -296,7 +297,7 @@ describe.skipIf(!url)('compute-metrics — integração', () => {
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
 
       // Compute metrics for org1 (with no data seeded here)
-      const result = await computeMetrics(orgId, reportId, PERIODO);
+      const result = await computeMetrics(sourceFor(orgId), reportId, PERIODO);
 
       expect(() => MetricasSchema.parse(result)).not.toThrow();
 

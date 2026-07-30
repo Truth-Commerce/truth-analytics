@@ -19,8 +19,8 @@ export type GerarKitsInput = {
   orgName: string;
   nicho: string | null;
   ticketMedio: number | null;
-  provider?: ErpDataSource['provider'];
-  sourceGeneration?: number;
+  provider: ErpDataSource['provider'];
+  sourceGeneration: number;
 };
 
 /**
@@ -29,7 +29,7 @@ export type GerarKitsInput = {
  * pós-finalize (pos-finalize-extras.ts).
  */
 export async function gerarKitsDoCiclo(input: GerarKitsInput): Promise<{ kits: number } | null> {
-  const source = { orgId: input.orgId, provider: input.provider ?? 'bling', sourceGeneration: input.sourceGeneration ?? 1 } as const;
+  const source = { orgId: input.orgId, provider: input.provider, sourceGeneration: input.sourceGeneration } as const;
   const ancora = await getUltimaDataPedido(source);
   if (!ancora) return null;
 

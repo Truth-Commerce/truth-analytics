@@ -23,8 +23,8 @@ export type GerarCalendarioInput = {
   reportId: string;
   orgName: string;
   nicho: string | null;
-  provider?: ErpDataSource['provider'];
-  sourceGeneration?: number;
+  provider: ErpDataSource['provider'];
+  sourceGeneration: number;
 };
 
 /**
@@ -42,7 +42,7 @@ export async function gerarCalendarioDoCiclo(
   }));
   if (datas.length === 0) return null;
 
-  const source = { orgId: input.orgId, provider: input.provider ?? 'bling', sourceGeneration: input.sourceGeneration ?? 1 } as const;
+  const source = { orgId: input.orgId, provider: input.provider, sourceGeneration: input.sourceGeneration } as const;
   const ancora = await getUltimaDataPedido(source);
   if (!ancora) return null;
 

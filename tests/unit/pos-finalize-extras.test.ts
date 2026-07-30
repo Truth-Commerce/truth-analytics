@@ -21,6 +21,7 @@ const BASE = {
   nicho: 'cozinha' as string | null,
   ticketMedio: 80,
   topProdutos: ['A'],
+  source: { orgId: 'o1', provider: 'olist' as const, sourceGeneration: 7 },
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -31,7 +32,7 @@ describe('executarExtrasPosFinalize', () => {
     await executarExtrasPosFinalize(BASE);
     expect(inferirNichoComIA).not.toHaveBeenCalled();
     expect(gerarKitsDoCiclo).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'o1', nicho: 'cozinha' }),
+      expect.objectContaining({ orgId: 'o1', nicho: 'cozinha', provider: 'olist', sourceGeneration: 7 }),
     );
   });
 
@@ -44,7 +45,7 @@ describe('executarExtrasPosFinalize', () => {
     vi.mocked(gerarKitsDoCiclo).mockResolvedValue(null);
     await executarExtrasPosFinalize({ ...BASE, nicho: null });
     expect(gravarNichoSeVazio).toHaveBeenCalledWith('o1', 'papelaria');
-    expect(gerarKitsDoCiclo).toHaveBeenCalledWith(expect.objectContaining({ nicho: 'papelaria' }));
+    expect(gerarKitsDoCiclo).toHaveBeenCalledWith(expect.objectContaining({ nicho: 'papelaria', provider: 'olist', sourceGeneration: 7 }));
   });
 
   it('falha em um passo NAO impede o seguinte e NUNCA lança', async () => {
@@ -69,7 +70,7 @@ describe('executarExtrasPosFinalize', () => {
     vi.mocked(gerarCalendarioDoCiclo).mockResolvedValue({ sugestoes: 3 });
     await executarExtrasPosFinalize(BASE);
     expect(gerarCalendarioDoCiclo).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'o1', reportId: 'r1', orgName: 'Loja', nicho: 'cozinha' }),
+      expect.objectContaining({ orgId: 'o1', reportId: 'r1', orgName: 'Loja', nicho: 'cozinha', provider: 'olist', sourceGeneration: 7 }),
     );
   });
 

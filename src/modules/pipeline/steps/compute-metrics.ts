@@ -11,7 +11,7 @@ import { computeTruthScore } from './truth-score';
 import type { RawOrderItem } from '@/modules/providers/types';
 import type { Periodo } from '@/modules/providers/types';
 import type { ErpDataSource } from '@/modules/providers/data.types';
-import { legacyBlingSource, orderScope } from '@/modules/orders/order-scope';
+import { orderScope } from '@/modules/orders/order-scope';
 
 // ---------------------------------------------------------------------------
 // Types used internally for pure functions
@@ -414,12 +414,11 @@ export function posicaoPreco(
 // ---------------------------------------------------------------------------
 
 export async function computeMetrics(
-  source: ErpDataSource | string,
+  source: ErpDataSource,
   reportId: string,
   periodo: Periodo,
   benchmarkParcialOverride?: boolean,
 ): Promise<Metricas> {
-  source = legacyBlingSource(source);
   // Load orders for org within the period
   const rawOrders = await db
     .select()
