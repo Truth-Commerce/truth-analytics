@@ -161,14 +161,14 @@ export type PreparationCursor = {
   window: { from: string; to: string };
   catchUpFrom: string;
   snapshot: { done: boolean };
-  catchup: { done: boolean; completedAt?: string };
+  catchup: { done: boolean; completedAt: string };
   verify1: PreparationVerification | null;
   verify2: PreparationVerification | null;
 };
 export type PreparationVerification = { done: true; expectedCount: number; checksum: string; dailyChecksum: string; channelChecksum: string };
 
 /** Versioned readiness state: any malformed persisted shape explicitly resets preparation. */
-export function parsePreparationCursor(value: unknown, sourceGeneration: number, accountFingerprint: string | null = null): PreparationCursor | null {
+export function parsePreparationCursor(value: unknown, sourceGeneration: number, accountFingerprint: string): PreparationCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const cursor = value as Record<string, unknown>;
   const snapshot = cursor.snapshot as { done?: unknown } | undefined;
@@ -177,7 +177,7 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
   const fingerprint = typeof cursor.accountFingerprint === 'string' ? cursor.accountFingerprint : null;
   const window = cursor.window as { from?: unknown; to?: unknown } | undefined;
   const from = iso(window?.from); const to = iso(window?.to); const catchUpFrom = iso(cursor.catchUpFrom);
-  const catchupCompletedAt = catchup?.completedAt === undefined ? undefined : iso(catchup.completedAt);
+  const catchupCompletedAt = iso(catchup?.completedAt);
   const digest = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{32}$/i.test(value);
   const verify = (value: unknown): PreparationVerification | null => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -186,6 +186,6 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
     return { done: true, expectedCount, checksum: entry.checksum, dailyChecksum: entry.dailyChecksum, channelChecksum: entry.channelChecksum };
   };
   const verify1 = verify(cursor.verify1); const verify2 = verify(cursor.verify2);
-  if (cursor.version !== 1 || cursor.stage !== 'ready' || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || (accountFingerprint !== null && fingerprint !== accountFingerprint) || !from || !to || !catchUpFrom || catchupCompletedAt === null || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(from) || new Date(catchUpFrom) > new Date(to) || snapshot?.done !== true || catchup?.done !== true || !verify1 || !verify2 || verify1.expectedCount !== verify2.expectedCount || verify1.checksum !== verify2.checksum || verify1.dailyChecksum !== verify2.dailyChecksum || verify1.channelChecksum !== verify2.channelChecksum) return null;
-  return { version: 1, stage: 'ready', sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: true }, catchup: catchupCompletedAt ? { done: true, completedAt: catchupCompletedAt } : { done: true }, verify1, verify2 };
+  if (cursor.version !== 1 || cursor.stage !== 'ready' || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || !catchupCompletedAt || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(from) || new Date(catchUpFrom) > new Date(to) || snapshot?.done !== true || catchup?.done !== true || !verify1 || !verify2 || verify1.expectedCount !== verify2.expectedCount || verify1.checksum !== verify2.checksum || verify1.dailyChecksum !== verify2.dailyChecksum || verify1.channelChecksum !== verify2.channelChecksum) return null;
+  return { version: 1, stage: 'ready', sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: true }, catchup: { done: true, completedAt: catchupCompletedAt }, verify1, verify2 };
 }

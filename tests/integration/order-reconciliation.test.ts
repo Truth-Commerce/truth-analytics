@@ -20,7 +20,7 @@ describe.skipIf(!url)('order readiness — integração PostgreSQL', () => {
   const cursor = (overrides = {}) => ({
     version: 1, stage: 'ready', sourceGeneration: 3, accountFingerprint: fingerprint,
     window: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-02T00:00:00.000Z' },
-    catchUpFrom: '2026-07-01T00:00:00.000Z', snapshot: { done: true }, catchup: { done: true },
+    catchUpFrom: '2026-07-01T00:00:00.000Z', snapshot: { done: true }, catchup: { done: true, completedAt: '2026-07-02T00:00:00.000Z' },
     verify1: { done: true, expectedCount: 1, checksum: createHash('md5').update('ready-order||10.00').digest('hex'), dailyChecksum: createHash('md5').update('2026-07-01|10.00').digest('hex'), channelChecksum: createHash('md5').update('Olist|10.00').digest('hex') },
     verify2: { done: true, expectedCount: 1, checksum: createHash('md5').update('ready-order||10.00').digest('hex'), dailyChecksum: createHash('md5').update('2026-07-01|10.00').digest('hex'), channelChecksum: createHash('md5').update('Olist|10.00').digest('hex') }, ...overrides,
   });
@@ -48,6 +48,7 @@ describe.skipIf(!url)('order readiness — integração PostgreSQL', () => {
     await tdb.insert(orders).values({ org_id: orgId, provider: 'olist', source_generation: 3, provider_order_id: 'outside-window', canal: 'Olist', data: new Date('2026-07-03T12:00:00.000Z'), valor_total: '99.00' });
     await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({ ready: true, reasons: [] });
     await expect(reconcileOrderReadiness(source({ accountFingerprint: 'b'.repeat(64) }))).resolves.toMatchObject({ ready: false, reasons: ['source_stale', 'preparation_incomplete'] });
+    await expect(reconcileOrderReadiness(source({ accountFingerprint: null }))).resolves.toMatchObject({ ready: false, reasons: ['source_stale', 'preparation_incomplete'] });
     await expect(reconcileOrderReadiness(source({ sourceGeneration: 4 }))).resolves.toMatchObject({ ready: false, reasons: ['source_stale', 'preparation_incomplete'] });
     await tdb.update(connections).set({ refresh_token: null }).where(eq(connections.org_id, orgId));
     await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({ ready: false, reasons: ['source_stale'] });
@@ -57,6 +58,7 @@ describe.skipIf(!url)('order readiness — integração PostgreSQL', () => {
     await seed(cursor({ verify2: { ...cursor().verify2, checksum: 'a'.repeat(32) } }));
     await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({ ready: false, reasons: ['verification_unstable'] });
     await tdb.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
+    await tdb.delete(orders).where(eq(orders.org_id, orgId));
     await seed();
     await sql`UPDATE orders SET provider_status='novo', valor_total='11.00', data='2026-07-01T13:00:00.000Z', canal='Outro' WHERE org_id=${orgId}`;
     await expect(reconcileOrderReadiness(source())).resolves.toMatchObject({ ready: false, reasons: ['checksum_mismatch', 'daily_total_mismatch', 'channel_mismatch'] });

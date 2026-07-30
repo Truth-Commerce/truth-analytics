@@ -22,7 +22,8 @@ function unstableVerification(value: unknown): boolean {
  * cursor and source-scoped order facts all agree.
  */
 export async function reconcileOrderReadiness(source: SyncSource): Promise<OrderReadiness> {
-  if (source.provider === 'olist' && (source.accountFingerprint === null || !/^[a-f0-9]{64}$/i.test(source.accountFingerprint))) {
+  const accountFingerprint = source.accountFingerprint;
+  if (source.provider === 'olist' && (accountFingerprint === null || !/^[a-f0-9]{64}$/i.test(accountFingerprint))) {
     return { ready: false, reasons: ['source_stale', 'preparation_incomplete'], expectedCount: 0, actualCount: 0, pendingDetails: 0, quarantined: 0 };
   }
   const sourceResult = await db.execute(sql`
@@ -36,7 +37,7 @@ export async function reconcileOrderReadiness(source: SyncSource): Promise<Order
       AND css.account_fingerprint IS NOT DISTINCT FROM ${source.accountFingerprint} AND css.resource='orders_prepare'
   `) as unknown as SourceRow[];
   const row = sourceResult[0];
-  const cursor = row ? parsePreparationCursor(row.cursor, source.sourceGeneration, source.accountFingerprint) : null;
+  const cursor = row && accountFingerprint !== null ? parsePreparationCursor(row.cursor, source.sourceGeneration, accountFingerprint) : null;
   const verificationUnstable = row ? unstableVerification(row.cursor) : false;
   const factsResult = cursor ? await db.execute(sql`
     SELECT count(DISTINCT NULLIF(provider_order_id, ''))::int AS actual_count,

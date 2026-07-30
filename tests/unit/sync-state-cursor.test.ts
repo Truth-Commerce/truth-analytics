@@ -65,14 +65,14 @@ describe('parsePreparationCursor', () => {
       window: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-02T00:00:00.000Z' },
       catchUpFrom: '2026-07-01T00:00:00.000Z',
       snapshot: { done: true },
-      catchup: { done: true },
+      catchup: { done: true, completedAt: '2026-07-02T00:00:00.000Z' },
       verify1: { done: true, expectedCount: 2, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) },
       verify2: { done: true, expectedCount: 2, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) },
     };
     expect(parsePreparationCursor(valid, 3, 'a'.repeat(64))).toEqual(valid);
     expect(parsePreparationCursor(valid, 4, 'a'.repeat(64))).toBeNull();
     expect(parsePreparationCursor(valid, 3, 'b'.repeat(64))).toBeNull();
-    expect(parsePreparationCursor({ version: 2 }, 3)).toBeNull();
+    expect(parsePreparationCursor({ version: 2 }, 3, 'a'.repeat(64))).toBeNull();
     expect(parsePreparationCursor({ ...valid, verify2: { ...valid.verify2, expectedCount: -1 } }, 3, 'a'.repeat(64))).toBeNull();
     expect(parsePreparationCursor({ ...valid, verify2: { ...valid.verify2, dailyChecksum: 'd'.repeat(32) } }, 3, 'a'.repeat(64))).toBeNull();
   });
