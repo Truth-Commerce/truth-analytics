@@ -114,27 +114,37 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
   try {
     let cursor = parsePreparationCursor(lease.cursor, source.sourceGeneration, fingerprint) ?? base(source, fingerprint, window);
     // A previously published generation is idempotent; malformed state always starts cleanly.
-    if (cursor.stage === 'ready') { await completeSyncLease(active); return outcome(cursor, window); }
+    if (cursor.stage === 'ready') {
+      const readiness = await reconcileOrderReadiness({ ...source, accountFingerprint: fingerprint });
+      if (!readiness.ready || !await publishReady(active, source, cursor)) {
+        await failSyncLease({ ...active, errorCode: 'prepare_ready_revalidation_failed' });
+        return { stage: 'blocked', ready: false, blocked: true, stale: false, window: { from: cursor.window.from, to: cursor.window.to, catchUpFrom: cursor.catchUpFrom }, reason: 'prepare_ready_revalidation_failed' };
+      }
+      if (!await completeSyncLease(active)) throw new Error('prepare_lease_lost');
+      return outcome(cursor, window);
+    }
     if (!await save(active, cursor)) throw new Error('prepare_lease_lost');
     if (cursor.stage === 'snapshot' || cursor.stage === 'catchup') {
       const phase = cursor.stage; const loaded = await fetchPhase(source, active, cursor, phase, deadlineAt, options.maxOrders ?? INITIAL_CAP); cursor = loaded.cursor; active = loaded.lease;
-      if (loaded.yielded || cursor.stage === 'blocked') return outcome(cursor, window);
+      if (loaded.yielded || cursor.stage === 'blocked') { if (cursor.stage === 'blocked') await yieldSyncLease(active); return outcome(cursor, window); }
     }
     if (cursor.stage === 'verify1' || cursor.stage === 'verify2') {
       const phase = cursor.stage; const verified = await fetchPhase(source, active, cursor, phase, deadlineAt, options.maxOrders ?? INITIAL_CAP); cursor = verified.cursor; active = verified.lease;
-      if (verified.yielded || cursor.stage === 'blocked') return outcome(cursor, window);
+      if (verified.yielded || cursor.stage === 'blocked') { if (cursor.stage === 'blocked') await yieldSyncLease(active); return outcome(cursor, window); }
       const evidence = await facts(source, cursor);
       if (verified.remoteTotal !== evidence.expectedCount) { cursor.stage = 'blocked'; cursor.reason = 'verification_count_mismatch'; }
       else if (phase === 'verify1') { cursor.verify1 = { done: true, ...evidence }; cursor.stage = 'verify2'; }
       else if (!cursor.verify1 || JSON.stringify(cursor.verify1) !== JSON.stringify({ done: true, ...evidence })) { cursor.stage = 'blocked'; cursor.reason = 'verification_unstable'; }
       else { cursor.verify2 = { done: true, ...evidence }; cursor.stage = 'details'; }
-      if (!await save(active, cursor)) throw new Error('prepare_lease_lost'); if (cursor.stage === 'blocked') return outcome(cursor, window);
+      if (!await save(active, cursor)) throw new Error('prepare_lease_lost'); if (cursor.stage === 'blocked') { await yieldSyncLease(active); return outcome(cursor, window); }
     }
     if (cursor.stage === 'details') {
+      const beforeDetailsLease = await renew(active); if (!beforeDetailsLease) throw new Error('prepare_lease_lost'); active = beforeDetailsLease;
       const result = await enrichOrders(source, { maxPedidos: options.maxDetails ?? INITIAL_CAP, deadlineAt, periodo: { inicio: new Date(cursor.window.from), fim: new Date(cursor.window.to) } });
-      if (result.incompleto || result.quarentenados > 0) { if (result.quarentenados > 0) { cursor.stage = 'blocked'; cursor.reason = 'details_quarantined'; await save(active, cursor); } else { await save(active, cursor); await yieldSyncLease(active); } return outcome(cursor, window, result.quarentenados > 0 ? 'details_quarantined' : 'details_pending'); }
+      const afterDetailsLease = await renew(active); if (!afterDetailsLease) throw new Error('prepare_lease_lost'); active = afterDetailsLease;
+      if (result.incompleto || result.quarentenados > 0) { if (result.quarentenados > 0) { cursor.stage = 'blocked'; cursor.reason = 'details_quarantined'; if (!await save(active, cursor)) throw new Error('prepare_lease_lost'); } else { if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); } return outcome(cursor, window, result.quarentenados > 0 ? 'details_quarantined' : 'details_pending'); }
       const readiness = await reconcileOrderReadiness({ ...source, accountFingerprint: fingerprint });
-      if (!readiness.ready) { cursor.stage = 'blocked'; cursor.reason = readiness.reasons[0] ?? 'reconciliation_failed'; await save(active, cursor); return outcome(cursor, window); }
+      if (!readiness.ready) { cursor.stage = 'blocked'; cursor.reason = readiness.reasons[0] ?? 'reconciliation_failed'; if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
       cursor.stage = 'ready';
     }
     if (cursor.stage === 'ready') {

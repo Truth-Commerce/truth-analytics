@@ -208,7 +208,7 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
     if (!rawProgress || typeof rawProgress !== 'object' || Array.isArray(rawProgress)) return null;
     const p = rawProgress as Record<string, unknown>; const phaseKey = phases.includes(p.phaseKey as PreparationPhase) ? p.phaseKey as PreparationPhase : null;
     const offset = nonNegativeInteger(p.offset); const total = p.total === null ? null : nonNegativeInteger(p.total);
-    if (!phaseKey || typeof p.cycleId !== 'string' || p.cycleId.length < 1 || offset === null || (total === null && p.total !== null)) return null;
+    if (!phaseKey || typeof p.cycleId !== 'string' || p.cycleId.length < 1 || offset === null || (total === null && p.total !== null) || (total !== null && offset > total)) return null;
     progress = { phaseKey, cycleId: p.cycleId, offset, total };
   }
   if (cursor.version !== 1 || !stage || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(from) || new Date(catchUpFrom) > new Date(to) || typeof snapshot?.done !== 'boolean' || typeof catchup?.done !== 'boolean' || (catchupCompletedAt === null && catchup?.completedAt !== null) || (cursor.verify1 !== null && !verify1) || (cursor.verify2 !== null && !verify2)) return null;
