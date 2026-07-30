@@ -19,7 +19,10 @@ import { diasDoPlano } from '@/modules/pipeline/plan-lock';
 import { deltaNumero, paceMeta } from '@/modules/reports/compare';
 import { diasDesde } from '@/modules/tasks/sla';
 import { orderScopes, type ActiveErpRef } from '@/modules/orders/order-scope';
-import { listActiveErpConnections } from '@/modules/connections/active-provider.repository';
+import {
+  getActiveErpConnection,
+  getActiveErpConnectionsForOrgIds,
+} from '@/modules/connections/active-provider.repository';
 
 // ---------------------------------------------------------------------------
 // Command center da carteira (H4 T3) — agrega TODOS os insumos do score de
@@ -229,8 +232,9 @@ async function getReportsInfoBatch(orgIds: string[], agora: Date): Promise<Map<s
  * uma org de cada vez). Reusa `getStockRows` + `getVendas30dPorSku` +
  * `montarCobertura` (mesmo pipeline do módulo de estoque).
  */
-async function contarSkusCriticos(orgId: string, agora: Date): Promise<number> {
-  const [stock, vendas30d] = await Promise.all([getStockRows(orgId), getVendas30dPorSku(orgId, agora)]);
+async function contarSkusCriticos(source: ActiveErpRef | null, agora: Date): Promise<number> {
+  if (!source) return 0;
+  const [stock, vendas30d] = await Promise.all([getStockRows(source), getVendas30dPorSku(source, agora)]);
   return montarCobertura(stock, vendas30d).filter((p) => p.estado === 'critico').length;
 }
 
@@ -248,13 +252,13 @@ async function contarSkusCriticos(orgId: string, agora: Date): Promise<number> {
  * queries no total — mesmo resultado por org (mesmas linhas, só agrupadas em
  * JS em vez de N idas ao banco), `montarCobertura` (pura) inalterada.
  */
-async function contarSkusCriticosBatch(orgIds: string[], agora: Date): Promise<Map<string, number>> {
+async function contarSkusCriticosBatch(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, number>> {
   const [stockPorOrg, vendasPorOrg] = await Promise.all([
-    getStockRowsBatch(orgIds),
-    getVendas30dPorSkuBatch(orgIds, agora),
+    getStockRowsBatch(refs),
+    getVendas30dPorSkuBatch(refs, agora),
   ]);
   const result = new Map<string, number>();
-  for (const orgId of orgIds) {
+  for (const { orgId } of refs) {
     const stock = stockPorOrg.get(orgId) ?? [];
     const vendas = vendasPorOrg.get(orgId) ?? new Map<string, number>();
     result.set(orgId, montarCobertura(stock, vendas).filter((p) => p.estado === 'critico').length);
@@ -324,7 +328,7 @@ export async function carteiraResumo(access: UserAccess, agora: Date): Promise<O
   const carteira = await getCarteira(access);
   if (carteira.length === 0) return [];
   const orgIds = carteira.map((c) => c.orgId);
-  const activeRefs = (await listActiveErpConnections({ limit: orgIds.length * 2 })).filter((ref) => orgIds.includes(ref.orgId));
+  const activeRefs = await getActiveErpConnectionsForOrgIds(orgIds);
   const hoje = hojeBrt(agora);
 
   const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticosMap] = await Promise.all([
@@ -333,7 +337,7 @@ export async function carteiraResumo(access: UserAccess, agora: Date): Promise<O
     getTotaisSemanaisBatch(activeRefs, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
-    contarSkusCriticosBatch(orgIds, agora),
+    contarSkusCriticosBatch(activeRefs, agora),
   ]);
   const insumos: InsumosPorOrg = { detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos: skusCriticosMap };
 
@@ -360,7 +364,8 @@ export async function orgResumoUnico(
   if (!c) return null;
   const hoje = hojeBrt(agora);
   const orgIds = [orgId];
-  const activeRefs = (await listActiveErpConnections({ limit: 2 })).filter((ref) => ref.orgId === orgId);
+  const activeRef = await getActiveErpConnection(orgId);
+  const activeRefs = activeRef ? [activeRef] : [];
 
   const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos] = await Promise.all([
     getOrgDetalhesBatch(orgIds),
@@ -368,7 +373,7 @@ export async function orgResumoUnico(
     getTotaisSemanaisBatch(activeRefs, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
-    contarSkusCriticos(orgId, agora),
+    contarSkusCriticos(activeRef, agora),
   ]);
   const insumos: InsumosPorOrg = {
     detalhes,
