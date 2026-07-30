@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { orders } from '@/db/schema';
@@ -30,7 +30,9 @@ function rows<T>(value: unknown): T[] { return Array.isArray(value) ? value as T
 async function pendingOrders(source: ErpDataSource, limit: number, periodo?: Periodo): Promise<PendingOrder[]> {
   const retryReady = sql`(${orders.enrichment_last_attempt_at} IS NULL OR ${orders.enrichment_last_attempt_at} <= clock_timestamp() - interval '30 seconds')`;
   const filters = [eq(orders.org_id, source.orgId), eq(orders.provider, source.provider), eq(orders.source_generation, source.sourceGeneration), isNotNull(orders.provider_order_id), isNull(orders.enriquecido_em), lt(orders.enrichment_attempts, MAX_PERMANENT_ATTEMPTS), retryReady];
-  if (periodo) filters.push(gte(orders.data, periodo.inicio), lte(orders.data, periodo.fim));
+  // Preparation windows are [from,to): never enrich an order that belongs to
+  // tomorrow's snapshot merely because it falls exactly on the upper bound.
+  if (periodo) filters.push(gte(orders.data, periodo.inicio), lt(orders.data, periodo.fim));
   const result = await db.select({ id: orders.id, providerOrderId: orders.provider_order_id, enrichmentAttempts: orders.enrichment_attempts }).from(orders).where(and(...filters)).orderBy(sql`${orders.data} desc`).limit(limit);
   return result.filter((row): row is PendingOrder => Boolean(row.providerOrderId));
 }

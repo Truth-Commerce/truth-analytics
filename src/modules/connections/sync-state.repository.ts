@@ -163,17 +163,21 @@ export function parseOrdersCursor(value: unknown, sourceGeneration?: number): Ol
   return { pass, from, to, updatedAfter, offset, total, sourceGeneration: generation };
 }
 
+export type PreparationPhase = 'snapshot' | 'catchup' | 'verify1' | 'verify2' | 'details' | 'ready' | 'blocked';
+export type PreparationProgress = { phaseKey: PreparationPhase; cycleId: string; offset: number; total: number | null };
 export type PreparationCursor = {
   version: 1;
-  stage: 'ready';
+  stage: PreparationPhase;
   sourceGeneration: number;
   accountFingerprint: string;
   window: { from: string; to: string };
   catchUpFrom: string;
   snapshot: { done: boolean };
-  catchup: { done: boolean; completedAt: string };
+  catchup: { done: boolean; completedAt: string | null };
   verify1: PreparationVerification | null;
   verify2: PreparationVerification | null;
+  progress: PreparationProgress | null;
+  reason?: string;
 };
 export type PreparationVerification = { done: true; expectedCount: number; checksum: string; dailyChecksum: string; channelChecksum: string };
 
@@ -187,7 +191,7 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
   const fingerprint = typeof cursor.accountFingerprint === 'string' ? cursor.accountFingerprint : null;
   const window = cursor.window as { from?: unknown; to?: unknown } | undefined;
   const from = iso(window?.from); const to = iso(window?.to); const catchUpFrom = iso(cursor.catchUpFrom);
-  const catchupCompletedAt = iso(catchup?.completedAt);
+  const catchupCompletedAt = catchup?.completedAt === null ? null : iso(catchup?.completedAt);
   const digest = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{32}$/i.test(value);
   const verify = (value: unknown): PreparationVerification | null => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -195,7 +199,27 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
     if (entry.done !== true || expectedCount === null || !digest(entry.checksum) || !digest(entry.dailyChecksum) || !digest(entry.channelChecksum)) return null;
     return { done: true, expectedCount, checksum: entry.checksum, dailyChecksum: entry.dailyChecksum, channelChecksum: entry.channelChecksum };
   };
-  const verify1 = verify(cursor.verify1); const verify2 = verify(cursor.verify2);
-  if (cursor.version !== 1 || cursor.stage !== 'ready' || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || !catchupCompletedAt || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(from) || new Date(catchUpFrom) > new Date(to) || snapshot?.done !== true || catchup?.done !== true || !verify1 || !verify2 || verify1.expectedCount !== verify2.expectedCount || verify1.checksum !== verify2.checksum || verify1.dailyChecksum !== verify2.dailyChecksum || verify1.channelChecksum !== verify2.channelChecksum) return null;
-  return { version: 1, stage: 'ready', sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: true }, catchup: { done: true, completedAt: catchupCompletedAt }, verify1, verify2 };
+  const verify1 = cursor.verify1 === null ? null : verify(cursor.verify1); const verify2 = cursor.verify2 === null ? null : verify(cursor.verify2);
+  const phases: PreparationPhase[] = ['snapshot', 'catchup', 'verify1', 'verify2', 'details', 'ready', 'blocked'];
+  const stage = phases.includes(cursor.stage as PreparationPhase) ? cursor.stage as PreparationPhase : null;
+  const rawProgress = cursor.progress;
+  let progress: PreparationProgress | null = null;
+  if (rawProgress !== null && rawProgress !== undefined) {
+    if (!rawProgress || typeof rawProgress !== 'object' || Array.isArray(rawProgress)) return null;
+    const p = rawProgress as Record<string, unknown>; const phaseKey = phases.includes(p.phaseKey as PreparationPhase) ? p.phaseKey as PreparationPhase : null;
+    const offset = nonNegativeInteger(p.offset); const total = p.total === null ? null : nonNegativeInteger(p.total);
+    if (!phaseKey || typeof p.cycleId !== 'string' || p.cycleId.length < 1 || offset === null || (total === null && p.total !== null)) return null;
+    progress = { phaseKey, cycleId: p.cycleId, offset, total };
+  }
+  if (cursor.version !== 1 || !stage || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(from) || new Date(catchUpFrom) > new Date(to) || typeof snapshot?.done !== 'boolean' || typeof catchup?.done !== 'boolean' || (catchupCompletedAt === null && catchup?.completedAt !== null) || (cursor.verify1 !== null && !verify1) || (cursor.verify2 !== null && !verify2)) return null;
+  if (stage !== 'snapshot' && snapshot.done !== true) return null;
+  if (!['snapshot', 'catchup'].includes(stage) && (catchup.done !== true || !catchupCompletedAt)) return null;
+  if (catchup.done === false && catchupCompletedAt !== null) return null;
+  if (stage === 'verify2' && !verify1) return null;
+  if (stage === 'details' && (!verify1 || !verify2 || JSON.stringify(verify1) !== JSON.stringify(verify2))) return null;
+  if (stage === 'ready' && (progress !== null || typeof cursor.reason === 'string')) return null;
+  if (progress && !['snapshot', 'catchup', 'verify1', 'verify2', 'blocked'].includes(stage)) return null;
+  if (progress && stage !== 'blocked' && progress.phaseKey !== stage) return null;
+  if (stage === 'ready' && (!verify1 || !verify2 || verify1.expectedCount !== verify2.expectedCount || verify1.checksum !== verify2.checksum || verify1.dailyChecksum !== verify2.dailyChecksum || verify1.channelChecksum !== verify2.channelChecksum)) return null;
+  return { version: 1, stage, sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: snapshot.done }, catchup: { done: catchup.done, completedAt: catchupCompletedAt }, verify1, verify2, ...(rawProgress === undefined ? {} : { progress }), ...(typeof cursor.reason === 'string' ? { reason: cursor.reason } : {}) } as PreparationCursor;
 }

@@ -321,6 +321,27 @@ export async function touchLastSyncAtForSource(source: ErpDataSource, quando: Da
   return updated.length === 1;
 }
 
+/**
+ * Publishes Olist freshness only after the shadow preparation reached READY.
+ * The binding is deliberately more exact than the regular collector CAS: a
+ * credential/account rotation or an inactive connection can never be revived.
+ */
+export async function publishOlistPreparationSync(input: {
+  source: ErpDataSource;
+  accountFingerprint: string;
+  catchupCompletedAt: Date;
+}): Promise<boolean> {
+  if (input.source.provider !== 'olist' || !/^[a-f0-9]{64}$/i.test(input.accountFingerprint)) return false;
+  const result = await db.execute(sql`
+    UPDATE connections SET last_sync_at = GREATEST(COALESCE(last_sync_at, '-infinity'::timestamptz), ${input.catchupCompletedAt}::timestamptz)
+    WHERE org_id=${input.source.orgId} AND provider='olist' AND data_generation=${input.source.sourceGeneration}
+      AND provider_account_fingerprint=${input.accountFingerprint}
+      AND status IN ('configurado', 'ok') AND access_token IS NOT NULL AND refresh_token IS NOT NULL
+    RETURNING id
+  `);
+  return (Array.isArray(result) ? result : (result as { rows?: unknown[] }).rows ?? []).length === 1;
+}
+
 /** Reads freshness from the same provider/generation fence used for publishing it. */
 export async function getLastSyncAtForSource(source: ErpDataSource): Promise<Date | null> {
   const [row] = await db.select({ lastSyncAt: connections.last_sync_at }).from(connections).where(and(
