@@ -42,4 +42,10 @@ describe('Olist shadow preparation window', () => {
     expect(fetchOrders).toHaveBeenCalledTimes(1);
     expect(transaction).toHaveBeenCalledTimes(1);
   });
+
+  it.each([0, -1, 1001, 1.5])('rejects invalid bounded capacity %s before I/O', async (limit) => {
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { maxOrders: limit })).rejects.toThrow('prepare_olist_limit_invalid');
+    expect(acquire).not.toHaveBeenCalled();
+  });
 });
