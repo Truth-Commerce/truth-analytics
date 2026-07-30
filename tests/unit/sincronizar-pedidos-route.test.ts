@@ -50,7 +50,7 @@ describe('cron sincronizar-pedidos — wiring do Passo 1 (renovação) + Passo 2
     vi.mocked(sync.sincronizarPedidosDaOrg).mockResolvedValue({
       processados: 3,
       total: 3,
-      enriquecimento: { enriquecidos: 3, falhas: 0, restantes: 0, incompleto: false },
+      enriquecimento: { enriquecidos: 3, falhas: 0, quarentenados: 0, restantes: 0, incompleto: false },
     });
 
     const { GET } = await import('@/app/api/cron/sincronizar-pedidos/route');
@@ -85,7 +85,7 @@ describe('cron sincronizar-pedidos — wiring do Passo 1 (renovação) + Passo 2
     vi.mocked(sync.sincronizarPedidosDaOrg).mockResolvedValue({
       processados: 0,
       total: 0,
-      enriquecimento: { enriquecidos: 0, falhas: 0, restantes: 0, incompleto: false },
+      enriquecimento: { enriquecidos: 0, falhas: 0, quarentenados: 0, restantes: 0, incompleto: false },
     });
 
     const { GET } = await import('@/app/api/cron/sincronizar-pedidos/route');

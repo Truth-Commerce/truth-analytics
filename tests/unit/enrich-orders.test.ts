@@ -206,6 +206,12 @@ describe('enrichOrders', () => {
 
     await enrichOrders({ orgId: 'org-1', provider: 'olist', sourceGeneration: 3 }, { maxPedidos: 1, prazoMs: 60_000 });
 
-    expect(providerDetail).toHaveBeenCalledWith('org-1', '100');
+    expect(providerDetail).toHaveBeenCalledWith('org-1', '100', expect.objectContaining({ deadlineAt: expect.any(Number) }));
+  });
+
+  it('nao inicia HTTP de detalhe depois do deadline', async () => {
+    armarDb([{ id: 'u1', blingOrderId: '100' }], 1);
+    await enrichOrders({ orgId: 'org-1', provider: 'olist', sourceGeneration: 3 }, { maxPedidos: 1, prazoMs: 0 });
+    expect(providerDetail).not.toHaveBeenCalled();
   });
 });

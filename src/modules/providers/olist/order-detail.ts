@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { resolveOlistChannel } from '@/modules/providers/olist/channel';
 import { fetchOlistJson, OlistDataError } from '@/modules/providers/olist/http';
-import type { RawOrderDetail } from '@/modules/providers/data.types';
+import type { OrderDetailRequestContext, RawOrderDetail } from '@/modules/providers/data.types';
 
 const finiteNumber = z.number().finite();
 const channelSchema = z.object({ canalVenda: z.string().nullable().optional(), nome: z.string().nullable().optional() }).passthrough();
@@ -18,12 +18,12 @@ export const OlistOrderDetailSchema = z.object({
   intermediador: z.object({ nome: z.string().nullable().optional() }).passthrough().nullable().optional(),
 }).passthrough();
 
-function invalidDetailResponse(): never { throw new Error('olist_detalhe_resposta_invalida'); }
+function invalidDetailResponse(): never { throw new OlistDataError('olist_detalhe_resposta_invalida', 'permanent'); }
 
-export async function fetchOlistOrderDetail(orgId: string, providerOrderId: string): Promise<RawOrderDetail> {
+export async function fetchOlistOrderDetail(orgId: string, providerOrderId: string, context?: OrderDetailRequestContext): Promise<RawOrderDetail> {
   let payload: unknown;
   try {
-    payload = await fetchOlistJson({ orgId, priority: 'details', path: `/pedidos/${encodeURIComponent(providerOrderId)}`, schema: OlistOrderDetailSchema });
+    payload = await fetchOlistJson({ orgId, priority: 'details', path: `/pedidos/${encodeURIComponent(providerOrderId)}`, schema: OlistOrderDetailSchema, deadlineAt: context?.deadlineAt });
   } catch (error) {
     if (error instanceof OlistDataError && error.code === 'olist_payload_invalido') invalidDetailResponse();
     throw error;

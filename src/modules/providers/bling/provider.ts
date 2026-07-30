@@ -9,9 +9,11 @@ import type { ConnectionProvider } from '@/modules/providers/types';
 export const blingDataProvider: ErpDataProvider = {
   name: 'bling',
   fetchOrders: fetchDataOrders,
-  async fetchOrderDetail(orgId, providerOrderId) {
-    const token = await getValidAccessToken(orgId);
-    return fetchOrderDetail(orgId, providerOrderId, token);
+  async fetchOrderDetail(orgId, providerOrderId, context) {
+    if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
+    const token = context?.blingToken ?? await getValidAccessToken(orgId);
+    if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
+    return fetchOrderDetail(orgId, providerOrderId, token, context);
   },
 };
 
