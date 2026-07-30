@@ -212,14 +212,15 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
     progress = { phaseKey, cycleId: p.cycleId, offset, total };
   }
   if (cursor.version !== 1 || !stage || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(from) || new Date(catchUpFrom) > new Date(to) || typeof snapshot?.done !== 'boolean' || typeof catchup?.done !== 'boolean' || (catchupCompletedAt === null && catchup?.completedAt !== null) || (cursor.verify1 !== null && !verify1) || (cursor.verify2 !== null && !verify2)) return null;
-  if (stage !== 'snapshot' && snapshot.done !== true) return null;
-  if (!['snapshot', 'catchup'].includes(stage) && (catchup.done !== true || !catchupCompletedAt)) return null;
+  if (!['snapshot', 'blocked'].includes(stage) && snapshot.done !== true) return null;
+  if (!['snapshot', 'catchup', 'blocked'].includes(stage) && (catchup.done !== true || !catchupCompletedAt)) return null;
   if (catchup.done === false && catchupCompletedAt !== null) return null;
   if (stage === 'verify2' && !verify1) return null;
   if (stage === 'details' && (!verify1 || !verify2 || JSON.stringify(verify1) !== JSON.stringify(verify2))) return null;
   if (stage === 'ready' && (progress !== null || typeof cursor.reason === 'string')) return null;
   if (progress && !['snapshot', 'catchup', 'verify1', 'verify2', 'blocked'].includes(stage)) return null;
   if (progress && stage !== 'blocked' && progress.phaseKey !== stage) return null;
+  if (stage === 'blocked' && typeof cursor.reason !== 'string') return null;
   if (stage === 'ready' && (!verify1 || !verify2 || verify1.expectedCount !== verify2.expectedCount || verify1.checksum !== verify2.checksum || verify1.dailyChecksum !== verify2.dailyChecksum || verify1.channelChecksum !== verify2.channelChecksum)) return null;
   return { version: 1, stage, sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: snapshot.done }, catchup: { done: catchup.done, completedAt: catchupCompletedAt }, verify1, verify2, ...(rawProgress === undefined ? {} : { progress }), ...(typeof cursor.reason === 'string' ? { reason: cursor.reason } : {}) } as PreparationCursor;
 }

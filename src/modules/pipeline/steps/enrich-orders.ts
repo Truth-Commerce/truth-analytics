@@ -37,8 +37,10 @@ async function pendingOrders(source: ErpDataSource, limit: number, periodo?: Per
   return result.filter((row): row is PendingOrder => Boolean(row.providerOrderId));
 }
 
-async function pendingCount(source: ErpDataSource): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(orders).where(and(eq(orders.org_id, source.orgId), eq(orders.provider, source.provider), eq(orders.source_generation, source.sourceGeneration), isNotNull(orders.provider_order_id), isNull(orders.enriquecido_em), lt(orders.enrichment_attempts, MAX_PERMANENT_ATTEMPTS)));
+async function pendingCount(source: ErpDataSource, periodo?: Periodo): Promise<number> {
+  const filters = [eq(orders.org_id, source.orgId), eq(orders.provider, source.provider), eq(orders.source_generation, source.sourceGeneration), isNotNull(orders.provider_order_id), isNull(orders.enriquecido_em), lt(orders.enrichment_attempts, MAX_PERMANENT_ATTEMPTS)];
+  if (periodo) filters.push(gte(orders.data, periodo.inicio), lt(orders.data, periodo.fim));
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(orders).where(and(...filters));
   return row?.n ?? 0;
 }
 
@@ -106,25 +108,25 @@ export async function enrichOrders(source: ErpDataSource, opts: EnrichOptions): 
   try {
     const queue = await pendingOrders(source, opts.maxPedidos, opts.periodo);
     if (!queue.length) {
-      const restantes = await pendingCount(source);
+      const restantes = await pendingCount(source, opts.periodo);
       return { enriquecidos, falhas, quarentenados, restantes, incompleto: restantes > 0 };
     }
     const fingerprint = source.provider === 'olist'
       ? await getOlistAccountFingerprint(source.orgId, source.sourceGeneration)
       : null;
-    if (source.provider === 'olist' && !fingerprint) return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true };
+    if (source.provider === 'olist' && !fingerprint) return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source, opts.periodo), incompleto: true };
     const acquired = await acquireSyncLease({ source: { ...source, accountFingerprint: fingerprint }, resource: 'order_details', ttlMs: LEASE_TTL_MS });
-    if (!acquired) return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true };
+    if (!acquired) return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source, opts.periodo), incompleto: true };
     let lease = acquired; activeLease = lease;
     const provider = getErpDataProvider(source.provider);
     const gate = source.provider === 'bling' ? criarPortao(BLING_INTERVAL_MS) : async () => undefined;
     let blingToken: string | undefined;
     let blingChannels: ReadonlyMap<string, string> | undefined;
     if (source.provider === 'bling') {
-      if (Date.now() >= deadlineAt) { await release(lease, 'bling_deadline_exceeded'); return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true }; }
+      if (Date.now() >= deadlineAt) { await release(lease, 'bling_deadline_exceeded'); return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source, opts.periodo), incompleto: true }; }
       blingToken = await getValidAccessToken(source.orgId, undefined, { deadlineAt });
       await gate();
-      if (Date.now() >= deadlineAt) { await release(lease, 'bling_deadline_exceeded'); return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true }; }
+      if (Date.now() >= deadlineAt) { await release(lease, 'bling_deadline_exceeded'); return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source, opts.periodo), incompleto: true }; }
       blingChannels = await fetchCanaisVenda(source.orgId, blingToken, { deadlineAt });
     }
     const blingState = blingToken ? { token: blingToken } : undefined;
@@ -157,7 +159,7 @@ export async function enrichOrders(source: ErpDataSource, opts: EnrichOptions): 
         log.warn('enriquecimento: pedido falhou', { providerOrderId: order.providerOrderId, erro: error instanceof Error ? error.message : String(error) });
       }
     })));
-    const restantes = await pendingCount(source);
+    const restantes = await pendingCount(source, opts.periodo);
     if (!await completeSyncLease(lease)) {
       await release(lease, 'order_details_complete_failed');
       return { enriquecidos, falhas, quarentenados, restantes, incompleto: true };

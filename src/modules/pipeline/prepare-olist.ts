@@ -37,15 +37,6 @@ async function renew(lease: SyncLease): Promise<SyncLease | null> {
 async function save(lease: SyncLease, cursor: PreparationCursor): Promise<boolean> { return savePreparationCursor({ ...lease, cursor }); }
 async function current(source: ErpDataSource, fingerprint: string): Promise<boolean> { return (await getOlistAccountFingerprint(source.orgId, source.sourceGeneration)) === fingerprint; }
 
-async function upsert(source: ErpDataSource, list: RawOrder[]): Promise<void> {
-  for (const order of list.filter((o) => o.providerOrderId.trim())) await db.execute(sql`
-    INSERT INTO orders (org_id, provider, source_generation, provider_order_id, provider_status, canal, data, valor_total, frete, itens)
-    VALUES (${source.orgId}, 'olist', ${source.sourceGeneration}, ${order.providerOrderId}, ${order.providerStatus}, ${order.canal}, ${order.data}, ${String(order.valorTotal)}, ${String(order.frete)}, ${JSON.stringify(order.itens)}::jsonb)
-    ON CONFLICT (org_id, provider, source_generation, provider_order_id) DO UPDATE SET
-      provider_status=EXCLUDED.provider_status, canal=CASE WHEN EXCLUDED.canal='Desconhecido' THEN orders.canal ELSE EXCLUDED.canal END,
-      data=EXCLUDED.data, valor_total=EXCLUDED.valor_total
-  `);
-}
 /** A stale owner can neither write page rows nor advance the preparation cursor. */
 async function persistPage(lease: SyncLease, source: ErpDataSource, list: RawOrder[], cursor: PreparationCursor): Promise<boolean> {
   return db.transaction(async (tx) => {
@@ -61,11 +52,11 @@ async function persistPage(lease: SyncLease, source: ErpDataSource, list: RawOrd
 }
 async function databaseNow(): Promise<string> { const row = rows<{ now: Date | string }>(await db.execute(sql`SELECT clock_timestamp() AS now`))[0]; if (!row) throw new Error('prepare_database_clock_unavailable'); return new Date(row.now).toISOString(); }
 async function publishReady(lease: SyncLease, source: ErpDataSource, cursor: PreparationCursor): Promise<boolean> {
-  const baseline = cursor.catchup.completedAt; if (!baseline) return false;
+  const baseline = cursor.catchUpFrom;
   return db.transaction(async (tx) => {
     const owned = rows<{ id: string }>(await tx.execute(sql`SELECT id FROM connection_sync_state WHERE org_id=${lease.orgId} AND provider='olist' AND source_generation=${lease.sourceGeneration} AND account_fingerprint=${lease.accountFingerprint} AND resource='orders_prepare' AND lease_token=${lease.token} AND fencing_version=${lease.fencingVersion} AND lease_expires_at > clock_timestamp() FOR UPDATE`));
     if (!owned.length) return false;
-    const published = rows(await tx.execute(sql`UPDATE connections SET last_sync_at=GREATEST(COALESCE(last_sync_at, '-infinity'::timestamptz), ${baseline}::timestamptz) WHERE org_id=${source.orgId} AND provider='olist' AND data_generation=${source.sourceGeneration} AND provider_account_fingerprint=${cursor.accountFingerprint} AND status IN ('configurado','ok') AND access_token IS NOT NULL AND refresh_token IS NOT NULL RETURNING id`));
+    const published = rows(await tx.execute(sql`UPDATE connections SET last_sync_at=GREATEST(COALESCE(last_sync_at, '-infinity'::timestamptz), ${baseline}::timestamptz) WHERE org_id=${source.orgId} AND provider='olist' AND data_generation=${source.sourceGeneration} AND provider_account_fingerprint=${cursor.accountFingerprint} AND status IN ('configurado','ok') AND access_token IS NOT NULL AND refresh_token IS NOT NULL AND EXISTS (SELECT 1 FROM organizations WHERE id=${source.orgId} AND status='active') RETURNING id`));
     if (published.length !== 1) return false;
     return rows(await tx.execute(sql`UPDATE connection_sync_state SET cursor=${JSON.stringify(cursor)}::jsonb, updated_at=clock_timestamp() WHERE id=${owned[0].id} AND lease_token=${lease.token} AND fencing_version=${lease.fencingVersion} AND lease_expires_at > clock_timestamp() RETURNING id`)).length === 1;
   });
@@ -90,13 +81,13 @@ async function fetchPhase(source: ErpDataSource, lease: SyncLease, cursor: Prepa
     if (!await current(source, cursor.accountFingerprint)) throw new Error('prepare_source_stale');
     let page: OrderPage | undefined;
     await provider.fetchOrders(source.orgId, phase === 'snapshot' || phase === 'verify1' || phase === 'verify2'
-      ? { mode: 'created', periodo: { inicio: new Date(cursor.window.from), fim: new Date(cursor.window.to) }, offset, limit: 100, deadlineAt }
+      ? { mode: 'created', periodo: { inicio: new Date(cursor.window.from), fim: new Date(new Date(cursor.window.to).getTime() - 1) }, offset, limit: 100, deadlineAt }
       : { mode: 'updated', updatedAfter: new Date(cursor.catchUpFrom), offset, limit: 100, deadlineAt }, async (value) => { page = value; });
     if (!page || (!page.done && (page.nextOffset <= offset || page.orders.length === 0))) throw new Error('prepare_page_no_progress');
     if (page.total > cap) { cursor.stage = 'blocked'; cursor.reason = 'capacity_risk'; cursor.progress = { phaseKey: phase, cycleId, offset, total: page.total }; await save(active, cursor); return { cursor, lease: active, yielded: false }; }
     offset = page.nextOffset;
     cursor.progress = { phaseKey: phase, cycleId, offset, total: page.total };
-    if (phase === 'snapshot' || phase === 'catchup') { if (!await persistPage(active, source, page.orders, cursor)) throw new Error('prepare_lease_lost'); }
+    if (phase === 'snapshot' || phase === 'catchup' || phase === 'verify1' || phase === 'verify2') { if (!await persistPage(active, source, page.orders, cursor)) throw new Error('prepare_lease_lost'); }
     else if (!await save(active, cursor)) throw new Error('prepare_lease_lost');
     if (page.done) {
       cursor.progress = null;
@@ -112,6 +103,7 @@ async function fetchPhase(source: ErpDataSource, lease: SyncLease, cursor: Prepa
 /** Shadow-only Olist bootstrap. It never changes connection status or invokes normal cron/report flows. */
 export async function prepareOlistOrders(source: ErpDataSource, options: PrepareOlistOptions = {}): Promise<PreparationResult> {
   if (source.provider !== 'olist') throw new Error('prepare_olist_provider_required');
+  for (const value of [options.maxOrders, options.maxDetails]) if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > INITIAL_CAP)) throw new Error('prepare_olist_limit_invalid');
   const clock = rows<{ now: Date | string }>(await db.execute(sql`SELECT clock_timestamp() AS now`))[0]; if (!clock) throw new Error('prepare_database_clock_unavailable');
   const window = preparationWindow(new Date(clock.now).toISOString()); const deadlineAt = options.deadlineAt ?? Date.now() + 240_000;
   const fingerprint = await getOlistAccountFingerprint(source.orgId, source.sourceGeneration);
