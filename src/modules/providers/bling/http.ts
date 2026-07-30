@@ -3,6 +3,9 @@ import { logger } from '@/lib/logger';
 const MAX_TENTATIVAS = 3;
 const BASE_DELAY_MS = 1000;
 const MAX_RETRY_AFTER_MS = 30_000;
+export class BlingDataError extends Error {
+  constructor(public readonly code: string, public readonly status?: number) { super(code); }
+}
 
 function remaining(deadlineAt?: number): number { return deadlineAt === undefined ? Infinity : deadlineAt - Date.now(); }
 function ensureDeadline(deadlineAt?: number): void { if (remaining(deadlineAt) <= 0) throw new Error('bling_deadline_exceeded'); }
@@ -20,7 +23,7 @@ function sleep(ms: number, deadlineAt?: number): Promise<void> {
  * - Esgotou as tentativas: bling_erro_<status> (ou bling_indisponivel em erro de rede).
  */
 export async function fetchBling(url: string, token: string, options: { deadlineAt?: number } = {}): Promise<Response> {
-  let ultimaFalha = 'bling_indisponivel';
+  let ultimaFalha = 'bling_indisponivel'; let ultimoStatus: number | undefined;
   for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
     let res: Response;
     try {
@@ -39,6 +42,7 @@ export async function fetchBling(url: string, token: string, options: { deadline
     }
     if (res.status === 429 || res.status >= 500) {
       ultimaFalha = `bling_erro_${res.status}`;
+      ultimoStatus = res.status;
       if (tentativa < MAX_TENTATIVAS) {
         const retryAfter = Number(res.headers.get('retry-after'));
         const delay =
@@ -55,9 +59,9 @@ export async function fetchBling(url: string, token: string, options: { deadline
       continue;
     }
     if (!res.ok) {
-      throw new Error('bling_indisponivel');
+      throw new BlingDataError(`bling_http_${res.status}`, res.status);
     }
     return res;
   }
-  throw new Error(ultimaFalha);
+  throw new BlingDataError(ultimaFalha, ultimoStatus);
 }

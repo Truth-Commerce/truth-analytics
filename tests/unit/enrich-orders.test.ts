@@ -200,6 +200,13 @@ describe('enrichOrders', () => {
     expect(result.enriquecidos).toBe(1);
   });
 
+  it('mantem restantes e incompleto quando a fila esta apenas em cooldown de retry', async () => {
+    armarDb([], 2);
+    const result = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    expect(result).toMatchObject({ restantes: 2, incompleto: true });
+    expect(fetchOrderDetail).not.toHaveBeenCalled();
+  });
+
   it('aceita uma fonte ERP e busca o detalhe pelo provider registrado', async () => {
     armarDb([{ id: 'u1', blingOrderId: '100' }], 0);
     providerDetail.mockResolvedValue({ itens: [], frete: 0, comissao: 0 });

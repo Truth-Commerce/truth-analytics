@@ -9,6 +9,7 @@ import { getValidAccessToken } from '@/modules/connections/connection.repository
 import { getOlistAccountFingerprint } from '@/modules/connections/provider-connection.repository';
 import { acquireSyncLease, completeSyncLease, failSyncLease, getSyncLeaseRemainingMs, renewSyncLease, type SyncLease } from '@/modules/connections/sync-state.repository';
 import { WORST_CASE_OLIST_REQUEST_MS, OlistDataError } from '@/modules/providers/olist/http';
+import { BlingDataError } from '@/modules/providers/bling/http';
 import { fetchCanaisVenda } from '@/modules/providers/bling/canais';
 import type { ErpDataSource, RawOrderDetail } from '@/modules/providers/data.types';
 import { getErpDataProvider } from '@/modules/providers/registry';
@@ -54,6 +55,13 @@ function validDetail(value: RawOrderDetail): boolean {
 
 function errorCode(error: unknown): { code: string; permanent: boolean } {
   if (error instanceof Error && error.message === 'olist_detalhe_resposta_invalida') return { code: 'contract', permanent: true };
+  if (error instanceof BlingDataError) {
+    if (error.status === 403) return { code: 'permission', permanent: true };
+    if (error.status === 404) return { code: 'missing_remote', permanent: true };
+    if (error.status === 401) return { code: 'auth_transient', permanent: false };
+    return { code: error.code, permanent: false };
+  }
+  if (error instanceof Error && (error.message === 'bling_detalhe_vazio' || error.message === 'bling_payload_invalido')) return { code: 'contract', permanent: true };
   if (error instanceof OlistDataError) {
     if (error.status === 403) return { code: 'permission', permanent: true };
     if (error.status === 404) return { code: 'missing_remote', permanent: true };
@@ -100,7 +108,10 @@ export async function enrichOrders(sourceOrOrgId: ErpDataSource | string, opts: 
   let activeLease: SyncLease | null = null;
   try {
     const queue = await pendingOrders(source, opts.maxPedidos, opts.periodo);
-    if (!queue.length) return { enriquecidos, falhas, quarentenados, restantes: 0, incompleto: false };
+    if (!queue.length) {
+      const restantes = await pendingCount(source);
+      return { enriquecidos, falhas, quarentenados, restantes, incompleto: restantes > 0 };
+    }
     const fingerprint = source.provider === 'olist' ? await getOlistAccountFingerprint(source.orgId) : null;
     if (source.provider === 'olist' && !fingerprint) return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true };
     const acquired = await acquireSyncLease({ source: { ...source, accountFingerprint: fingerprint }, resource: 'order_details', ttlMs: LEASE_TTL_MS });

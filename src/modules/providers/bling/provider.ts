@@ -1,4 +1,5 @@
 import { getValidAccessToken } from '@/modules/connections/connection.repository';
+import { BlingDataError } from '@/modules/providers/bling/http';
 import { fetchOrderDetail } from '@/modules/providers/bling/order-detail';
 import { fetchOrders as fetchDataOrders } from '@/modules/providers/bling/orders';
 import { buildAuthorizeUrl, exchangeCode, refreshTokens } from '@/modules/providers/bling/oauth';
@@ -11,9 +12,16 @@ export const blingDataProvider: ErpDataProvider = {
   fetchOrders: fetchDataOrders,
   async fetchOrderDetail(orgId, providerOrderId, context) {
     if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
-    const token = context?.blingToken ?? await getValidAccessToken(orgId);
+    let token = context?.blingToken ?? await getValidAccessToken(orgId, undefined, { deadlineAt: context?.deadlineAt });
     if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
-    return fetchOrderDetail(orgId, providerOrderId, token, context);
+    try {
+      return await fetchOrderDetail(orgId, providerOrderId, token, context);
+    } catch (error) {
+      if (!(error instanceof BlingDataError) || error.status !== 401) throw error;
+      token = await getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt });
+      if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
+      return fetchOrderDetail(orgId, providerOrderId, token, context ? { ...context, blingToken: token } : undefined);
+    }
   },
 };
 
