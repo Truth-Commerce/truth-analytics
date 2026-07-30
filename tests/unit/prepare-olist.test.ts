@@ -56,6 +56,13 @@ describe('Olist shadow preparation window', () => {
     expect(fail).toHaveBeenCalledWith(expect.objectContaining({ errorCode: 'prepare_page_no_progress' }));
   });
 
+  it('blocks a snapshot beyond the 1000-order capacity and yields the resumable lease', async () => {
+    fetchOrders.mockImplementation(async (_org: string, _request: unknown, onPage: (page: unknown) => Promise<void>) => onPage({ orders: [{ providerOrderId: 'capacity', providerStatus: 'ok', canal: 'site', data: new Date('2026-07-01T00:00:00.000Z'), valorTotal: 10, frete: 0, itens: [] }], offset: 0, nextOffset: 1, total: 1001, done: false }));
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'blocked', reason: 'capacity_risk' });
+    expect(yieldLease).toHaveBeenCalled();
+  });
+
   it('does not issue HTTP after an already-expired deadline and yields its lease', async () => {
     const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { deadlineAt: Date.now() - 1 })).resolves.toMatchObject({ stage: 'snapshot', ready: false, blocked: false });
