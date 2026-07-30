@@ -156,19 +156,36 @@ export function parseOrdersCursor(value: unknown, sourceGeneration?: number): Ol
 export type PreparationCursor = {
   version: 1;
   sourceGeneration: number;
+  accountFingerprint: string;
+  window: { from: string; to: string };
+  catchUpFrom: string;
   snapshot: { done: boolean };
   catchup: { done: boolean };
   expectedCount: number;
   checksum: string;
+  verification: {
+    dailyTotals: { expectedChecksum: string; actualChecksum: string };
+    channelSamples: { expectedChecksum: string; actualChecksum: string };
+  };
 };
 
 /** Versioned readiness state: any malformed persisted shape explicitly resets preparation. */
-export function parsePreparationCursor(value: unknown, sourceGeneration: number): PreparationCursor | null {
+export function parsePreparationCursor(value: unknown, sourceGeneration: number, accountFingerprint: string | null = null): PreparationCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const cursor = value as Record<string, unknown>;
   const snapshot = cursor.snapshot as { done?: unknown } | undefined;
   const catchup = cursor.catchup as { done?: unknown } | undefined;
   const expectedCount = nonNegativeInteger(cursor.expectedCount);
-  if (cursor.version !== 1 || snapshot?.done !== true || catchup?.done !== true || expectedCount === null || typeof cursor.checksum !== 'string' || cursor.checksum.length === 0) return null;
-  return { version: 1, sourceGeneration, snapshot: { done: true }, catchup: { done: true }, expectedCount, checksum: cursor.checksum };
+  const generation = positiveInteger(cursor.sourceGeneration);
+  const fingerprint = typeof cursor.accountFingerprint === 'string' ? cursor.accountFingerprint : null;
+  const window = cursor.window as { from?: unknown; to?: unknown } | undefined;
+  const from = iso(window?.from); const to = iso(window?.to); const catchUpFrom = iso(cursor.catchUpFrom);
+  const verification = cursor.verification as { dailyTotals?: { expectedChecksum?: unknown; actualChecksum?: unknown }; channelSamples?: { expectedChecksum?: unknown; actualChecksum?: unknown } } | null;
+  const dailyExpected = verification?.dailyTotals?.expectedChecksum;
+  const dailyActual = verification?.dailyTotals?.actualChecksum;
+  const samplesExpected = verification?.channelSamples?.expectedChecksum;
+  const samplesActual = verification?.channelSamples?.actualChecksum;
+  const digest = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{32}$/i.test(value);
+  if (cursor.version !== 1 || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || (accountFingerprint !== null && fingerprint !== accountFingerprint) || !from || !to || !catchUpFrom || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(from) || new Date(catchUpFrom) > new Date(to) || snapshot?.done !== true || catchup?.done !== true || expectedCount === null || !digest(cursor.checksum) || !digest(dailyExpected) || dailyExpected !== dailyActual || !digest(samplesExpected) || samplesExpected !== samplesActual) return null;
+  return { version: 1, sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: true }, catchup: { done: true }, expectedCount, checksum: cursor.checksum, verification: { dailyTotals: { expectedChecksum: dailyExpected, actualChecksum: dailyActual }, channelSamples: { expectedChecksum: samplesExpected, actualChecksum: samplesActual } } };
 }
