@@ -99,6 +99,7 @@ export async function configureProviderCredentials(input: {
     status: 'configurado' as const,
   };
   await db.transaction(async (tx) => {
+    await assertOlistIsNotActive(tx, input.orgId, input.provider);
     await tx.insert(connections).values(values).onConflictDoUpdate({
       target: [connections.org_id, connections.provider],
       set: {
@@ -438,26 +439,41 @@ export async function disconnectProvider(input: {
   provider: ErpProviderId;
   actorUserId: string;
 }): Promise<void> {
-  await db
-    .update(connections)
-    .set({
-      oauth_client_id: null,
-      oauth_client_secret: null,
-      access_token: null,
-      refresh_token: null,
-      expira_em: null,
-      refresh_expira_em: null,
-      last_refresh_at: null,
-      last_error_code: null,
-      last_error_at: null,
-      status: 'erro',
-    })
-    .where(and(eq(connections.org_id, input.orgId), eq(connections.provider, input.provider)));
+  await db.transaction(async (tx) => {
+    await assertOlistIsNotActive(tx, input.orgId, input.provider);
+    await tx
+      .update(connections)
+      .set({
+        oauth_client_id: null,
+        oauth_client_secret: null,
+        access_token: null,
+        refresh_token: null,
+        expira_em: null,
+        refresh_expira_em: null,
+        last_refresh_at: null,
+        last_error_code: null,
+        last_error_at: null,
+        status: 'erro',
+      })
+      .where(and(eq(connections.org_id, input.orgId), eq(connections.provider, input.provider)));
+  });
   await recordAudit({
     orgId: input.orgId,
     userId: input.actorUserId,
     acao: `connection.${input.provider}.desconectada`,
   });
+}
+
+/** Credentials for the live Olist ERP can only change after a Bling rollback. */
+async function assertOlistIsNotActive(
+  tx: MutationTransaction,
+  orgId: string,
+  provider: ErpProviderId,
+): Promise<void> {
+  if (provider !== 'olist') return;
+  const rows = await tx.execute(sql`SELECT status FROM connections WHERE org_id=${orgId} AND provider='olist' FOR UPDATE`);
+  const row = rows[0] as { status?: string } | undefined;
+  if (row?.status === 'ok') throw new Error('olist_erp_ativo');
 }
 
 export async function listProviderConnectionsExpiring(input: {
