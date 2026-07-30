@@ -58,7 +58,7 @@ describe('Olist shadow preparation window', () => {
 
   it('does not issue HTTP after an already-expired deadline and yields its lease', async () => {
     const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
-    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { deadlineAt: Date.now() - 1 })).resolves.toMatchObject({ blocked: true });
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 }, { deadlineAt: Date.now() - 1 })).resolves.toMatchObject({ stage: 'snapshot', ready: false, blocked: false });
     expect(fetchOrders).not.toHaveBeenCalled();
     expect(yieldLease).toHaveBeenCalled();
   });
