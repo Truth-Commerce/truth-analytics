@@ -65,6 +65,8 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     ? {
         id: primeiro.id,
         status: primeiro.status,
+        sourceProvider: primeiro.sourceProvider,
+        sourceGeneration: primeiro.sourceGeneration,
         periodoInicio: primeiro.periodoInicio,
         periodoFim: primeiro.periodoFim,
         createdAt: primeiro.createdAt,

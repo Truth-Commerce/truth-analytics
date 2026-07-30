@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, isNotNull, lt, lte, ne, sql } from 'drizzle-orm
 
 import { db } from '@/db/client';
 import { hasPostgresErrorCode } from '@/db/postgres-error';
-import { connections, reports } from '@/db/schema';
+import { connections, organizations, reports } from '@/db/schema';
 import type { AnaliseIa, Metricas } from '@/modules/pipeline/contracts';
 import { isErpProviderId } from '@/modules/providers/provider-catalog';
 import type { ErpProviderId } from '@/modules/providers/types';
@@ -33,24 +33,34 @@ type SummaryRow = {
   created_at: Date;
 };
 
-function frozenSource(provider: string | null, generation: number | null): Pick<ReportSummary, 'sourceProvider' | 'sourceGeneration'> {
+function frozenSource(
+  status: string,
+  provider: string | null,
+  generation: number | null,
+): Pick<ReportSummary, 'sourceProvider' | 'sourceGeneration'> {
   // Somente o par integralmente ausente é legado. Uma fonte parcial ou um
   // provider desconhecido não pode ser reinterpretado como Bling: escondemos
   // ambos para que leitores não consumam uma fonte errada.
-  if (provider === null && generation === null) {
+  if (status === 'done' && provider === null && generation === null) {
     return { sourceProvider: 'bling', sourceGeneration: 1 };
   }
-  if (provider !== null && generation !== null && isErpProviderId(provider)) {
+  if (
+    provider !== null
+    && generation !== null
+    && isErpProviderId(provider)
+    && Number.isInteger(generation)
+    && generation > 0
+  ) {
     return { sourceProvider: provider, sourceGeneration: generation };
   }
-  return {};
+  return { sourceProvider: null, sourceGeneration: null };
 }
 
 function summaryRowToSummary(row: SummaryRow): ReportSummary {
   return {
     id: row.id,
     status: row.status as ReportStatus,
-    ...frozenSource(row.source_provider, row.source_generation),
+    ...frozenSource(row.status, row.source_provider, row.source_generation),
     periodoInicio: row.periodo_inicio,
     periodoFim: row.periodo_fim,
     createdAt: row.created_at,
@@ -63,7 +73,7 @@ function rowToSummary(row: ReportRow): ReportSummary {
   return {
     id: row.id,
     status: row.status as ReportStatus,
-    ...frozenSource(row.source_provider, row.source_generation),
+    ...frozenSource(row.status, row.source_provider, row.source_generation),
     periodoInicio: row.periodo_inicio,
     periodoFim: row.periodo_fim,
     createdAt: row.created_at,
@@ -302,13 +312,15 @@ export type QueuedReportClaim = {
   periodo: { inicio: Date; fim: Date };
 };
 
+const MISSING_ERP_SOURCE = Symbol('missing_erp_source');
+
 /**
  * Assume um relatório queued e fixa a fonte de dados na mesma transação.
  * O lock da linha do report faz com que exatamente um worker consiga avançar
  * para running; se não houver uma fonte ERP válida, o report termina failed.
  */
 export async function claimQueuedReport(reportId: string): Promise<QueuedReportClaim | null> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [report] = await tx
       .select({
         orgId: reports.org_id,
@@ -324,18 +336,25 @@ export async function claimQueuedReport(reportId: string): Promise<QueuedReportC
     const [source] = await tx
       .select({ provider: connections.provider, sourceGeneration: connections.data_generation })
       .from(connections)
+      .innerJoin(organizations, eq(organizations.id, connections.org_id))
       .where(and(
         eq(connections.org_id, report.orgId),
         eq(connections.status, 'ok'),
         isNotNull(connections.access_token),
+        eq(organizations.status, 'active'),
       ))
       .for('update')
       .limit(1);
 
-    if (!source || !isErpProviderId(source.provider)) {
+    if (
+      !source
+      || !isErpProviderId(source.provider)
+      || !Number.isInteger(source.sourceGeneration)
+      || source.sourceGeneration <= 0
+    ) {
       await tx.update(reports).set({ status: 'failed', erro: 'sem_conexao_erp' })
         .where(and(eq(reports.id, reportId), eq(reports.status, 'queued')));
-      return null;
+      return MISSING_ERP_SOURCE;
     }
 
     await tx.update(reports).set({
@@ -343,6 +362,7 @@ export async function claimQueuedReport(reportId: string): Promise<QueuedReportC
       source_provider: source.provider,
       source_generation: source.sourceGeneration,
       erro: null,
+      etapa: 'coletando_vendas',
     }).where(and(eq(reports.id, reportId), eq(reports.status, 'queued')));
 
     return {
@@ -352,6 +372,11 @@ export async function claimQueuedReport(reportId: string): Promise<QueuedReportC
       periodo: { inicio: report.periodoInicio, fim: report.periodoFim },
     };
   });
+
+  if (result === MISSING_ERP_SOURCE) {
+    throw new Error('sem_conexao_erp');
+  }
+  return result;
 }
 
 /**

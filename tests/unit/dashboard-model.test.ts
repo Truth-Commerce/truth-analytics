@@ -86,6 +86,8 @@ function detail(over: Partial<ReportDetail>): ReportDetail {
   return {
     id: 'r-1',
     status: 'done',
+    sourceProvider: null,
+    sourceGeneration: null,
     periodoInicio: new Date('2026-06-01T00:00:00Z'),
     periodoFim: new Date('2026-06-30T23:59:59Z'),
     createdAt: new Date('2026-07-01T12:00:00Z'),
@@ -174,6 +176,8 @@ function linha(over: Partial<HistoricoDashboardRow>): HistoricoDashboardRow {
   return {
     id: `r-${Math.random()}`,
     status: 'done',
+    sourceProvider: null,
+    sourceGeneration: null,
     periodoInicio: new Date('2026-06-01T00:00:00Z'),
     periodoFim: new Date('2026-06-07T23:59:59Z'),
     createdAt: new Date('2026-06-08T12:00:00Z'),

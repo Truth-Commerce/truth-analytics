@@ -12,9 +12,9 @@ export type ReportEtapa =
 export type ReportSummary = {
   id: string;
   status: ReportStatus;
-  /** Fonte congelada no início da execução; relatórios legados usam bling/1. */
-  sourceProvider?: ErpProviderId;
-  sourceGeneration?: number;
+  /** Fonte congelada; done legado sem fonte é lido como bling/1. */
+  sourceProvider: ErpProviderId | null;
+  sourceGeneration: number | null;
   periodoInicio: Date;
   periodoFim: Date;
   createdAt: Date;
