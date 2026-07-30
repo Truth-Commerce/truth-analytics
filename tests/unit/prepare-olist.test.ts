@@ -46,6 +46,7 @@ describe('Olist shadow preparation window', () => {
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'catchup', ready: false });
     expect(fetchOrders).toHaveBeenCalledTimes(1);
     expect(transaction).toHaveBeenCalledTimes(1);
+    expect(yieldLease).toHaveBeenCalledTimes(1);
   });
 
   it.each([0, -1, 1001, 1.5])('rejects invalid bounded capacity %s before I/O', async (limit) => {
