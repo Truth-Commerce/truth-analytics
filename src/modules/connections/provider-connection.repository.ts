@@ -321,6 +321,13 @@ export async function touchLastSyncAtForSource(source: ErpDataSource, quando: Da
   return updated.length === 1;
 }
 
+/** Frozen, allowlisted Olist sources awaiting shadow preparation. */
+export async function listOlistConnectionsPendingPreparation(input: { orgIds: string[]; limit: number }): Promise<ErpDataSource[]> {
+  if (!input.orgIds.length) return [];
+  const rows = await db.select({ orgId: connections.org_id, sourceGeneration: connections.data_generation }).from(connections).innerJoin(organizations, eq(organizations.id, connections.org_id)).where(and(eq(connections.provider, 'olist'), inArray(connections.org_id, input.orgIds), inArray(connections.status, ['configurado', 'ok']), eq(organizations.status, 'active'), isNotNull(connections.access_token), isNotNull(connections.refresh_token), isNotNull(connections.provider_account_fingerprint))).limit(Math.min(3, Math.max(1, input.limit)));
+  return rows.map((row) => ({ orgId: row.orgId, provider: 'olist' as const, sourceGeneration: row.sourceGeneration }));
+}
+
 /** Reads freshness from the same provider/generation fence used for publishing it. */
 export async function getLastSyncAtForSource(source: ErpDataSource): Promise<Date | null> {
   const [row] = await db.select({ lastSyncAt: connections.last_sync_at }).from(connections).where(and(

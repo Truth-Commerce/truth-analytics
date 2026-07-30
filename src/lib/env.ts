@@ -65,6 +65,13 @@ const schema = z
   ADMIN_ALERT_EMAIL: z.string().optional(),
   PIPELINE_SECRET: z.string().min(16).optional(),
   CRON_SECRET: z.string().min(16).optional(),
+  OLIST_DATA_SYNC_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  OLIST_DATA_SYNC_ORG_IDS: z.string().default('').transform((value, ctx) => {
+    if (!value) return [] as string[];
+    const ids = value.split(',').map((id) => id.trim());
+    if (ids.some((id) => !z.string().uuid().safeParse(id).success)) { ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'OLIST_DATA_SYNC_ORG_IDS deve conter UUIDs CSV' }); return z.NEVER; }
+    return [...new Set(ids)];
+  }),
   SENTRY_DSN: z.string().url().optional(),
   })
   .superRefine((env, ctx) => {
