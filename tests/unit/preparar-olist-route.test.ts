@@ -24,8 +24,9 @@ describe('cron preparar-olist', () => {
     env.CRON_SECRET = 'cron-secret-123456';
     env.OLIST_DATA_SYNC_ENABLED = false;
     env.OLIST_DATA_SYNC_ORG_IDS = [];
-    vi.clearAllMocks();
-    vi.restoreAllMocks();
+    candidates.mockReset();
+    prepare.mockReset();
+    heartbeat.mockReset();
   });
 
   it('rejects unauthenticated requests before any repository call', async () => {
