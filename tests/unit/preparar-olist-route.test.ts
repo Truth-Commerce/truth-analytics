@@ -18,4 +18,11 @@ describe('cron preparar-olist', () => {
     const { GET } = await import('@/app/api/cron/preparar-olist/route');
     expect((await GET(new Request('http://test'))).status).toBe(401);
   });
+  it('caps the cohort and reports safe outcome counters', async () => {
+    env.OLIST_DATA_SYNC_ENABLED = true; env.OLIST_DATA_SYNC_ORG_IDS = ['00000000-0000-4000-8000-000000000001'];
+    candidates.mockResolvedValue([{ orgId: 'a', provider: 'olist', sourceGeneration: 1 }, { orgId: 'b', provider: 'olist', sourceGeneration: 1 }, { orgId: 'c', provider: 'olist', sourceGeneration: 1 }, { orgId: 'd', provider: 'olist', sourceGeneration: 1 }]);
+    prepare.mockResolvedValue({ ready: true, blocked: false, stale: false });
+    const { GET } = await import('@/app/api/cron/preparar-olist/route'); const response = await GET(new Request('http://test', { headers: { authorization: 'Bearer cron-secret-123456' } }));
+    expect(await response.json()).toEqual({ orgs: 3, ready: 3, pending: 0, blocked: 0, stale: 0, failed: 0 }); expect(prepare).toHaveBeenCalledTimes(3); expect(heartbeat).toHaveBeenCalledWith('preparar-olist', true, expect.any(Object));
+  });
 });
