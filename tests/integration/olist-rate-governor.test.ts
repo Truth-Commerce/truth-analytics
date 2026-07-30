@@ -293,6 +293,6 @@ describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
     const [state] = await sqlA`SELECT observed_limit, observed_remaining, observed_reset_at FROM provider_rate_limit_state WHERE provider = 'olist' AND account_fingerprint = ${account}`;
     expect(state.observed_limit).toBe(27);
     expect(state.observed_remaining).toBe(26);
-    expect(state.observed_reset_at.getTime()).toBe(2_000_000_000_000);
+    expect(new Date(state.observed_reset_at).getTime()).toBe(2_000_000_000_000);
   });
 });
