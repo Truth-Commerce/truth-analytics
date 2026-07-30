@@ -1,4 +1,5 @@
-import { index, integer, jsonb, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigint, index, integer, jsonb, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 
 import { organizations } from './organizations';
 
@@ -11,10 +12,13 @@ export const connectionSyncState = pgTable(
       .notNull()
       .references(() => organizations.id),
     provider: varchar('provider', { length: 32 }).notNull(),
+    source_generation: integer('source_generation').notNull().default(1),
+    account_fingerprint: varchar('account_fingerprint', { length: 64 }),
     resource: varchar('resource', { length: 64 }).notNull(),
     cursor: jsonb('cursor'),
     run_id: uuid('run_id'),
     lease_token: varchar('lease_token', { length: 128 }),
+    fencing_version: bigint('fencing_version', { mode: 'bigint' }).notNull().default(sql`0`),
     lease_expires_at: timestamp('lease_expires_at', { withTimezone: true, mode: 'date' }),
     started_at: timestamp('started_at', { withTimezone: true, mode: 'date' }),
     succeeded_at: timestamp('succeeded_at', { withTimezone: true, mode: 'date' }),
@@ -31,9 +35,10 @@ export const connectionSyncState = pgTable(
       .notNull(),
   },
   (t) => ({
-    org_provider_resource_uq: unique('connection_sync_state_org_provider_resource_uq').on(
+    org_provider_generation_resource_uq: unique('connection_sync_state_org_provider_generation_resource_uq').on(
       t.org_id,
       t.provider,
+      t.source_generation,
       t.resource,
     ),
     lease_expires_idx: index('connection_sync_state_lease_expires_idx').on(t.lease_expires_at),

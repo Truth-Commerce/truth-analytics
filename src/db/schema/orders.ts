@@ -53,11 +53,6 @@ export const orders = pgTable(
   },
   (t) => ({
     org_bling_uq: unique('orders_org_bling_uq').on(t.org_id, t.bling_order_id),
-    org_provider_order_uq: unique('orders_org_provider_order_uq').on(
-      t.org_id,
-      t.provider,
-      t.provider_order_id,
-    ),
     org_provider_generation_order_uq: uniqueIndex('orders_org_provider_generation_order_uq').on(
       t.org_id,
       t.provider,
