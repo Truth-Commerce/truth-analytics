@@ -46,7 +46,6 @@ export async function montarDigestOrg(
   agora: Date,
 ): Promise<DigestOrg | null> {
   const source = await getActiveErpConnection(org.id);
-  if (!source) return null;
   const hoje = hojeBrt(agora);
   const corte7d = new Date(agora.getTime() - 7 * DIA_MS);
   const [[total], [concluidas], [atrasadas], [andamento], vendasMes, vendasMesAnterior] = await Promise.all([
@@ -71,8 +70,8 @@ export async function montarDigestOrg(
       .select({ n: count() })
       .from(tasks)
       .where(and(eq(tasks.org_id, org.id), eq(tasks.status, 'em_andamento'))),
-    getTotalVendasMesCorrente(source, agora),
-    getTotalVendasMesAnterior(source, agora),
+    source ? getTotalVendasMesCorrente(source, agora) : Promise.resolve(0),
+    source ? getTotalVendasMesAnterior(source, agora) : Promise.resolve(0),
   ]);
   if (Number(total?.n ?? 0) === 0) return null;
   return {

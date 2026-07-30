@@ -103,7 +103,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     // requisição por pedido. Enriquece o período do relatório dentro de um
     // orçamento que cabe no maxDuration; o que sobrar fica para o cron diário.
     // Best-effort: enrichOrders nunca lança (relatório com item parcial > nenhum).
-    const enriquecimento = await enrichOrders(orgId, {
+    const enriquecimento = await enrichOrders(source, {
       maxPedidos: ENRIQUECIMENTO_PIPELINE.maxPedidos,
       prazoMs: ENRIQUECIMENTO_PIPELINE.prazoMs,
       periodo,

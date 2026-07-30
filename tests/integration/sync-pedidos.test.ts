@@ -149,7 +149,8 @@ describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
       const { sincronizarPedidosDaOrg, JANELA_SYNC_DIAS } = await import(
         '@/modules/pipeline/sync-pedidos'
       );
-      const result = await sincronizarPedidosDaOrg(orgId, agora);
+      const source = { orgId, provider: 'bling' as const, sourceGeneration: 1 };
+      const result = await sincronizarPedidosDaOrg(source, agora);
       expect(result.processados).toBe(1);
 
       // Janela: inicio = agora - 2 dias, fim = agora
@@ -175,7 +176,7 @@ describe.skipIf(!url)('sync incremental de pedidos — integração', () => {
       expect(conn!.last).not.toBeNull();
 
       // Idempotência: rodar de novo NÃO duplica
-      await sincronizarPedidosDaOrg(orgId, agora);
+      await sincronizarPedidosDaOrg(source, agora);
       const todas = await db
         .select({ id: orders.id })
         .from(orders)

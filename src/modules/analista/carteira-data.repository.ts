@@ -18,7 +18,7 @@ import {
 import { diasDoPlano } from '@/modules/pipeline/plan-lock';
 import { deltaNumero, paceMeta } from '@/modules/reports/compare';
 import { diasDesde } from '@/modules/tasks/sla';
-import { orderScopes, type ActiveErpRef } from '@/modules/orders/order-scope';
+import { MAX_ACTIVE_ERP_BATCH, orderScopes, type ActiveErpRef } from '@/modules/orders/order-scope';
 import {
   getActiveErpConnection,
   getActiveErpConnectionsForOrgIds,
@@ -50,6 +50,25 @@ export type OrgResumo = {
 };
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+function chunkActiveErpBatch<T>(values: readonly T[]): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += MAX_ACTIVE_ERP_BATCH) {
+    chunks.push(values.slice(index, index + MAX_ACTIVE_ERP_BATCH));
+  }
+  return chunks;
+}
+
+function mergeMaps<K, V>(maps: readonly Map<K, V>[]): Map<K, V> {
+  return new Map(maps.flatMap((map) => [...map]));
+}
+
+async function getActiveRefsInBatches(orgIds: readonly string[]): Promise<ActiveErpRef[]> {
+  const refs = await Promise.all(
+    chunkActiveErpBatch([...new Set(orgIds)]).map((chunk) => getActiveErpConnectionsForOrgIds(chunk)),
+  );
+  return refs.flat();
+}
 
 /** meta em risco = pace < 80% a partir do dia 15 do mês (Decisões de plano H4). */
 const META_EM_RISCO_DIA_MINIMO = 15;
@@ -266,6 +285,18 @@ async function contarSkusCriticosBatch(refs: readonly ActiveErpRef[], agora: Dat
   return result;
 }
 
+async function getTotaisMensaisInBatches(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisMensais>> {
+  return mergeMaps(await Promise.all(chunkActiveErpBatch(refs).map((chunk) => getTotaisMensaisBatch(chunk, agora))));
+}
+
+async function getTotaisSemanaisInBatches(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisSemanais>> {
+  return mergeMaps(await Promise.all(chunkActiveErpBatch(refs).map((chunk) => getTotaisSemanaisBatch(chunk, agora))));
+}
+
+async function contarSkusCriticosInBatches(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, number>> {
+  return mergeMaps(await Promise.all(chunkActiveErpBatch(refs).map((chunk) => contarSkusCriticosBatch(chunk, agora))));
+}
+
 /**
  * Resumo de carteira por org, escopado pelo PAPEL (analista: só a carteira
  * própria; admin: todas as orgs cliente) — escopo e contagem de tasks vêm
@@ -328,16 +359,16 @@ export async function carteiraResumo(access: UserAccess, agora: Date): Promise<O
   const carteira = await getCarteira(access);
   if (carteira.length === 0) return [];
   const orgIds = carteira.map((c) => c.orgId);
-  const activeRefs = await getActiveErpConnectionsForOrgIds(orgIds);
+  const activeRefs = await getActiveRefsInBatches(orgIds);
   const hoje = hojeBrt(agora);
 
   const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticosMap] = await Promise.all([
     getOrgDetalhesBatch(orgIds),
-    getTotaisMensaisBatch(activeRefs, agora),
-    getTotaisSemanaisBatch(activeRefs, agora),
+    getTotaisMensaisInBatches(activeRefs, agora),
+    getTotaisSemanaisInBatches(activeRefs, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
-    contarSkusCriticosBatch(activeRefs, agora),
+    contarSkusCriticosInBatches(activeRefs, agora),
   ]);
   const insumos: InsumosPorOrg = { detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos: skusCriticosMap };
 

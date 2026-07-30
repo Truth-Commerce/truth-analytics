@@ -72,6 +72,10 @@ describe('cron sincronizar-pedidos — wiring do Passo 1 (renovação) + Passo 2
     const primeiraSync = vi.mocked(sync.sincronizarPedidosDaOrg).mock.invocationCallOrder[0];
     expect(ordensRenovacao).toHaveLength(3);
     expect(Math.max(...ordensRenovacao)).toBeLessThan(primeiraSync!);
+    expect(sync.sincronizarPedidosDaOrg).toHaveBeenCalledWith(
+      { orgId: 'org-a', provider: 'bling', sourceGeneration: 1 },
+      expect.any(Date),
+    );
   });
 
   it('falha transitória NÃO conta como expirada mesmo quando renovarConexaoDaOrg lança', async () => {

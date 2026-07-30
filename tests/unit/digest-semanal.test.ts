@@ -130,4 +130,18 @@ describe('processarDigestSemanal — varredura global (db mockado)', () => {
     expect(res).toEqual({ orgs: 1, enviados: 0 });
     expect(mocks.sendDigestSemanalEmail).not.toHaveBeenCalled();
   });
+
+  it('mantém digest de tasks sem fonte ERP e zera vendas', async () => {
+    mocks.dbQueue.push([{ id: 'org-a', name: 'Loja A' }], ...contagens(2, 1, 0, 1));
+    mocks.getActiveErpConnection.mockResolvedValue(null);
+    mocks.getOrgPrimaryUser.mockResolvedValue({ id: 'u1', email: 'a@x.com' });
+
+    await expect(processarDigestSemanal(AGORA)).resolves.toEqual({ orgs: 1, enviados: 1 });
+    expect(mocks.sendDigestSemanalEmail).toHaveBeenCalledWith('a@x.com', expect.objectContaining({
+      vendasMes: 0,
+      vendasMesAnterior: 0,
+    }));
+    expect(mocks.getTotalVendasMesCorrente).not.toHaveBeenCalled();
+    expect(mocks.getTotalVendasMesAnterior).not.toHaveBeenCalled();
+  });
 });
