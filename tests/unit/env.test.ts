@@ -113,4 +113,36 @@ describe('parseServerEnv', () => {
       } as unknown as NodeJS.ProcessEnv),
     ).toThrow('32 bytes');
   });
+
+  const BASE_ENV = {
+    POSTGRES_URL: 'postgres://x',
+    AUTH_SECRET: 'secret',
+    APP_URL: 'http://localhost:3000',
+    ENCRYPTION_KEY: KEY_32,
+  };
+
+  it('defaults Olist shadow sync to disabled with an empty allowlist', () => {
+    const env = parseServerEnv(BASE_ENV as unknown as NodeJS.ProcessEnv);
+    expect(env.OLIST_DATA_SYNC_ENABLED).toBe(false);
+    expect(env.OLIST_DATA_SYNC_ORG_IDS).toEqual([]);
+  });
+
+  it('parses true and deduplicates UUIDs in the Olist allowlist', () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const env = parseServerEnv({ ...BASE_ENV, OLIST_DATA_SYNC_ENABLED: 'true', OLIST_DATA_SYNC_ORG_IDS: ` ${id},${id} ` } as unknown as NodeJS.ProcessEnv);
+    expect(env.OLIST_DATA_SYNC_ENABLED).toBe(true);
+    expect(env.OLIST_DATA_SYNC_ORG_IDS).toEqual([id]);
+  });
+
+  it('parses the explicit false Olist flag', () => {
+    expect(parseServerEnv({ ...BASE_ENV, OLIST_DATA_SYNC_ENABLED: 'false' } as unknown as NodeJS.ProcessEnv).OLIST_DATA_SYNC_ENABLED).toBe(false);
+  });
+
+  it.each(['TRUE', '1', 'yes'])('rejects invalid Olist boolean %s', (value) => {
+    expect(() => parseServerEnv({ ...BASE_ENV, OLIST_DATA_SYNC_ENABLED: value } as unknown as NodeJS.ProcessEnv)).toThrow();
+  });
+
+  it.each(['*', '00000000-0000-4000-8000-000000000001,,00000000-0000-4000-8000-000000000002'])('rejects wildcard and empty Olist allowlist segments', (value) => {
+    expect(() => parseServerEnv({ ...BASE_ENV, OLIST_DATA_SYNC_ORG_IDS: value } as unknown as NodeJS.ProcessEnv)).toThrow('OLIST_DATA_SYNC_ORG_IDS deve conter UUIDs CSV');
+  });
 });
