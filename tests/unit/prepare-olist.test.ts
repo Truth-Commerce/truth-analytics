@@ -91,6 +91,18 @@ describe('Olist shadow preparation window', () => {
     expect(complete).not.toHaveBeenCalled();
   });
 
+  it('returns stale before acquiring a lease when the frozen source fingerprint changed', async () => {
+    const connection = await import('@/modules/connections/provider-connection.repository');
+    vi.mocked(connection.getOlistAccountFingerprint).mockResolvedValueOnce('b'.repeat(64));
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    const frozenSource = { orgId: 'org', provider: 'olist' as const, sourceGeneration: 1, accountFingerprint: 'a'.repeat(64) };
+
+    await expect(prepareOlistOrders(frozenSource)).resolves.toMatchObject({ stage: 'stale', ready: false, stale: true, reason: 'source_stale' });
+
+    expect(acquire).not.toHaveBeenCalled();
+    expect(fetchOrders).not.toHaveBeenCalled();
+  });
+
   const readyCursor = () => ({ version: 1 as const, stage: 'ready' as const, sourceGeneration: 1, accountFingerprint: 'a'.repeat(64), window: { from: '2026-05-01T00:00:00.000Z', to: '2026-07-30T00:00:00.000Z' }, catchUpFrom: '2026-07-30T19:42:10.123Z', snapshot: { done: true }, catchup: { done: true, completedAt: '2026-07-30T19:42:11.000Z' }, verify1: { done: true, expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, verify2: { done: true, expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) } });
   it('fails ready revalidation without completing the outer lease', async () => {
     mocks.parse.mockReturnValue(readyCursor());

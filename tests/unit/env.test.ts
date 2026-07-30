@@ -145,4 +145,9 @@ describe('parseServerEnv', () => {
   it.each(['*', '00000000-0000-4000-8000-000000000001,,00000000-0000-4000-8000-000000000002'])('rejects wildcard and empty Olist allowlist segments', (value) => {
     expect(() => parseServerEnv({ ...BASE_ENV, OLIST_DATA_SYNC_ORG_IDS: value } as unknown as NodeJS.ProcessEnv)).toThrow('OLIST_DATA_SYNC_ORG_IDS deve conter UUIDs CSV');
   });
+
+  it('rejects an Olist allowlist with more than 50 valid UUIDs', () => {
+    const ids = Array.from({ length: 51 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`);
+    expect(() => parseServerEnv({ ...BASE_ENV, OLIST_DATA_SYNC_ORG_IDS: ids.join(',') } as unknown as NodeJS.ProcessEnv)).toThrow(/50/);
+  });
 });
