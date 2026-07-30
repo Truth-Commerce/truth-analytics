@@ -70,6 +70,13 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
       access_token: null,
       refresh_token: null,
     });
+    await db.insert(connections).values({
+      org_id: orgRiscoId,
+      provider: 'olist',
+      data_generation: 1,
+      status: 'ok',
+      access_token: 'enc-token-olist',
+    });
 
     const hoje = hojeBrt(agora);
     const [tAtrasada] = await db
@@ -104,6 +111,8 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
     await db.insert(orders).values([
       {
         org_id: orgRiscoId,
+        provider: 'olist',
+        source_generation: 1,
         bling_order_id: `${PREFIX}risco-atual-${RUN}`,
         canal: 'teste',
         data: dataHoje,
@@ -111,6 +120,8 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
       },
       {
         org_id: orgRiscoId,
+        provider: 'olist',
+        source_generation: 1,
         bling_order_id: `${PREFIX}risco-anterior-${RUN}`,
         canal: 'teste',
         data: mesAnterior,
@@ -138,6 +149,8 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
     });
     await db.insert(orders).values({
       org_id: orgRiscoId,
+      provider: 'olist',
+      source_generation: 1,
       bling_order_id: `${PREFIX}risco-estoque-${RUN}`,
       canal: 'teste',
       data: new Date(agora.getTime() - 5 * 86_400_000),
@@ -160,6 +173,8 @@ describe.skipIf(!url)('carteira-data.repository — integração', () => {
     });
     await db.insert(orders).values({
       org_id: orgSaudavelId,
+      provider: 'bling',
+      source_generation: 1,
       bling_order_id: `${PREFIX}saudavel-atual-${RUN}`,
       canal: 'teste',
       data: dataHoje,

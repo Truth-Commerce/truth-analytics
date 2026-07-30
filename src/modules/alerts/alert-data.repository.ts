@@ -4,6 +4,8 @@ import { db } from '@/db/client';
 import { orders, organizations, reports, trackedProducts } from '@/db/schema';
 import type { Metricas } from '@/modules/pipeline/contracts';
 import type { RawOrderItem } from '@/modules/providers/types';
+import type { ErpDataSource } from '@/modules/providers/data.types';
+import { orderScope } from '@/modules/orders/order-scope';
 
 /**
  * Orgs `active` com pelo menos um relatório `done` criado nos últimos `dias`
@@ -30,14 +32,14 @@ export async function listOrgsComRelatorioRecente(dias: number, agora: Date): Pr
  * 7 dias, mais recente primeiro). Escopado por org_id.
  */
 export async function getTotaisSemanais(
-  orgId: string,
+  source: ErpDataSource,
   agora: Date,
 ): Promise<{ total7dias: number; totaisSemanasAnteriores: number[] }> {
   const inicio = new Date(agora.getTime() - 35 * 86_400_000);
   const rows = await db
     .select({ data: orders.data, valor_total: orders.valor_total })
     .from(orders)
-    .where(and(eq(orders.org_id, orgId), between(orders.data, inicio, agora)));
+    .where(and(orderScope(source), between(orders.data, inicio, agora)));
 
   const buckets = [0, 0, 0, 0, 0]; // 0 = últimos 7d; 1..4 = semanas anteriores
   for (const o of rows) {
@@ -70,14 +72,14 @@ export async function getPosicaoPrecoUltimoDone(
  * [agora - diasHistorico, agora]. Escopado por org_id (produtos e pedidos).
  */
 export async function getUltimaVendaPorSku(
-  orgId: string,
+  source: ErpDataSource,
   diasHistorico: number,
   agora: Date,
 ): Promise<{ produtos: { sku: string; nome: string }[]; ultimaVendaPorSku: Map<string, Date> }> {
   const produtosRows = await db
     .select({ sku: trackedProducts.sku, nome: trackedProducts.nome })
     .from(trackedProducts)
-    .where(and(eq(trackedProducts.org_id, orgId), eq(trackedProducts.ativo, true)));
+    .where(and(eq(trackedProducts.org_id, source.orgId), eq(trackedProducts.ativo, true)));
   const produtos = produtosRows.filter(
     (p): p is { sku: string; nome: string } => p.sku !== null,
   );
@@ -87,7 +89,7 @@ export async function getUltimaVendaPorSku(
   const orderRows = await db
     .select({ data: orders.data, itens: orders.itens })
     .from(orders)
-    .where(and(eq(orders.org_id, orgId), gte(orders.data, desde)));
+    .where(and(orderScope(source), gte(orders.data, desde)));
 
   const skus = new Set(produtos.map((p) => p.sku));
   const ultimaVendaPorSku = new Map<string, Date>();
@@ -105,10 +107,10 @@ export async function getUltimaVendaPorSku(
  * Data do pedido mais recente da org (MAX(orders.data)) — o "agora efetivo"
  * das janelas dos detectores. Null = org sem nenhum pedido.
  */
-export async function getUltimaDataPedido(orgId: string): Promise<Date | null> {
+export async function getUltimaDataPedido(source: ErpDataSource): Promise<Date | null> {
   const [row] = await db
     .select({ ultima: sql<Date | string | null>`max(${orders.data})` })
     .from(orders)
-    .where(eq(orders.org_id, orgId));
+    .where(orderScope(source));
   return row?.ultima ? new Date(row.ultima) : null;
 }

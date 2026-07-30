@@ -3,9 +3,11 @@ import { gerarBriefingDoCiclo } from '@/modules/analista/gerar-briefing';
 import { gerarCalendarioDoCiclo } from '@/modules/calendario/gerar-calendario';
 import { gerarKitsDoCiclo } from '@/modules/kits/gerar-kits';
 import { gravarNichoSeVazio, inferirNichoComIA } from '@/modules/pipeline/steps/nicho-ia';
+import type { ErpDataSource } from '@/modules/providers/data.types';
 
 /** Contexto repassado aos passos de calendário/briefing. */
 export type PosFinalizeExtrasCtx = {
+  source: ErpDataSource;
   orgId: string;
   reportId: string;
   orgName: string;
@@ -74,6 +76,8 @@ export async function executarExtrasPosFinalize(input: PosFinalizeExtrasInput): 
         orgName: input.orgName,
         nicho,
         ticketMedio: input.ticketMedio,
+        provider: input.source.provider,
+        sourceGeneration: input.source.sourceGeneration,
       });
     } catch (err) {
       logger.warn('extras.kits_falhou', {
@@ -95,6 +99,9 @@ export async function executarExtrasPosFinalize(input: PosFinalizeExtrasInput): 
         nicho,
         ticketMedio: input.ticketMedio,
         topProdutos: input.topProdutos,
+        provider: input.source.provider,
+        sourceGeneration: input.source.sourceGeneration,
+        source: input.source,
       });
     } catch (err) {
       logger.warn('extras.calendario_falhou', {
@@ -115,6 +122,7 @@ export async function executarExtrasPosFinalize(input: PosFinalizeExtrasInput): 
         nicho,
         ticketMedio: input.ticketMedio,
         topProdutos: input.topProdutos,
+        source: input.source,
       });
     } catch (err) {
       logger.warn('extras.briefing_falhou', {

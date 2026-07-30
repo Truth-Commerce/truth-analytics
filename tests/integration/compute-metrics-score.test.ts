@@ -9,6 +9,7 @@ const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
 const tdb = drizzle(sql);
 const RUN = Date.now();
+const sourceFor = (orgId: string) => ({ orgId, provider: 'bling' as const, sourceGeneration: 1 });
 
 // Período atual: 10 dias (2024-02-11 .. 2024-02-21).
 // Período anterior (mesma duração, imediatamente antes): 2024-02-01 .. 2024-02-11.
@@ -70,7 +71,7 @@ describe.skipIf(!url)('compute-metrics — truth_score (integração)', () => {
       ]);
 
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
-      const result = await computeMetrics(orgId, reportId, PERIODO, true);
+      const result = await computeMetrics(sourceFor(orgId), reportId, PERIODO, true);
 
       expect(result.truth_score).toBeDefined();
       expect(result.truth_score?.totalPeriodo).toBe(600);
@@ -158,7 +159,7 @@ describe.skipIf(!url)('compute-metrics — truth_score (integração)', () => {
       ]);
 
       const { computeMetrics } = await import('@/modules/pipeline/steps/compute-metrics');
-      const result = await computeMetrics(orgId, reportId, PERIODO, true);
+      const result = await computeMetrics(sourceFor(orgId), reportId, PERIODO, true);
 
       expect(result.truth_score?.totalPeriodoAnterior).toBe(500);
       expect(result.truth_score?.fatores.crescimento.variacaoPercentual).toBe(20);

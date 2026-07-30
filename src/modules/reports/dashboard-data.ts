@@ -2,6 +2,7 @@ import { getOrganizationById, type ClientOrganization } from '@/modules/admin/ad
 import { getUltimaDataPedido } from '@/modules/alerts/alert-data.repository';
 import { listAlertasAbertos, type AlertaAberto } from '@/modules/alerts/alert.repository';
 import { getConnection } from '@/modules/connections/connection.repository';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import {
   getOrgSettings,
   getTotalVendasMesCorrente,
@@ -39,6 +40,7 @@ export type DashboardData = {
  * ação nº 1); o histórico usa extração no SQL.
  */
 export async function getDashboardData(orgId: string): Promise<DashboardData> {
+  const source = await getActiveErpConnection(orgId);
   const [historico, conn, org, donesRecentes, produtos, alertas, settings, totalMes, ultimaDataPedido] =
     await Promise.all([
       listHistoricoDashboard(orgId),
@@ -48,8 +50,8 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
       listTrackedProducts(orgId),
       listAlertasAbertos(orgId),
       getOrgSettings(orgId),
-      getTotalVendasMesCorrente(orgId),
-      getUltimaDataPedido(orgId),
+      source ? getTotalVendasMesCorrente(source) : Promise.resolve(0),
+      source ? getUltimaDataPedido(source) : Promise.resolve(null),
     ]);
 
   const latestDone = donesRecentes[0] ?? null;

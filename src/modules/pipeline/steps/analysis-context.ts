@@ -3,6 +3,7 @@ import type { Plano } from '@/modules/auth/user.types';
 import { getOrgSettings, getTotalVendasMesCorrente } from '@/modules/organizations/organization-settings.repository';
 import type { AnalysisContext } from '@/modules/pipeline/steps/analyze-ia';
 import type { Periodo } from '@/modules/providers/types';
+import type { ErpDataSource } from '@/modules/providers/data.types';
 import { totalVendas } from '@/modules/reports/compare';
 import { getUltimosDoneDetalhados } from '@/modules/reports/report.repository';
 
@@ -19,10 +20,11 @@ export async function buildAnalysisContext(input: {
   nicho: string | null;
   plano: Plano;
   periodo: Periodo;
+  source: ErpDataSource;
 }): Promise<AnalysisContext> {
   const [settings, totalMesCorrente, anteriores] = await Promise.all([
     getOrgSettings(input.orgId),
-    getTotalVendasMesCorrente(input.orgId),
+    getTotalVendasMesCorrente(input.source),
     getUltimosDoneDetalhados(input.orgId, 1),
   ]);
   const anterior = anteriores[0];

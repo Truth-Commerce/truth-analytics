@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Mocks das dependências externas (db, token, Bling) ---
 // vi.mock é içado ao topo do arquivo; o mock precisa existir nesse momento, por
@@ -56,6 +56,8 @@ vi.mock('@/modules/connections/sync-state.repository', () => ({
 vi.mock('@/modules/connections/provider-connection.repository', () => ({ getOlistAccountFingerprint: vi.fn().mockResolvedValue('a'.repeat(64)) }));
 
 import { enrichOrders } from '@/modules/pipeline/steps/enrich-orders';
+
+const BLING_SOURCE = { orgId: 'org-1', provider: 'bling' as const, sourceGeneration: 1 };
 
 /** Encadeia o `db.select()...limit()` para devolver a fila e o `db.update()` para capturar. */
 function armarDb(pendentes: Array<{ id: string; blingOrderId: string | null }>, restantesDepois: number) {
@@ -118,7 +120,7 @@ describe('enrichOrders', () => {
       canalId: '205976832',
     });
 
-    const r = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    const r = await enrichOrders(BLING_SOURCE, { maxPedidos: 50, prazoMs: 60_000 });
 
     expect(r.enriquecidos).toBe(2);
     expect(r.falhas).toBe(0);
@@ -138,7 +140,7 @@ describe('enrichOrders', () => {
       .mockRejectedValueOnce(new Error('bling_erro_500'))
       .mockResolvedValueOnce({ itens: [], frete: 0, comissao: 0, canalId: undefined });
 
-    const r = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    const r = await enrichOrders(BLING_SOURCE, { maxPedidos: 50, prazoMs: 60_000 });
 
     expect(r.enriquecidos).toBe(1);
     expect(r.falhas).toBe(1);
@@ -147,7 +149,7 @@ describe('enrichOrders', () => {
 
   it('fila vazia retorna cedo sem chamar o Bling', async () => {
     armarDb([], 0);
-    const r = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    const r = await enrichOrders(BLING_SOURCE, { maxPedidos: 50, prazoMs: 60_000 });
     expect(r.enriquecidos).toBe(0);
     expect(fetchOrderDetail).not.toHaveBeenCalled();
   });
@@ -155,7 +157,7 @@ describe('enrichOrders', () => {
   it('ignora pendentes sem identificador Bling', async () => {
     armarDb([{ id: 'olist-1', blingOrderId: null }], 0);
 
-    const r = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    const r = await enrichOrders(BLING_SOURCE, { maxPedidos: 50, prazoMs: 60_000 });
 
     expect(r.enriquecidos).toBe(0);
     expect(fetchOrderDetail).not.toHaveBeenCalled();
@@ -165,7 +167,7 @@ describe('enrichOrders', () => {
     armarDb([{ id: 'u1', blingOrderId: '100' }], 130);
     fetchOrderDetail.mockResolvedValue({ itens: [], frete: 0, comissao: 0, canalId: undefined });
 
-    const r = await enrichOrders('org-1', { maxPedidos: 1, prazoMs: 60_000 });
+    const r = await enrichOrders(BLING_SOURCE, { maxPedidos: 1, prazoMs: 60_000 });
 
     expect(r.restantes).toBe(130);
     expect(r.incompleto).toBe(true);
@@ -175,7 +177,7 @@ describe('enrichOrders', () => {
     armarDb([{ id: 'bling-1', blingOrderId: '100' }], 0);
     fetchOrderDetail.mockResolvedValue({ itens: [], frete: 0, comissao: 0, canalId: undefined });
 
-    const r = await enrichOrders('org-1', { maxPedidos: 1, prazoMs: 60_000 });
+    const r = await enrichOrders(BLING_SOURCE, { maxPedidos: 1, prazoMs: 60_000 });
 
     expect(r.incompleto).toBe(false);
     const predicate = JSON.stringify(wherePredicates[1]);
@@ -196,13 +198,13 @@ describe('enrichOrders', () => {
       canalId: '999', // nao esta no mapa
     });
 
-    const result = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    const result = await enrichOrders(BLING_SOURCE, { maxPedidos: 50, prazoMs: 60_000 });
     expect(result.enriquecidos).toBe(1);
   });
 
   it('mantem restantes e incompleto quando a fila esta apenas em cooldown de retry', async () => {
     armarDb([], 2);
-    const result = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    const result = await enrichOrders(BLING_SOURCE, { maxPedidos: 50, prazoMs: 60_000 });
     expect(result).toMatchObject({ restantes: 2, incompleto: true });
     expect(fetchOrderDetail).not.toHaveBeenCalled();
   });

@@ -18,6 +18,11 @@ import {
 import { diasDoPlano } from '@/modules/pipeline/plan-lock';
 import { deltaNumero, paceMeta } from '@/modules/reports/compare';
 import { diasDesde } from '@/modules/tasks/sla';
+import { MAX_ACTIVE_ERP_BATCH, orderScopes, type ActiveErpRef } from '@/modules/orders/order-scope';
+import {
+  getActiveErpConnection,
+  getActiveErpConnectionsForOrgIds,
+} from '@/modules/connections/active-provider.repository';
 
 // ---------------------------------------------------------------------------
 // Command center da carteira (H4 T3) — agrega TODOS os insumos do score de
@@ -45,6 +50,25 @@ export type OrgResumo = {
 };
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+function chunkActiveErpBatch<T>(values: readonly T[]): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += MAX_ACTIVE_ERP_BATCH) {
+    chunks.push(values.slice(index, index + MAX_ACTIVE_ERP_BATCH));
+  }
+  return chunks;
+}
+
+function mergeMaps<K, V>(maps: readonly Map<K, V>[]): Map<K, V> {
+  return new Map(maps.flatMap((map) => [...map]));
+}
+
+async function getActiveRefsInBatches(orgIds: readonly string[]): Promise<ActiveErpRef[]> {
+  const refs = await Promise.all(
+    chunkActiveErpBatch([...new Set(orgIds)]).map((chunk) => getActiveErpConnectionsForOrgIds(chunk)),
+  );
+  return refs.flat();
+}
 
 /** meta em risco = pace < 80% a partir do dia 15 do mês (Decisões de plano H4). */
 const META_EM_RISCO_DIA_MINIMO = 15;
@@ -106,7 +130,8 @@ type TotaisMensais = { atual: number; anterior: number };
  * já registrada em report.repository.ts/tempoMedioConclusaoDias) — mais
  * seguro comparar em JS com os operadores tipados (`gte`/`lte`) só no WHERE.
  */
-async function getTotaisMensaisBatch(orgIds: string[], agora: Date): Promise<Map<string, TotaisMensais>> {
+async function getTotaisMensaisBatch(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisMensais>> {
+  if (refs.length === 0) return new Map();
   const hoje = hojeBrt(agora);
   const inicioMesAtual = inicioDeDiaUtc(`${hoje.slice(0, 7)}-01`);
   const fimHoje = fimDeDiaUtc(hoje);
@@ -117,7 +142,7 @@ async function getTotaisMensaisBatch(orgIds: string[], agora: Date): Promise<Map
   const rows = await db
     .select({ orgId: orders.org_id, data: orders.data, valor_total: orders.valor_total })
     .from(orders)
-    .where(and(inArray(orders.org_id, orgIds), gte(orders.data, inicioMesAnterior), lte(orders.data, fimHoje)));
+    .where(and(orderScopes(refs), gte(orders.data, inicioMesAnterior), lte(orders.data, fimHoje)));
 
   const acc = new Map<string, TotaisMensais>();
   for (const o of rows) {
@@ -139,12 +164,13 @@ type TotaisSemanais = { total7dias: number; totaisSemanasAnteriores: number[] };
  * por-org. Mesma matemática de buckets (idade em janelas de 7 dias), só que
  * acumulada por orgId em vez de um total só.
  */
-async function getTotaisSemanaisBatch(orgIds: string[], agora: Date): Promise<Map<string, TotaisSemanais>> {
+async function getTotaisSemanaisBatch(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisSemanais>> {
+  if (refs.length === 0) return new Map();
   const inicio = new Date(agora.getTime() - 35 * 86_400_000);
   const rows = await db
     .select({ orgId: orders.org_id, data: orders.data, valor_total: orders.valor_total })
     .from(orders)
-    .where(and(inArray(orders.org_id, orgIds), gte(orders.data, inicio), lte(orders.data, agora)));
+    .where(and(orderScopes(refs), gte(orders.data, inicio), lte(orders.data, agora)));
 
   const buckets = new Map<string, number[]>();
   for (const o of rows) {
@@ -156,7 +182,7 @@ async function getTotaisSemanaisBatch(orgIds: string[], agora: Date): Promise<Ma
   }
 
   const result = new Map<string, TotaisSemanais>();
-  for (const orgId of orgIds) {
+  for (const { orgId } of refs) {
     const arr = buckets.get(orgId) ?? [0, 0, 0, 0, 0];
     result.set(orgId, { total7dias: round2(arr[0]!), totaisSemanasAnteriores: arr.slice(1).map(round2) });
   }
@@ -225,8 +251,9 @@ async function getReportsInfoBatch(orgIds: string[], agora: Date): Promise<Map<s
  * uma org de cada vez). Reusa `getStockRows` + `getVendas30dPorSku` +
  * `montarCobertura` (mesmo pipeline do módulo de estoque).
  */
-async function contarSkusCriticos(orgId: string, agora: Date): Promise<number> {
-  const [stock, vendas30d] = await Promise.all([getStockRows(orgId), getVendas30dPorSku(orgId, agora)]);
+async function contarSkusCriticos(source: ActiveErpRef | null, agora: Date): Promise<number> {
+  if (!source) return 0;
+  const [stock, vendas30d] = await Promise.all([getStockRows(source), getVendas30dPorSku(source, agora)]);
   return montarCobertura(stock, vendas30d).filter((p) => p.estado === 'critico').length;
 }
 
@@ -244,18 +271,30 @@ async function contarSkusCriticos(orgId: string, agora: Date): Promise<number> {
  * queries no total — mesmo resultado por org (mesmas linhas, só agrupadas em
  * JS em vez de N idas ao banco), `montarCobertura` (pura) inalterada.
  */
-async function contarSkusCriticosBatch(orgIds: string[], agora: Date): Promise<Map<string, number>> {
+async function contarSkusCriticosBatch(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, number>> {
   const [stockPorOrg, vendasPorOrg] = await Promise.all([
-    getStockRowsBatch(orgIds),
-    getVendas30dPorSkuBatch(orgIds, agora),
+    getStockRowsBatch(refs),
+    getVendas30dPorSkuBatch(refs, agora),
   ]);
   const result = new Map<string, number>();
-  for (const orgId of orgIds) {
+  for (const { orgId } of refs) {
     const stock = stockPorOrg.get(orgId) ?? [];
     const vendas = vendasPorOrg.get(orgId) ?? new Map<string, number>();
     result.set(orgId, montarCobertura(stock, vendas).filter((p) => p.estado === 'critico').length);
   }
   return result;
+}
+
+async function getTotaisMensaisInBatches(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisMensais>> {
+  return mergeMaps(await Promise.all(chunkActiveErpBatch(refs).map((chunk) => getTotaisMensaisBatch(chunk, agora))));
+}
+
+async function getTotaisSemanaisInBatches(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, TotaisSemanais>> {
+  return mergeMaps(await Promise.all(chunkActiveErpBatch(refs).map((chunk) => getTotaisSemanaisBatch(chunk, agora))));
+}
+
+async function contarSkusCriticosInBatches(refs: readonly ActiveErpRef[], agora: Date): Promise<Map<string, number>> {
+  return mergeMaps(await Promise.all(chunkActiveErpBatch(refs).map((chunk) => contarSkusCriticosBatch(chunk, agora))));
 }
 
 /**
@@ -320,15 +359,16 @@ export async function carteiraResumo(access: UserAccess, agora: Date): Promise<O
   const carteira = await getCarteira(access);
   if (carteira.length === 0) return [];
   const orgIds = carteira.map((c) => c.orgId);
+  const activeRefs = await getActiveRefsInBatches(orgIds);
   const hoje = hojeBrt(agora);
 
   const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticosMap] = await Promise.all([
     getOrgDetalhesBatch(orgIds),
-    getTotaisMensaisBatch(orgIds, agora),
-    getTotaisSemanaisBatch(orgIds, agora),
+    getTotaisMensaisInBatches(activeRefs, agora),
+    getTotaisSemanaisInBatches(activeRefs, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
-    contarSkusCriticosBatch(orgIds, agora),
+    contarSkusCriticosInBatches(activeRefs, agora),
   ]);
   const insumos: InsumosPorOrg = { detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos: skusCriticosMap };
 
@@ -355,14 +395,16 @@ export async function orgResumoUnico(
   if (!c) return null;
   const hoje = hojeBrt(agora);
   const orgIds = [orgId];
+  const activeRef = await getActiveErpConnection(orgId);
+  const activeRefs = activeRef ? [activeRef] : [];
 
   const [detalhes, mensais, semanais, conexoes, reportsInfo, skusCriticos] = await Promise.all([
     getOrgDetalhesBatch(orgIds),
-    getTotaisMensaisBatch(orgIds, agora),
-    getTotaisSemanaisBatch(orgIds, agora),
+    getTotaisMensaisBatch(activeRefs, agora),
+    getTotaisSemanaisBatch(activeRefs, agora),
     getConexoesBatch(orgIds, agora),
     getReportsInfoBatch(orgIds, agora),
-    contarSkusCriticos(orgId, agora),
+    contarSkusCriticos(activeRef, agora),
   ]);
   const insumos: InsumosPorOrg = {
     detalhes,

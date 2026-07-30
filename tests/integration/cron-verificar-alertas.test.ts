@@ -23,7 +23,7 @@ vi.mock('@/modules/tasks/lembretes-prazo', () => ({
 const CRON_SECRET_TEST = 'cron-verificar-alertas-teste-16+';
 
 import { db } from '@/db/client';
-import { alerts, notifications, orders, organizations, reports, users } from '@/db/schema';
+import { alerts, connections, notifications, orders, organizations, reports, users } from '@/db/schema';
 import * as emailModule from '@/modules/notifications/email';
 import * as notificationRepo from '@/modules/notifications/notification.repository';
 import { GET } from '@/app/api/cron/verificar-alertas/route';
@@ -52,6 +52,15 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
       .returning({ id: organizations.id });
     orgId = org!.id;
 
+    await db.insert(connections).values({
+      org_id: orgId,
+      provider: 'bling',
+      data_generation: 1,
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      status: 'ok',
+    });
+
     const [user] = await db
       .insert(users)
       .values({ org_id: orgId, email: userEmail, senha_hash: 'hash', role: 'client' })
@@ -75,6 +84,9 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
     const venda = (offsetDias: number, valor: number) => ({
       org_id: orgId,
       bling_order_id: `${PREFIX}${RUN}-${offsetDias}`,
+      provider: 'bling',
+      provider_order_id: `${PREFIX}${RUN}-${offsetDias}`,
+      source_generation: 1,
       canal: 'bling',
       data: new Date(agora.getTime() - offsetDias * DIA),
       valor_total: valor.toFixed(2),
@@ -94,6 +106,7 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
       await db.delete(alerts).where(eq(alerts.org_id, orgId));
       await db.delete(notifications).where(eq(notifications.user_id, userId));
       await db.delete(orders).where(eq(orders.org_id, orgId));
+      await db.delete(connections).where(eq(connections.org_id, orgId));
       await db.delete(reports).where(eq(reports.org_id, orgId));
       await db.delete(users).where(eq(users.org_id, orgId));
       await db.delete(organizations).where(eq(organizations.id, orgId));
@@ -160,6 +173,14 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
       .values({ name: `${PREFIX}org-velha-${RUN}`, status: 'active' })
       .returning({ id: organizations.id });
     const org2Id = org2!.id;
+    await db.insert(connections).values({
+      org_id: org2Id,
+      provider: 'bling',
+      data_generation: 1,
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      status: 'ok',
+    });
     await db.insert(reports).values({
       org_id: org2Id,
       status: 'done',
@@ -170,6 +191,9 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
     const vendaVelha = (offsetDias: number) => ({
       org_id: org2Id,
       bling_order_id: `${PREFIX}velha-${RUN}-${offsetDias}`,
+      provider: 'bling',
+      provider_order_id: `${PREFIX}velha-${RUN}-${offsetDias}`,
+      source_generation: 1,
       canal: 'bling',
       data: new Date(agora.getTime() - offsetDias * DIA),
       valor_total: '1000.00',
@@ -192,6 +216,7 @@ describe.skipIf(!url)('cron verificar-alertas — integração', () => {
       emailSpy.mockRestore();
       await db.delete(alerts).where(eq(alerts.org_id, org2Id));
       await db.delete(orders).where(eq(orders.org_id, org2Id));
+      await db.delete(connections).where(eq(connections.org_id, org2Id));
       await db.delete(reports).where(eq(reports.org_id, org2Id));
       await db.delete(organizations).where(eq(organizations.id, org2Id));
     }

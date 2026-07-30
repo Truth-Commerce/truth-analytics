@@ -14,6 +14,7 @@ import { analyzeWithIA } from '@/modules/pipeline/steps/analyze-ia';
 import { buildAnalysisContext } from '@/modules/pipeline/steps/analysis-context';
 import { finalize } from '@/modules/pipeline/steps/finalize';
 import { executarExtrasPosFinalize } from '@/modules/pipeline/steps/pos-finalize-extras';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import type { ReportEtapa } from '@/modules/reports/report.types';
 
 /**
@@ -81,6 +82,8 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     const { plano, nicho } = org;
     if (!plano) throw new Error('sem_plano');
     const orgName = org.name;
+    const source = await getActiveErpConnection(orgId);
+    if (!source) throw new Error('sem_conexao_erp');
 
     // Coleta Bling ∥ mercado (allSettled: nenhuma promessa solta escreve depois do retorno).
     const [blingOutcome, marketOutcome] = await Promise.allSettled([
@@ -100,7 +103,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     // requisição por pedido. Enriquece o período do relatório dentro de um
     // orçamento que cabe no maxDuration; o que sobrar fica para o cron diário.
     // Best-effort: enrichOrders nunca lança (relatório com item parcial > nenhum).
-    const enriquecimento = await enrichOrders(orgId, {
+    const enriquecimento = await enrichOrders(source, {
       maxPedidos: ENRIQUECIMENTO_PIPELINE.maxPedidos,
       prazoMs: ENRIQUECIMENTO_PIPELINE.prazoMs,
       periodo,
@@ -110,10 +113,10 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
     }
 
     await setEtapa(reportId, 'analisando_mercado');
-    const metricas = await computeMetrics(orgId, reportId, periodo, benchmarkParcial);
+    const metricas = await computeMetrics(source, reportId, periodo, benchmarkParcial);
 
     await setEtapa(reportId, 'analisando_ia');
-    const contexto = await buildAnalysisContext({ orgId, orgName, nicho, plano, periodo });
+    const contexto = await buildAnalysisContext({ orgId, orgName, nicho, plano, periodo, source });
     const { analise, usage: iaUsage } = await analyzeWithIA(metricas, contexto);
 
     await setEtapa(reportId, 'finalizando');
@@ -134,6 +137,7 @@ export async function generateReport(reportId: string): Promise<GenerateOutcome>
       nicho,
       ticketMedio: metricas.ticketMedio,
       topProdutos: metricas.topProdutos.map((p) => p.nome),
+      source,
     });
 
     log.info('pipeline concluído');

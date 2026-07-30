@@ -8,6 +8,7 @@ import {
   getVendas30dPorSku,
   upsertStock,
 } from '@/modules/estoque/stock.repository';
+import type { ActiveErpRef } from '@/modules/orders/order-scope';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -17,6 +18,7 @@ const AGORA = new Date();
 describe.skipIf(!url)('stock.repository — integração', () => {
   let orgId = '';
   let outraOrgId = '';
+  const source = (orgId: string): ActiveErpRef => ({ orgId, provider: 'bling', sourceGeneration: 1, accountFingerprint: null, lastSyncAt: null });
 
   beforeAll(async () => {
     const [org] = await db
@@ -88,7 +90,7 @@ describe.skipIf(!url)('stock.repository — integração', () => {
     const n2 = await upsertStock(orgId, [{ sku: 'SKU-A', nome: 'Produto A v2', saldo: 4 }]);
     expect(n2).toBe(1);
 
-    const rows = await getStockRows(orgId);
+    const rows = await getStockRows(source(orgId));
     expect(rows).toEqual([{ sku: 'SKU-A', nome: 'Produto A v2', saldo: 4 }]);
   });
 
@@ -99,19 +101,19 @@ describe.skipIf(!url)('stock.repository — integração', () => {
     ]);
     expect(n).toBe(1);
 
-    const rows = await getStockRows(orgId);
+    const rows = await getStockRows(source(orgId));
     const dup = rows.find((r) => r.sku === 'SKU-DUP');
     expect(dup).toEqual({ sku: 'SKU-DUP', nome: 'Produto Dup v2', saldo: 3 });
   });
 
   it('getVendas30dPorSku soma quantidade na janela, ignora itens sem sku e não vaza entre orgs', async () => {
-    const mapa = await getVendas30dPorSku(orgId, AGORA);
+    const mapa = await getVendas30dPorSku(source(orgId), AGORA);
     expect(mapa.get('SKU-A')).toBe(5); // 2 + 3; o pedido de 45d atrás fica fora
     expect(mapa.size).toBe(1);
   });
 
   it('getStockRows é escopado por org', async () => {
-    const rows = await getStockRows(outraOrgId);
+    const rows = await getStockRows(source(outraOrgId));
     expect(rows).toEqual([]);
   });
 });

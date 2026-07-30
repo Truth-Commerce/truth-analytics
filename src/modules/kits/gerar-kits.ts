@@ -6,6 +6,8 @@ import { logger } from '@/lib/logger';
 import { getUltimaDataPedido } from '@/modules/alerts/alert-data.repository';
 import { gerarKitsComIA } from '@/modules/kits/kit-ia';
 import { candidatosDeKits, type ItemPedido } from '@/modules/kits/market-basket';
+import type { ErpDataSource } from '@/modules/providers/data.types';
+import { orderScope } from '@/modules/orders/order-scope';
 import { insertKits, setKitsIaUsage } from '@/modules/kits/kit.repository';
 
 /** Janela de co-ocorrência (dias) — mais longa que o ciclo p/ ter sinal. */
@@ -17,6 +19,8 @@ export type GerarKitsInput = {
   orgName: string;
   nicho: string | null;
   ticketMedio: number | null;
+  provider: ErpDataSource['provider'];
+  sourceGeneration: number;
 };
 
 /**
@@ -25,14 +29,15 @@ export type GerarKitsInput = {
  * pós-finalize (pos-finalize-extras.ts).
  */
 export async function gerarKitsDoCiclo(input: GerarKitsInput): Promise<{ kits: number } | null> {
-  const ancora = await getUltimaDataPedido(input.orgId);
+  const source = { orgId: input.orgId, provider: input.provider, sourceGeneration: input.sourceGeneration } as const;
+  const ancora = await getUltimaDataPedido(source);
   if (!ancora) return null;
 
   const desde = new Date(ancora.getTime() - JANELA_KITS_DIAS * 86_400_000);
   const rows = await db
     .select({ itens: orders.itens })
     .from(orders)
-    .where(and(eq(orders.org_id, input.orgId), gte(orders.data, desde)));
+    .where(and(orderScope(source), gte(orders.data, desde)));
 
   const candidatos = candidatosDeKits(
     rows.map((r) => ({ itens: (r.itens as ItemPedido[]) ?? [] })),

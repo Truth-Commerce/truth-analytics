@@ -1,5 +1,6 @@
 import { collectBlingOrders, type CollectResult } from '@/modules/pipeline/steps/collect-bling';
 import { enrichOrders, type EnrichResult } from '@/modules/pipeline/steps/enrich-orders';
+import type { ErpDataSource } from '@/modules/providers/data.types';
 
 /** Sync incremental cobre os últimos 2 dias (pedidos atrasados de ontem + hoje parcial). */
 export const JANELA_SYNC_DIAS = 2;
@@ -26,11 +27,11 @@ export type SyncResult = CollectResult & { enriquecimento: EnrichResult };
  * Erros da COLETA propagam — o chamador (cron) faz try/catch por org.
  * O enriquecimento é best-effort e nunca lança.
  */
-export async function sincronizarPedidosDaOrg(orgId: string, agora: Date): Promise<SyncResult> {
+export async function sincronizarPedidosDaOrg(source: ErpDataSource, agora: Date): Promise<SyncResult> {
   const periodo = { inicio: new Date(agora.getTime() - JANELA_SYNC_DIAS * DIA_MS), fim: agora };
-  const coleta = await collectBlingOrders(orgId, periodo);
+  const coleta = await collectBlingOrders(source.orgId, periodo);
   // Sem `periodo`: aqui a fila inteira é elegível, para o histórico atrasado
   // também andar todo dia — e não só a janela de 2 dias do sync.
-  const enriquecimento = await enrichOrders(orgId, ENRIQUECIMENTO_SYNC);
+  const enriquecimento = await enrichOrders(source, ENRIQUECIMENTO_SYNC);
   return { ...coleta, enriquecimento };
 }

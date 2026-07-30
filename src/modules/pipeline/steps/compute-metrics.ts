@@ -10,6 +10,8 @@ import { MetricasSchema, type Metricas, type ProdutoAbc } from '@/modules/pipeli
 import { computeTruthScore } from './truth-score';
 import type { RawOrderItem } from '@/modules/providers/types';
 import type { Periodo } from '@/modules/providers/types';
+import type { ErpDataSource } from '@/modules/providers/data.types';
+import { orderScope } from '@/modules/orders/order-scope';
 
 // ---------------------------------------------------------------------------
 // Types used internally for pure functions
@@ -412,7 +414,7 @@ export function posicaoPreco(
 // ---------------------------------------------------------------------------
 
 export async function computeMetrics(
-  orgId: string,
+  source: ErpDataSource,
   reportId: string,
   periodo: Periodo,
   benchmarkParcialOverride?: boolean,
@@ -423,7 +425,7 @@ export async function computeMetrics(
     .from(orders)
     .where(
       and(
-        eq(orders.org_id, orgId),
+        orderScope(source),
         between(orders.data, periodo.inicio, periodo.fim),
       ),
     );
@@ -434,7 +436,7 @@ export async function computeMetrics(
     .from(marketSnapshots)
     .where(
       and(
-        eq(marketSnapshots.org_id, orgId),
+        eq(marketSnapshots.org_id, source.orgId),
         eq(marketSnapshots.report_id, reportId),
       ),
     );
@@ -443,7 +445,7 @@ export async function computeMetrics(
   const rawProducts = await db
     .select()
     .from(trackedProducts)
-    .where(and(eq(trackedProducts.org_id, orgId), eq(trackedProducts.ativo, true)));
+    .where(and(eq(trackedProducts.org_id, source.orgId), eq(trackedProducts.ativo, true)));
 
   // Convert DB rows → typed internal format
   const orderRows: OrderRow[] = rawOrders.map((o: OrderRecord) => ({
@@ -482,7 +484,7 @@ export async function computeMetrics(
   const [temDoneAnterior] = await db
     .select({ id: reports.id })
     .from(reports)
-    .where(and(eq(reports.org_id, orgId), eq(reports.status, 'done'), ne(reports.id, reportId)))
+    .where(and(eq(reports.org_id, source.orgId), eq(reports.status, 'done'), ne(reports.id, reportId)))
     .limit(1);
 
   let totalPeriodoAnterior: number | null = null;
@@ -492,7 +494,7 @@ export async function computeMetrics(
       .from(orders)
       .where(
         and(
-          eq(orders.org_id, orgId),
+          orderScope(source),
           gte(orders.data, inicioAnterior),
           lt(orders.data, periodo.inicio),
         ),

@@ -71,7 +71,7 @@ export async function GET(req: Request): Promise<Response> {
 
   for (const orgId of orgIds) {
     try {
-      const r = await sincronizarPedidosDaOrg(orgId, agora);
+      const r = await sincronizarPedidosDaOrg({ orgId, provider: 'bling', sourceGeneration: 1 }, agora);
       sincronizadas++;
       enriquecidos += r.enriquecimento.enriquecidos;
       if (r.enriquecimento.restantes > 0) pendentesRestantes += r.enriquecimento.restantes;

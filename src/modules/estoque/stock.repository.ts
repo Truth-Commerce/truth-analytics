@@ -4,6 +4,8 @@ import { db } from '@/db/client';
 import { orders, productStock } from '@/db/schema';
 import { JANELA_VELOCIDADE_DIAS } from '@/modules/estoque/stock-coverage';
 import type { RawOrderItem, RawStockItem } from '@/modules/providers/types';
+import type { ErpDataSource } from '@/modules/providers/data.types';
+import { MAX_ACTIVE_ERP_BATCH, orderScope, orderScopes, type ActiveErpRef } from '@/modules/orders/order-scope';
 
 const CHUNK = 500;
 
@@ -43,12 +45,12 @@ export async function upsertStock(orgId: string, itens: RawStockItem[]): Promise
 
 /** Snapshot atual da org (saldo numérico). Escopado por org_id. */
 export async function getStockRows(
-  orgId: string,
+  source: Pick<ActiveErpRef, 'orgId'>,
 ): Promise<{ sku: string; nome: string; saldo: number }[]> {
   const rows = await db
     .select({ sku: productStock.sku, nome: productStock.nome, saldo: productStock.saldo })
     .from(productStock)
-    .where(eq(productStock.org_id, orgId));
+    .where(eq(productStock.org_id, source.orgId));
   return rows.map((r) => ({ sku: r.sku, nome: r.nome, saldo: Number(r.saldo) }));
 }
 
@@ -57,12 +59,12 @@ export async function getStockRows(
  * orders.itens (jsonb iterado em JS — mesmo padrão de getUltimaVendaPorSku).
  * Escopado por org_id.
  */
-export async function getVendas30dPorSku(orgId: string, agora: Date): Promise<Map<string, number>> {
+export async function getVendas30dPorSku(source: ErpDataSource, agora: Date): Promise<Map<string, number>> {
   const desde = new Date(agora.getTime() - JANELA_VELOCIDADE_DIAS * 86_400_000);
   const rows = await db
     .select({ itens: orders.itens })
     .from(orders)
-    .where(and(eq(orders.org_id, orgId), gte(orders.data, desde)));
+    .where(and(orderScope(source), gte(orders.data, desde)));
 
   const mapa = new Map<string, number>();
   for (const o of rows) {
@@ -81,9 +83,11 @@ export async function getVendas30dPorSku(orgId: string, agora: Date): Promise<Ma
  * Mesmas linhas/campos de `getStockRows`, só agrupadas por orgId em JS.
  */
 export async function getStockRowsBatch(
-  orgIds: string[],
+  refs: readonly ActiveErpRef[],
 ): Promise<Map<string, { sku: string; nome: string; saldo: number }[]>> {
-  if (orgIds.length === 0) return new Map();
+  if (refs.length > MAX_ACTIVE_ERP_BATCH) throw new Error('active_erp_batch_limit_exceeded');
+  if (refs.length === 0) return new Map();
+  const orgIds = [...new Set(refs.map((ref) => ref.orgId))];
   const rows = await db
     .select({
       orgId: productStock.org_id,
@@ -109,15 +113,15 @@ export async function getStockRowsBatch(
  * usada pelo mesmo cenário cross-org de `getStockRowsBatch`.
  */
 export async function getVendas30dPorSkuBatch(
-  orgIds: string[],
+  refs: readonly ActiveErpRef[],
   agora: Date,
 ): Promise<Map<string, Map<string, number>>> {
-  if (orgIds.length === 0) return new Map();
+  if (refs.length === 0) return new Map();
   const desde = new Date(agora.getTime() - JANELA_VELOCIDADE_DIAS * 86_400_000);
   const rows = await db
     .select({ orgId: orders.org_id, itens: orders.itens })
     .from(orders)
-    .where(and(inArray(orders.org_id, orgIds), gte(orders.data, desde)));
+    .where(and(orderScopes(refs), gte(orders.data, desde)));
 
   const map = new Map<string, Map<string, number>>();
   for (const o of rows) {

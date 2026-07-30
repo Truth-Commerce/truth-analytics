@@ -13,6 +13,7 @@
  * existente (estoque/kits/calendário/alertas/tasks/briefing).
  */
 import { getUltimaDataPedido } from '@/modules/alerts/alert-data.repository';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import { listAlertasTimeline, type AlertaTimeline } from '@/modules/alerts/alert.repository';
 import { BriefingIaSchema, type BriefingIa } from '@/modules/analista/briefing-ia';
 import { getBriefingUltimoCiclo } from '@/modules/analista/briefing.repository';
@@ -62,12 +63,13 @@ export type Visao360Data = {
  * `getVendas30dPorSku` no dashboard do cliente) — default `new Date()` para
  * chamadas de produção; testes passam um instante fixo.
  */
-export async function getVisao360(orgId: string, agora: Date = new Date()): Promise<Visao360Data> {
+export async function getVisao360(orgId: string, _agora: Date = new Date()): Promise<Visao360Data> {
+  const source = await getActiveErpConnection(orgId);
   const [donesDetalhados, stockRows, agoraEfetivo, kitsRows, sugestoesRows, alertas, todasTasks, briefingRow] =
     await Promise.all([
       getUltimosDoneDetalhados(orgId, SCORE_HISTORICO_LIMITE),
-      getStockRows(orgId),
-      getUltimaDataPedido(orgId),
+      source ? getStockRows(source) : Promise.resolve([]),
+      source ? getUltimaDataPedido(source) : Promise.resolve(null),
       listKitsUltimoCiclo(orgId),
       listSugestoesUltimoCiclo(orgId),
       listAlertasTimeline(orgId, ALERTAS_TIMELINE_LIMITE),
@@ -76,7 +78,8 @@ export async function getVisao360(orgId: string, agora: Date = new Date()): Prom
     ]);
 
   // Sem nenhum pedido ainda: vendas30d fica vazio (mesmo fallback do dashboard/estoque).
-  const vendas30d = agoraEfetivo ? await getVendas30dPorSku(orgId, agoraEfetivo) : new Map<string, number>();
+  const fimJanelaVendas = agoraEfetivo ?? _agora;
+  const vendas30d = source && agoraEfetivo ? await getVendas30dPorSku(source, fimJanelaVendas) : new Map<string, number>();
   const estoque = montarCobertura(stockRows, vendas30d);
 
   // getUltimosDoneDetalhados vem desc (mais recente primeiro) — reverte para

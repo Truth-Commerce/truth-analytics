@@ -6,6 +6,7 @@ import {
   alerts,
   analystBriefings,
   calendarSuggestions,
+  connections,
   kitSuggestions,
   organizations,
   productStock,
@@ -77,11 +78,29 @@ describe.skipIf(!url)('visao360.repository — integração multi-tenant', () =>
       .returning({ id: organizations.id });
     orgAId = orgA!.id;
 
+    await db.insert(connections).values({
+      org_id: orgAId,
+      provider: 'bling',
+      data_generation: 1,
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      status: 'ok',
+    });
+
     const [orgB] = await db
       .insert(organizations)
       .values({ name: `${PREFIX}org-b-${RUN}`, status: 'active' })
       .returning({ id: organizations.id });
     orgBId = orgB!.id;
+
+    await db.insert(connections).values({
+      org_id: orgBId,
+      provider: 'bling',
+      data_generation: 1,
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      status: 'ok',
+    });
 
     const [an] = await db
       .insert(users)
@@ -120,10 +139,19 @@ describe.skipIf(!url)('visao360.repository — integração multi-tenant', () =>
     await db.update(reports).set({ created_at: new Date('2026-07-01T00:00:00Z') }).where(eq(reports.id, reportAtualId));
 
     // --- orgA: estoque (produto crítico com giro) ---
-    await db.insert(productStock).values({ org_id: orgAId, sku: `${PREFIX}sku-a`, nome: 'Produto A', saldo: '5.00' });
+    await db.insert(productStock).values({
+      org_id: orgAId,
+      provider: 'bling',
+      sku: `${PREFIX}sku-a`,
+      nome: 'Produto A',
+      saldo: '5.00',
+    });
     await db.insert(orders).values({
       org_id: orgAId,
       bling_order_id: `${PREFIX}order-a-${RUN}`,
+      provider: 'bling',
+      provider_order_id: `${PREFIX}order-a-${RUN}`,
+      source_generation: 1,
       canal: 'teste',
       data: new Date('2026-07-05'),
       valor_total: '100.00',
@@ -240,6 +268,7 @@ describe.skipIf(!url)('visao360.repository — integração multi-tenant', () =>
       await db.delete(tasks).where(inArray(tasks.org_id, orgIds));
       await db.delete(orders).where(inArray(orders.org_id, orgIds));
       await db.delete(productStock).where(inArray(productStock.org_id, orgIds));
+      await db.delete(connections).where(inArray(connections.org_id, orgIds));
       await db.delete(reports).where(inArray(reports.org_id, orgIds));
     }
     // organizations.analista_id → users.id (sem ON DELETE): limpar antes do delete de users.

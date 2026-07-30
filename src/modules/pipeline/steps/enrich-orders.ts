@@ -26,8 +26,6 @@ type PendingOrder = { id: string; providerOrderId: string; enrichmentAttempts: n
 class EnrichmentStructuralError extends Error {}
 
 function rows<T>(value: unknown): T[] { return Array.isArray(value) ? value as T[] : ((value as { rows?: T[] }).rows ?? []); }
-function isSource(value: ErpDataSource | string): value is ErpDataSource { return typeof value !== 'string'; }
-function sourceFor(value: ErpDataSource | string): ErpDataSource { return isSource(value) ? value : { orgId: value, provider: 'bling', sourceGeneration: 1 }; }
 
 async function pendingOrders(source: ErpDataSource, limit: number, periodo?: Periodo): Promise<PendingOrder[]> {
   const retryReady = sql`(${orders.enrichment_last_attempt_at} IS NULL OR ${orders.enrichment_last_attempt_at} <= clock_timestamp() - interval '30 seconds')`;
@@ -97,12 +95,9 @@ export async function persistOrderDetailWithLease(input: { lease: SyncLease; sou
 
 async function release(lease: SyncLease, code: string) { try { await failSyncLease({ ...lease, errorCode: code }); } catch { /* fenced persistence remains authoritative */ } }
 
-/** Provider-aware enrichment. The string overload remains until Task 8 moves its caller. */
-export async function enrichOrders(sourceOrOrgId: ErpDataSource, opts: EnrichOptions): Promise<EnrichResult>;
-/** @deprecated use enrichOrders({ orgId, provider, sourceGeneration }, opts). */
-export async function enrichOrders(sourceOrOrgId: string, opts: EnrichOptions): Promise<EnrichResult>;
-export async function enrichOrders(sourceOrOrgId: ErpDataSource | string, opts: EnrichOptions): Promise<EnrichResult> {
-  const source = sourceFor(sourceOrOrgId); const log = createLogger({ orgId: source.orgId, provider: source.provider });
+/** Provider-aware enrichment for one frozen ERP data source. */
+export async function enrichOrders(source: ErpDataSource, opts: EnrichOptions): Promise<EnrichResult> {
+  const log = createLogger({ orgId: source.orgId, provider: source.provider });
   const deadlineAt = Date.now() + opts.prazoMs;
   let enriquecidos = 0; let falhas = 0; let quarentenados = 0;
   let activeLease: SyncLease | null = null;
