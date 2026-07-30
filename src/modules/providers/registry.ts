@@ -1,10 +1,11 @@
 import { blingDataProvider } from '@/modules/providers/bling/provider';
+import { olistDataProvider } from '@/modules/providers/olist/provider';
 import type { ErpDataProvider } from '@/modules/providers/data.types';
 import type { ErpProviderId } from '@/modules/providers/types';
 
-// O domínio reconhece Olist, mas ele não fornece dados antes do adaptador existir.
 const registry: Partial<Record<ErpProviderId, ErpDataProvider>> = {
   bling: blingDataProvider,
+  olist: olistDataProvider,
 };
 
 export function getErpDataProvider(provider: ErpProviderId): ErpDataProvider {
