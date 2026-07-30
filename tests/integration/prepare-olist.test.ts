@@ -39,7 +39,13 @@ describe.skipIf(!url)('Olist prepare persistPage — PostgreSQL fence', () => {
     const ready = { ...cursor(), stage: 'ready' as const, snapshot: { done: true }, catchup: { done: true, completedAt: '2026-07-30T19:01:00.000Z' }, verify1: { done: true as const, expectedCount: 0, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, verify2: { done: true as const, expectedCount: 0, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, progress: null };
     expect(await __test.publishReady(lease!, source(), ready)).toBe(true);
     const [connection] = await db.select().from(connections).where(eq(connections.org_id, orgId)); expect(connection.last_sync_at?.toISOString()).toBe('2026-07-30T19:00:00.000Z');
-    await db.update(connections).set({ status: 'expirado' }).where(eq(connections.org_id, orgId));
-    expect(await __test.publishReady(lease!, source(), ready)).toBe(false);
+    const [before] = await db.select().from(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
+    const rejected = async (change: () => Promise<unknown>, attempt = ready) => { await change(); expect(await __test.publishReady(lease!, source(), attempt)).toBe(false); const [after] = await db.select().from(connectionSyncState).where(eq(connectionSyncState.org_id, orgId)); const [afterConnection] = await db.select().from(connections).where(eq(connections.org_id, orgId)); expect(after.cursor).toEqual(before.cursor); expect(afterConnection.last_sync_at).toEqual(connection.last_sync_at); };
+    await rejected(() => db.update(organizations).set({ status: 'inactive' }).where(eq(organizations.id, orgId))); await db.update(organizations).set({ status: 'active' }).where(eq(organizations.id, orgId));
+    await rejected(() => db.update(connections).set({ access_token: null }).where(eq(connections.org_id, orgId))); await db.update(connections).set({ access_token: 'token' }).where(eq(connections.org_id, orgId));
+    await rejected(() => db.update(connections).set({ refresh_token: null }).where(eq(connections.org_id, orgId))); await db.update(connections).set({ refresh_token: 'refresh' }).where(eq(connections.org_id, orgId));
+    await rejected(() => Promise.resolve(), { ...ready, accountFingerprint: 'b'.repeat(64) });
+    await rejected(() => Promise.resolve(), { ...ready, sourceGeneration: 2 });
+    await rejected(() => db.update(connections).set({ status: 'expirado' }).where(eq(connections.org_id, orgId)));
   });
 });
