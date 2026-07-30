@@ -28,13 +28,14 @@ type BlingCanaisResponse = {
 export async function fetchCanaisVenda(
   orgId: string,
   token: string,
+  options: { deadlineAt?: number } = {},
 ): Promise<Map<string, string>> {
   const mapa = new Map<string, string>();
   try {
     const url = new URL(`${serverEnv.BLING_API_BASE}/canais-venda`);
     url.searchParams.set('limite', '100');
 
-    const res = await fetchBling(url.toString(), token);
+    const res = await fetchBling(url.toString(), token, options);
     const body = (await res.json()) as BlingCanaisResponse;
 
     for (const canal of body.data ?? []) {

@@ -24,6 +24,15 @@ export type RawOrderDetail = {
   canal?: string;
 };
 
+/** Deadline propagated from bounded pipeline work into provider retries/governors. */
+export type OrderDetailRequestContext = {
+  deadlineAt: number;
+  /** Reused by the Bling adapter so a run does not fetch channels per order. */
+  blingToken?: string;
+  blingChannels?: ReadonlyMap<string, string>;
+  blingState?: { token: string; refreshPromise?: Promise<string> };
+};
+
 export type Periodo = {
   inicio: Date;
   fim: Date;
@@ -52,5 +61,5 @@ export type OrderPageHandler = (page: OrderPage) => Promise<void>;
 export interface ErpDataProvider {
   readonly name: ErpProviderId;
   fetchOrders(orgId: string, request: OrderPageRequest, onPage: OrderPageHandler): Promise<void>;
-  fetchOrderDetail(orgId: string, providerOrderId: string): Promise<RawOrderDetail>;
+  fetchOrderDetail(orgId: string, providerOrderId: string, context?: OrderDetailRequestContext): Promise<RawOrderDetail>;
 }

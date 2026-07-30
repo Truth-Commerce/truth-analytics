@@ -5,6 +5,7 @@ export type OAuthTokens = {
   refreshExpiresInSeconds?: number;
   scope?: string;
 };
+export type OAuthRequestContext = { deadlineAt?: number };
 
 /** @deprecated Use RawOrderItem from data.types in new operational adapters. */
 export type RawOrderItem = {
@@ -43,7 +44,7 @@ export interface ConnectionProvider {
   readonly name: ErpProviderId;
   buildAuthorizeUrl(state: string): string;
   exchangeCode(code: string): Promise<OAuthTokens>;
-  refresh(refreshToken: string): Promise<OAuthTokens>;
+  refresh(refreshToken: string, context?: OAuthRequestContext): Promise<OAuthTokens>;
   fetchOrders(
     orgId: string,
     periodo: Periodo,

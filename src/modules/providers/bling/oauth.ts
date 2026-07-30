@@ -1,5 +1,5 @@
 import { serverEnv } from '@/lib/env';
-import type { OAuthTokens } from '@/modules/providers/types';
+import type { OAuthRequestContext, OAuthTokens } from '@/modules/providers/types';
 
 function creds() {
   const { BLING_CLIENT_ID, BLING_CLIENT_SECRET, BLING_REDIRECT_URI } = serverEnv;
@@ -31,8 +31,10 @@ function parseTokens(json: Record<string, unknown>): OAuthTokens {
 const RETRY_DELAY_MS = 1000;
 const MAX_RETRY_AFTER_MS = 30_000;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function ensureDeadline(context?: OAuthRequestContext): void { if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded'); }
+function sleep(ms: number, context?: OAuthRequestContext): Promise<void> {
+  ensureDeadline(context);
+  return new Promise((resolve, reject) => setTimeout(() => { try { ensureDeadline(context); resolve(); } catch (error) { reject(error); } }, Math.min(ms, context?.deadlineAt === undefined ? ms : Math.max(0, context.deadlineAt - Date.now()))));
 }
 
 type TokenAttempt =
@@ -46,11 +48,12 @@ type TokenAttempt =
  * - 429/5xx ou erro de rede → transitória: honra Retry-After (cap 30s), senão
  *   1s — mesmo padrão de backoff do fetchBling (orders.ts), reduzido a 1 retry.
  */
-async function tokenRequestAttempt(body: URLSearchParams): Promise<TokenAttempt> {
+async function tokenRequestAttempt(body: URLSearchParams, context?: OAuthRequestContext): Promise<TokenAttempt> {
   const c = creds();
   const basic = Buffer.from(`${c.id}:${c.secret}`).toString('base64');
   let res: Response;
   try {
+    ensureDeadline(context);
     res = await fetch(`${serverEnv.BLING_API_BASE}/oauth/token`, {
       method: 'POST',
       headers: {
@@ -59,6 +62,7 @@ async function tokenRequestAttempt(body: URLSearchParams): Promise<TokenAttempt>
         Accept: 'application/json',
       },
       body,
+      signal: context?.deadlineAt === undefined ? undefined : AbortSignal.timeout(Math.max(1, context.deadlineAt - Date.now())),
     });
   } catch {
     return { ok: false, permanente: false, retryDelayMs: RETRY_DELAY_MS };
@@ -83,13 +87,13 @@ async function tokenRequestAttempt(body: URLSearchParams): Promise<TokenAttempt>
  * Error('bling_refresh_transiente') — quem chama NÃO deve marcar a conexão
  * como expirada nesse caso (o refresh_token continua válido).
  */
-async function tokenRequest(body: URLSearchParams): Promise<OAuthTokens> {
-  const primeira = await tokenRequestAttempt(body);
+async function tokenRequest(body: URLSearchParams, context?: OAuthRequestContext): Promise<OAuthTokens> {
+  const primeira = await tokenRequestAttempt(body, context);
   if (primeira.ok) return primeira.tokens;
   if (primeira.permanente) throw new Error('bling_refresh_invalido');
 
-  await sleep(primeira.retryDelayMs);
-  const segunda = await tokenRequestAttempt(body);
+  await sleep(primeira.retryDelayMs, context);
+  const segunda = await tokenRequestAttempt(body, context);
   if (segunda.ok) return segunda.tokens;
   throw new Error(segunda.permanente ? 'bling_refresh_invalido' : 'bling_refresh_transiente');
 }
@@ -99,7 +103,7 @@ export function exchangeCode(code: string): Promise<OAuthTokens> {
   return tokenRequest(body);
 }
 
-export function refreshTokens(refreshToken: string): Promise<OAuthTokens> {
+export function refreshTokens(refreshToken: string, context?: OAuthRequestContext): Promise<OAuthTokens> {
   const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken });
-  return tokenRequest(body);
+  return tokenRequest(body, context);
 }

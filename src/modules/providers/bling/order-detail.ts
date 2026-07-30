@@ -1,7 +1,7 @@
 import { serverEnv } from '@/lib/env';
 import { fetchCanaisVenda } from '@/modules/providers/bling/canais';
 import { fetchBling } from '@/modules/providers/bling/http';
-import type { RawOrderDetail, RawOrderItem } from '@/modules/providers/data.types';
+import type { OrderDetailRequestContext, RawOrderDetail, RawOrderItem } from '@/modules/providers/data.types';
 
 type BlingItemPayload = {
   codigo?: string | null;
@@ -54,18 +54,20 @@ export function fetchOrderDetail(
   orgId: string,
   providerOrderId: string,
   token: string,
+  context?: OrderDetailRequestContext,
 ): Promise<RawOrderDetail>;
 export async function fetchOrderDetail(
   orgIdOrProviderOrderId: string,
   providerOrderIdOrToken: string,
   maybeToken?: string,
+  context?: OrderDetailRequestContext,
 ): Promise<RawOrderDetail | LegacyOrderDetail> {
   const hasOrgId = maybeToken !== undefined;
   const orgId = hasOrgId ? orgIdOrProviderOrderId : undefined;
   const providerOrderId = hasOrgId ? providerOrderIdOrToken : orgIdOrProviderOrderId;
   const token = hasOrgId ? maybeToken : providerOrderIdOrToken;
   const url = `${serverEnv.BLING_API_BASE}/pedidos/vendas/${encodeURIComponent(providerOrderId)}`;
-  const res = await fetchBling(url, token);
+  const res = await fetchBling(url, token, { deadlineAt: context?.deadlineAt });
 
   let body: BlingDetalheResponse;
   try {
@@ -88,7 +90,7 @@ export async function fetchOrderDetail(
     };
   }
 
-  const canais = canalId ? await fetchCanaisVenda(orgId!, token) : undefined;
+  const canais = canalId ? context?.blingChannels ?? await fetchCanaisVenda(orgId!, token) : undefined;
   return {
     itens: (d.itens ?? []).map(mapItem),
     frete: num(d.transporte?.frete),

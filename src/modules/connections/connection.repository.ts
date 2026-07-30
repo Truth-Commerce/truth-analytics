@@ -71,7 +71,9 @@ export async function getConnection(orgId: string) {
 export async function getValidAccessToken(
   orgId: string,
   margemMs: number = REFRESH_MARGIN_MS,
+  options: { deadlineAt?: number } = {},
 ): Promise<string> {
+  if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) throw new Error('bling_deadline_exceeded');
   const [row] = await db
     .select()
     .from(connections)
@@ -88,7 +90,10 @@ export async function getValidAccessToken(
 
   // precisa renovar
   try {
-    const refreshed = await blingProvider.refresh(decryptSecret(row.refresh_token));
+    const refreshToken = decryptSecret(row.refresh_token);
+    const refreshed = options.deadlineAt === undefined
+      ? await blingProvider.refresh(refreshToken)
+      : await blingProvider.refresh(refreshToken, options);
     await db
       .update(connections)
       .set({

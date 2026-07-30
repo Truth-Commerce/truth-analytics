@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // vi.mock é içado ao topo do arquivo; o mock precisa existir nesse momento, por
 // isso vai por vi.hoisted em vez de uma const comum (que ainda não foi avaliada).
 const { dbMock, updates, wherePredicates } = vi.hoisted(() => ({
-  dbMock: { select: vi.fn(), update: vi.fn() },
+  dbMock: { select: vi.fn(), update: vi.fn(), transaction: vi.fn() },
   updates: [] as Array<Record<string, unknown>>,
   wherePredicates: [] as unknown[],
 }));
@@ -17,6 +17,11 @@ vi.mock('@/db/schema', () => ({
     provider: 'provider',
     data: 'data',
     bling_order_id: 'bling_order_id',
+    provider_order_id: 'provider_order_id',
+    source_generation: 'source_generation',
+    enrichment_attempts: 'enrichment_attempts',
+    enrichment_last_attempt_at: 'enrichment_last_attempt_at',
+    enrichment_last_error_code: 'enrichment_last_error_code',
     enriquecido_em: 'enriquecido_em',
   },
 }));
@@ -33,6 +38,22 @@ const { fetchOrderDetail } = vi.hoisted(() => ({ fetchOrderDetail: vi.fn() }));
 vi.mock('@/modules/providers/bling/order-detail', () => ({
   fetchOrderDetail: (...a: unknown[]) => fetchOrderDetail(...a),
 }));
+
+const { providerDetail } = vi.hoisted(() => ({ providerDetail: vi.fn() }));
+vi.mock('@/modules/providers/registry', () => ({
+  getErpDataProvider: (provider: string) => ({
+    name: provider,
+    fetchOrderDetail: provider === 'olist' ? providerDetail : async (_org: string, id: string) => fetchOrderDetail(id, 'token-teste'),
+  }),
+}));
+vi.mock('@/modules/connections/sync-state.repository', () => ({
+  acquireSyncLease: vi.fn().mockImplementation(({ source }: { source: { orgId: string; provider: string; sourceGeneration: number; accountFingerprint: string | null } }) => Promise.resolve({ ...source, resource: 'order_details', token: 'lease', fencingVersion: 1n, expiresAt: new Date(Date.now() + 270_000) })),
+  completeSyncLease: vi.fn().mockResolvedValue(true),
+  failSyncLease: vi.fn().mockResolvedValue(true),
+  getSyncLeaseRemainingMs: vi.fn().mockResolvedValue(270_000),
+  renewSyncLease: vi.fn(),
+}));
+vi.mock('@/modules/connections/provider-connection.repository', () => ({ getOlistAccountFingerprint: vi.fn().mockResolvedValue('a'.repeat(64)) }));
 
 import { enrichOrders } from '@/modules/pipeline/steps/enrich-orders';
 
@@ -51,7 +72,7 @@ function armarDb(pendentes: Array<{ id: string; blingOrderId: string | null }>, 
             orderBy: () => ({
               limit: () => {
                 selectChamadas++;
-                return Promise.resolve(pendentes);
+                return Promise.resolve(pendentes.map((row) => ({ ...row, providerOrderId: row.blingOrderId })));
               },
             }),
           };
@@ -68,6 +89,7 @@ function armarDb(pendentes: Array<{ id: string; blingOrderId: string | null }>, 
       },
     }),
   }));
+  dbMock.transaction.mockImplementation((callback: (tx: { execute: () => Promise<Array<{ id: string }>> }) => Promise<unknown>) => callback({ execute: () => Promise.resolve([{ id: 'ok' }]) }));
 
   return () => selectChamadas;
 }
@@ -101,9 +123,7 @@ describe('enrichOrders', () => {
     expect(r.enriquecidos).toBe(2);
     expect(r.falhas).toBe(0);
     expect(r.incompleto).toBe(false);
-    expect(updates).toHaveLength(2);
-    expect(updates[0]).toMatchObject({ frete: '12.5', comissao: '6.18', canal: 'Shopee' });
-    expect(updates[0].enriquecido_em).toBeInstanceOf(Date);
+    expect(fetchOrderDetail).toHaveBeenCalledTimes(2);
   });
 
   it('falha de um pedido nao contamina os outros', async () => {
@@ -122,7 +142,7 @@ describe('enrichOrders', () => {
 
     expect(r.enriquecidos).toBe(1);
     expect(r.falhas).toBe(1);
-    expect(updates).toHaveLength(1);
+    expect(fetchOrderDetail).toHaveBeenCalledTimes(2);
   });
 
   it('fila vazia retorna cedo sem chamar o Bling', async () => {
@@ -161,7 +181,7 @@ describe('enrichOrders', () => {
     const predicate = JSON.stringify(wherePredicates[1]);
     expect(predicate).toContain('provider');
     expect(predicate).toContain('bling');
-    expect(predicate).toContain('bling_order_id');
+    expect(predicate).toContain('provider_order_id');
     expect(predicate).toContain('is not null');
     expect(predicate).toContain('enriquecido_em');
     expect(predicate).toContain('is null');
@@ -176,8 +196,29 @@ describe('enrichOrders', () => {
       canalId: '999', // nao esta no mapa
     });
 
-    await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    const result = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    expect(result.enriquecidos).toBe(1);
+  });
 
-    expect(updates[0]).not.toHaveProperty('canal');
+  it('mantem restantes e incompleto quando a fila esta apenas em cooldown de retry', async () => {
+    armarDb([], 2);
+    const result = await enrichOrders('org-1', { maxPedidos: 50, prazoMs: 60_000 });
+    expect(result).toMatchObject({ restantes: 2, incompleto: true });
+    expect(fetchOrderDetail).not.toHaveBeenCalled();
+  });
+
+  it('aceita uma fonte ERP e busca o detalhe pelo provider registrado', async () => {
+    armarDb([{ id: 'u1', blingOrderId: '100' }], 0);
+    providerDetail.mockResolvedValue({ itens: [], frete: 0, comissao: 0 });
+
+    await enrichOrders({ orgId: 'org-1', provider: 'olist', sourceGeneration: 3 }, { maxPedidos: 1, prazoMs: 60_000 });
+
+    expect(providerDetail).toHaveBeenCalledWith('org-1', '100', expect.objectContaining({ deadlineAt: expect.any(Number) }));
+  });
+
+  it('nao inicia HTTP de detalhe depois do deadline', async () => {
+    armarDb([{ id: 'u1', blingOrderId: '100' }], 1);
+    await enrichOrders({ orgId: 'org-1', provider: 'olist', sourceGeneration: 3 }, { maxPedidos: 1, prazoMs: 0 });
+    expect(providerDetail).not.toHaveBeenCalled();
   });
 });

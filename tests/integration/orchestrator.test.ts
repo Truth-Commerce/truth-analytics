@@ -19,6 +19,7 @@ import postgres from 'postgres';
 
 import {
   connections,
+  connectionSyncState,
   marketSnapshots,
   notifications,
   orders,
@@ -148,6 +149,7 @@ describe.skipIf(!url)('orchestrator — integração fim-a-fim', () => {
     // Cleanup na ordem de dependência (FK): filhos antes dos pais
     await tdb.delete(marketSnapshots).where(eq(marketSnapshots.org_id, orgId));
     await tdb.delete(orders).where(eq(orders.org_id, orgId));
+    await tdb.delete(connectionSyncState).where(eq(connectionSyncState.org_id, orgId));
     await tdb.delete(reports).where(eq(reports.org_id, orgId));
     await tdb.delete(trackedProducts).where(eq(trackedProducts.org_id, orgId));
     await tdb.delete(connections).where(eq(connections.org_id, orgId));
