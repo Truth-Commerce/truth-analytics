@@ -30,6 +30,7 @@ export type OrderDetailRequestContext = {
   /** Reused by the Bling adapter so a run does not fetch channels per order. */
   blingToken?: string;
   blingChannels?: ReadonlyMap<string, string>;
+  blingState?: { token: string; refreshPromise?: Promise<string> };
 };
 
 export type Periodo = {

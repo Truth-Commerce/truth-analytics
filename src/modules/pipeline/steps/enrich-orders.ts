@@ -123,11 +123,12 @@ export async function enrichOrders(sourceOrOrgId: ErpDataSource | string, opts: 
     let blingChannels: ReadonlyMap<string, string> | undefined;
     if (source.provider === 'bling') {
       if (Date.now() >= deadlineAt) { await release(lease, 'bling_deadline_exceeded'); return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true }; }
-      blingToken = await getValidAccessToken(source.orgId);
+      blingToken = await getValidAccessToken(source.orgId, undefined, { deadlineAt });
       await gate();
       if (Date.now() >= deadlineAt) { await release(lease, 'bling_deadline_exceeded'); return { enriquecidos, falhas, quarentenados, restantes: await pendingCount(source), incompleto: true }; }
       blingChannels = await fetchCanaisVenda(source.orgId, blingToken, { deadlineAt });
     }
+    const blingState = blingToken ? { token: blingToken } : undefined;
     const limit = pLimit(source.provider === 'olist' ? 1 : 3);
     await Promise.all(queue.map(order => limit(async () => {
       if (Date.now() >= deadlineAt) return;
@@ -137,7 +138,7 @@ export async function enrichOrders(sourceOrOrgId: ErpDataSource | string, opts: 
         lease = checked;
         await gate();
         if (Date.now() >= deadlineAt) return;
-        const detail = await provider.fetchOrderDetail(source.orgId, order.providerOrderId, { deadlineAt, blingToken, blingChannels });
+        const detail = await provider.fetchOrderDetail(source.orgId, order.providerOrderId, { deadlineAt, blingToken, blingChannels, blingState });
         if (!validDetail(detail)) throw new OlistDataError('detail_contract_invalid', 'permanent');
         let saved: boolean;
         try { saved = await persistOrderDetailWithLease({ lease, source, order, detail, canal: detail.canal }); } catch { falhas++; throw new EnrichmentStructuralError('local_transient'); }

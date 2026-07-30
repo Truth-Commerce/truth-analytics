@@ -59,7 +59,7 @@ export async function fetchBling(url: string, token: string, options: { deadline
       continue;
     }
     if (!res.ok) {
-      throw new BlingDataError(`bling_http_${res.status}`, res.status);
+      throw new BlingDataError('bling_indisponivel', res.status);
     }
     return res;
   }

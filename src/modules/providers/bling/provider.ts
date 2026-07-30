@@ -12,13 +12,20 @@ export const blingDataProvider: ErpDataProvider = {
   fetchOrders: fetchDataOrders,
   async fetchOrderDetail(orgId, providerOrderId, context) {
     if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
-    let token = context?.blingToken ?? await getValidAccessToken(orgId, undefined, { deadlineAt: context?.deadlineAt });
+    let token = context?.blingState?.token ?? context?.blingToken ?? await getValidAccessToken(orgId, undefined, { deadlineAt: context?.deadlineAt });
     if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
     try {
       return await fetchOrderDetail(orgId, providerOrderId, token, context);
     } catch (error) {
       if (!(error instanceof BlingDataError) || error.status !== 401) throw error;
-      token = await getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt });
+      const state = context?.blingState;
+      if (state?.token !== token) token = state.token;
+      else if (state) {
+        state.refreshPromise ??= getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt })
+          .then(refreshed => { state.token = refreshed; return refreshed; })
+          .finally(() => { state.refreshPromise = undefined; });
+        token = await state.refreshPromise;
+      } else token = await getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt });
       if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
       return fetchOrderDetail(orgId, providerOrderId, token, context ? { ...context, blingToken: token } : undefined);
     }
