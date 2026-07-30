@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { connectionSyncState, connections, orders, organizations } from '@/db/schema';
 import { acquireSyncLease } from '@/modules/connections/sync-state.repository';
 import { __test } from '@/modules/pipeline/prepare-olist';
+import { listOlistConnectionsPendingPreparation } from '@/modules/connections/provider-connection.repository';
 
 const url = process.env.DATABASE_URL_TEST;
 const RUN = Date.now();
@@ -30,6 +31,15 @@ describe.skipIf(!url)('Olist prepare persistPage — PostgreSQL fence', () => {
     await sql`UPDATE connection_sync_state SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=${state.id}`;
     expect(await __test.persistPage(lease!, source(), page, cursor())).toBe(false);
     expect(await db.select().from(orders).where(eq(orders.org_id, orgId))).toHaveLength(0);
+  });
+
+  it('filters three READY rows in SQL before applying the candidate limit', async () => {
+    const fingerprint = 'a'.repeat(64); const readyOrgs: string[] = [];
+    try {
+      for (let i = 0; i < 3; i++) { const [org] = await db.insert(organizations).values({ name: `ta-ready-${RUN}-${i}`, status: 'active' }).returning({ id: organizations.id }); readyOrgs.push(org.id); await db.insert(connections).values({ org_id: org.id, provider: 'olist', status: 'configurado', data_generation: 1, provider_account_fingerprint: fingerprint, access_token: 'token', refresh_token: 'refresh' }); await db.insert(connectionSyncState).values({ org_id: org.id, provider: 'olist', source_generation: 1, account_fingerprint: fingerprint, resource: 'orders_prepare', cursor: { stage: 'ready' } }); }
+      await db.insert(connections).values({ org_id: orgId, provider: 'olist', status: 'configurado', data_generation: 1, provider_account_fingerprint: fingerprint, access_token: 'token', refresh_token: 'refresh' });
+      await expect(listOlistConnectionsPendingPreparation({ orgIds: [...readyOrgs, orgId], limit: 1 })).resolves.toEqual([{ orgId, provider: 'olist', sourceGeneration: 1, accountFingerprint: fingerprint }]);
+    } finally { for (const id of readyOrgs) { await db.delete(connectionSyncState).where(eq(connectionSyncState.org_id, id)); await db.delete(connections).where(eq(connections.org_id, id)); await db.delete(organizations).where(eq(organizations.id, id)); } }
   });
 
   it('publishes baseline and ready cursor only for the exact active Olist binding', async () => {
