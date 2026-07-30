@@ -14,7 +14,7 @@ vi.mock('@/lib/env', async (importOriginal) => {
 const CRON_SECRET_TEST = 'cron-digest-teste-16+++++';
 
 import { db } from '@/db/client';
-import { orders, organizations, taskActivities, tasks, users } from '@/db/schema';
+import { connections, orders, organizations, taskActivities, tasks, users } from '@/db/schema';
 import { hojeBrt, inicioDeDiaUtc } from '@/lib/timezone';
 import * as emailModule from '@/modules/notifications/email';
 import * as digestModule from '@/modules/tasks/digest-semanal';
@@ -42,6 +42,15 @@ describe.skipIf(!url)('cron digest-semanal — integração', () => {
       .values({ name: `${PREFIX}org-${RUN}`, status: 'active' })
       .returning({ id: organizations.id });
     orgId = org!.id;
+
+    await db.insert(connections).values({
+      org_id: orgId,
+      provider: 'bling',
+      data_generation: 1,
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      status: 'ok',
+    });
 
     await db
       .insert(users)
@@ -77,6 +86,9 @@ describe.skipIf(!url)('cron digest-semanal — integração', () => {
     const venda = (sufixo: string, data: Date, valor: number) => ({
       org_id: orgId,
       bling_order_id: `${PREFIX}${RUN}-${sufixo}`,
+      provider: 'bling',
+      provider_order_id: `${PREFIX}${RUN}-${sufixo}`,
+      source_generation: 1,
       canal: 'bling',
       data,
       valor_total: valor.toFixed(2),
@@ -94,6 +106,7 @@ describe.skipIf(!url)('cron digest-semanal — integração', () => {
       await db.delete(taskActivities).where(eq(taskActivities.task_id, taskConcluidaId));
       await db.delete(tasks).where(eq(tasks.org_id, orgId));
       await db.delete(orders).where(eq(orders.org_id, orgId));
+      await db.delete(connections).where(eq(connections.org_id, orgId));
       await db.delete(users).where(eq(users.org_id, orgId));
       await db.delete(organizations).where(eq(organizations.id, orgId));
     } finally {
@@ -144,6 +157,14 @@ describe.skipIf(!url)('cron digest-semanal — integração', () => {
       .values({ name: `${PREFIX}org-vazia-${RUN}`, status: 'active' })
       .returning({ id: organizations.id });
     const orgVaziaId = orgVazia!.id;
+    await db.insert(connections).values({
+      org_id: orgVaziaId,
+      provider: 'bling',
+      data_generation: 1,
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      status: 'ok',
+    });
     const spy = vi.spyOn(emailModule, 'sendDigestSemanalEmail').mockResolvedValue();
     try {
       const res = await digestModule.processarDigestSemanal(agora, { orgId: orgVaziaId });
@@ -151,6 +172,7 @@ describe.skipIf(!url)('cron digest-semanal — integração', () => {
       expect(spy).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
+      await db.delete(connections).where(eq(connections.org_id, orgVaziaId));
       await db.delete(organizations).where(eq(organizations.id, orgVaziaId));
     }
   });
