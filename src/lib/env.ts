@@ -17,6 +17,10 @@ const schema = z
       message: 'ENCRYPTION_KEY deve ser 32 bytes em base64',
     })
     .optional(),
+  OLIST_ACCOUNT_FINGERPRINT_KEY: z.string().optional().refine(
+    (v) => v === undefined || Buffer.from(v, 'base64').length === 32,
+    { message: 'OLIST_ACCOUNT_FINGERPRINT_KEY deve ser 32 bytes em base64' },
+  ),
   ENCRYPTION_KEYS: z
     .string()
     .optional()

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   check,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -20,6 +21,8 @@ export const connections = pgTable(
       .notNull()
       .references(() => organizations.id),
     provider: varchar('provider', { length: 32 }).notNull().default('bling'),
+    provider_account_fingerprint: varchar('provider_account_fingerprint', { length: 64 }),
+    data_generation: integer('data_generation').notNull().default(1),
     access_token: text('access_token'),
     refresh_token: text('refresh_token'),
     expira_em: timestamp('expira_em', { withTimezone: true, mode: 'date' }),

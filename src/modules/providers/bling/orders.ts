@@ -2,9 +2,12 @@ import { serverEnv } from '@/lib/env';
 import { getValidAccessToken } from '@/modules/connections/connection.repository';
 import { CANAL_DESCONHECIDO, fetchCanaisVenda } from '@/modules/providers/bling/canais';
 import { fetchBling } from '@/modules/providers/bling/http';
-import type { Periodo, RawOrder, RawOrderItem } from '@/modules/providers/types';
-
-const PAGE_SIZE = 100;
+import type {
+  OrderPageHandler,
+  OrderPageRequest,
+  RawOrder,
+  RawOrderItem,
+} from '@/modules/providers/data.types';
 
 type BlingItemPayload = {
   codigo?: string | null;
@@ -68,29 +71,42 @@ export function mapOrder(raw: BlingOrderPayload, canais: Map<string, string>): R
   const valorTotal = Number(raw.total ?? raw.totalProdutos ?? 0);
   const frete = Number(raw.transporte?.frete ?? 0);
   const itens: RawOrderItem[] = (raw.itens ?? []).map(mapItem);
-  return { blingOrderId: id, canal, data, valorTotal, frete, itens };
+  return { providerOrderId: id, providerStatus: '', canal, data, valorTotal, frete, itens };
+}
+
+function updatedWindow(updatedAfter: Date, now = new Date()): { inicio: Date; fim: Date } {
+  return {
+    inicio: updatedAfter,
+    fim: now >= updatedAfter ? now : updatedAfter,
+  };
 }
 
 export async function fetchOrders(
   orgId: string,
-  periodo: Periodo,
-  onPage?: (pagina: RawOrder[]) => Promise<void>,
-): Promise<RawOrder[]> {
+  request: OrderPageRequest,
+  onPage: OrderPageHandler,
+): Promise<void> {
   const token = await getValidAccessToken(orgId);
   const base = serverEnv.BLING_API_BASE;
 
   // Uma requisição por coleta; best-effort (mapa vazio não derruba nada).
   const canais = await fetchCanaisVenda(orgId, token);
 
-  const allOrders: RawOrder[] = [];
-  let page = 1;
+  let page = request.offset / request.limit + 1;
+  let offset = request.offset;
 
   while (true) {
     const url = new URL(`${base}/pedidos/vendas`);
-    url.searchParams.set('dataInicial', formatDate(periodo.inicio));
-    url.searchParams.set('dataFinal', formatDate(periodo.fim));
+    if (request.mode === 'created') {
+      url.searchParams.set('dataInicial', formatDate(request.periodo.inicio));
+      url.searchParams.set('dataFinal', formatDate(request.periodo.fim));
+    } else {
+      const janela = updatedWindow(request.updatedAfter);
+      url.searchParams.set('dataAlteracaoInicial', formatDate(janela.inicio));
+      url.searchParams.set('dataAlteracaoFinal', formatDate(janela.fim));
+    }
     url.searchParams.set('pagina', String(page));
-    url.searchParams.set('limite', String(PAGE_SIZE));
+    url.searchParams.set('limite', String(request.limit));
 
     const res = await fetchBling(url.toString(), token);
 
@@ -102,19 +118,29 @@ export async function fetchOrders(
     }
 
     const pageData = body.data ?? [];
-    if (pageData.length === 0) break;
-
-    const mapeados = pageData.map((raw) => mapOrder(raw, canais));
-    if (onPage) {
-      // Persistência em lotes: entrega a página e NÃO acumula em RAM.
-      await onPage(mapeados);
-    } else {
-      allOrders.push(...mapeados);
+    if (pageData.length === 0) {
+      await onPage({
+        orders: [],
+        offset,
+        nextOffset: offset,
+        total: offset,
+        done: true,
+      });
+      break;
     }
 
-    if (pageData.length < PAGE_SIZE) break;
+    const orders = pageData.map((raw) => mapOrder(raw, canais));
+    const done = pageData.length < request.limit;
+    await onPage({
+      orders,
+      offset,
+      nextOffset: offset + request.limit,
+      total: offset + orders.length,
+      done,
+    });
+
+    if (done) break;
+    offset += request.limit;
     page++;
   }
-
-  return allOrders;
 }

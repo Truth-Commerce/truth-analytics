@@ -3,8 +3,10 @@ import {
   and,
   asc,
   eq,
+  inArray,
   isNotNull,
   lte,
+  sql,
 } from 'drizzle-orm';
 
 import { db } from '@/db/client';
@@ -44,12 +46,22 @@ export type ConnectionRef = {
 export type ProviderRefreshContext = {
   orgId: string;
   provider: ErpProviderId;
+  status: 'configurado' | 'ok';
   clientId: string;
   clientSecret: string;
   refreshToken: string;
   expiresAt: Date;
   version: string;
 };
+
+export type OlistPublicationContext = {
+  credentialVersion: string;
+  dataGeneration: number;
+};
+
+/** Lifecycle carried from the HTTP/request owner into every Olist DB mutation. */
+export type ProviderConnectionLifecycle = { signal?: AbortSignal; deadlineAt?: number };
+const OLIST_DB_MAX_WAIT_MS = 10_000;
 
 export async function configureProviderCredentials(input: {
   orgId: string;
@@ -84,10 +96,8 @@ export async function configureProviderCredentials(input: {
     last_error_at: null,
     status: 'configurado' as const,
   };
-  await db
-    .insert(connections)
-    .values(values)
-    .onConflictDoUpdate({
+  await db.transaction(async (tx) => {
+    await tx.insert(connections).values(values).onConflictDoUpdate({
       target: [connections.org_id, connections.provider],
       set: {
         oauth_client_id: values.oauth_client_id,
@@ -100,8 +110,17 @@ export async function configureProviderCredentials(input: {
         last_error_code: null,
         last_error_at: null,
         status: 'configurado',
+        // Any credential rotation fences old Olist data even if /info resolves to the same account.
+        data_generation: sql`${connections.data_generation} + 1`,
+        provider_account_fingerprint: null,
       },
     });
+    // Rotating an Olist credential invalidates all readiness/leases together
+    // with its generation and account fingerprint above.
+    if (input.provider === 'olist') {
+      await tx.execute(sql`DELETE FROM connection_sync_state WHERE org_id=${input.orgId} AND provider='olist'`);
+    }
+  });
   await recordAudit({
     orgId: input.orgId,
     userId: input.actorUserId,
@@ -134,8 +153,8 @@ export async function getProviderConnectionSummary(
     provider,
     status: row.status,
     credentialsConfigured: Boolean(row.oauthClientId && row.oauthClientSecret),
-    authorized: Boolean(row.accessToken && row.refreshToken && row.status === 'configurado'),
-    operational: provider === 'bling' && row.status === 'ok',
+    authorized: Boolean(row.accessToken && row.refreshToken && (row.status === 'configurado' || row.status === 'ok')),
+    operational: row.status === 'ok',
     expiresAt: row.expiresAt,
     refreshExpiresAt: row.refreshExpiresAt,
     lastRefreshAt: row.lastRefreshAt,
@@ -259,6 +278,34 @@ export async function getValidAccessTokenForProvider(
   });
 }
 
+/** Snapshot captured before provider I/O and used as the final publication CAS. */
+export async function getOlistPublicationContext(orgId: string): Promise<OlistPublicationContext> {
+  const [row] = await db
+    .select({
+      oauthClientId: connections.oauth_client_id,
+      oauthClientSecret: connections.oauth_client_secret,
+      dataGeneration: connections.data_generation,
+    })
+    .from(connections)
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'olist')))
+    .limit(1);
+  if (!row?.oauthClientId || !row.oauthClientSecret) throw new Error('provider_credentials_missing');
+  return {
+    credentialVersion: credentialVersion(row.oauthClientId, row.oauthClientSecret),
+    dataGeneration: row.dataGeneration,
+  };
+}
+
+/** The account fingerprint is a required binding, never caller supplied request state. */
+export async function getOlistAccountFingerprint(orgId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ fingerprint: connections.provider_account_fingerprint })
+    .from(connections)
+    .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'olist')))
+    .limit(1);
+  return row?.fingerprint ?? null;
+}
+
 export async function getProviderRefreshContext(
   orgId: string,
   provider: ErpProviderId,
@@ -270,6 +317,7 @@ export async function getProviderRefreshContext(
       accessToken: connections.access_token,
       refreshToken: connections.refresh_token,
       expiresAt: connections.expira_em,
+      status: connections.status,
     })
     .from(connections)
     .where(and(eq(connections.org_id, orgId), eq(connections.provider, provider)))
@@ -279,13 +327,15 @@ export async function getProviderRefreshContext(
     !row.oauthClientSecret ||
     !row.accessToken ||
     !row.refreshToken ||
-    !row.expiresAt
+    !row.expiresAt ||
+    (row.status !== 'configurado' && row.status !== 'ok')
   ) {
     throw new Error('provider_not_authorized');
   }
   return {
     orgId,
     provider,
+    status: row.status,
     clientId: decryptConnectionSecret({
       orgId,
       provider,
@@ -313,17 +363,16 @@ export async function saveRefreshedProviderTokens(input: {
   context: ProviderRefreshContext;
   tokens: OAuthTokens;
   now?: Date;
+  lifecycle?: ProviderConnectionLifecycle;
 }): Promise<boolean> {
-  const current = await getVersionedProviderRow(input.context.orgId, input.context.provider);
-  if (
-    !current ||
-    !hasVersionedSecrets(current) ||
-    connectionVersion(current) !== input.context.version
-  ) return false;
-  const now = input.now ?? new Date();
-  const updated = await db
-    .update(connections)
-    .set({
+  return withOlistMutationTransaction(input.lifecycle, async (tx) => {
+    await setOlistMutationTimeouts(tx, input.lifecycle);
+    const current = await getLockedVersionedProviderRow(tx, input.context.orgId, input.context.provider);
+    if (!current || !hasVersionedSecrets(current) || connectionVersion(current) !== input.context.version) return false;
+    assertLifecycleActive(input.lifecycle);
+    const now = input.now ?? new Date();
+    await setOlistMutationTimeouts(tx, input.lifecycle);
+    const updated = await tx.update(connections).set({
       access_token: encryptConnectionSecret({
         orgId: input.context.orgId,
         provider: input.context.provider,
@@ -343,11 +392,10 @@ export async function saveRefreshedProviderTokens(input: {
       last_refresh_at: now,
       last_error_code: null,
       last_error_at: null,
-      status: 'configurado',
-    })
-    .where(versionWhere(current, input.context.orgId, input.context.provider))
-    .returning({ id: connections.id });
-  return updated.length === 1;
+      status: input.context.status,
+    }).where(versionWhere(current, input.context.orgId, input.context.provider)).returning({ id: connections.id });
+    return updated.length === 1;
+  });
 }
 
 export async function disconnectProvider(input: {
@@ -391,7 +439,7 @@ export async function listProviderConnectionsExpiring(input: {
     .where(
       and(
         eq(connections.provider, input.provider),
-        eq(connections.status, 'configurado'),
+        inArray(connections.status, ['configurado', 'ok']),
         eq(organizations.status, 'active'),
         isNotNull(connections.oauth_client_id),
         isNotNull(connections.oauth_client_secret),
@@ -417,24 +465,61 @@ export async function markProviderConnectionError(input: {
   permanent: boolean;
   expectedVersion: string;
   now?: Date;
+  lifecycle?: ProviderConnectionLifecycle;
 }): Promise<boolean> {
-  const current = await getVersionedProviderRow(input.orgId, input.provider);
-  if (
-    !current ||
-    !hasVersionedSecrets(current) ||
-    current.status !== 'configurado' ||
-    connectionVersion(current) !== input.expectedVersion
-  ) return false;
-  const updated = await db
-    .update(connections)
-    .set({
+  return withOlistMutationTransaction(input.lifecycle, async (tx) => {
+    await setOlistMutationTimeouts(tx, input.lifecycle);
+    const current = await getLockedVersionedProviderRow(tx, input.orgId, input.provider);
+    if (!current || !hasVersionedSecrets(current) || (current.status !== 'configurado' && current.status !== 'ok') || connectionVersion(current) !== input.expectedVersion) return false;
+    assertLifecycleActive(input.lifecycle);
+    await setOlistMutationTimeouts(tx, input.lifecycle);
+    const updated = await tx.update(connections).set({
       last_error_code: input.code,
       last_error_at: input.now ?? new Date(),
       ...(input.permanent ? { status: 'expirado' } : {}),
-    })
-    .where(configuredVersionWhere(current, input.orgId, input.provider))
-    .returning({ id: connections.id });
-  return updated.length === 1;
+    }).where(configuredVersionWhere(current, input.orgId, input.provider)).returning({ id: connections.id });
+    return updated.length === 1;
+  });
+}
+
+function assertLifecycleActive(lifecycle?: ProviderConnectionLifecycle): void {
+  if (lifecycle?.signal?.aborted || (lifecycle?.deadlineAt !== undefined && lifecycle.deadlineAt <= Date.now())) {
+    throw new Error('olist_db_lifecycle_inactive');
+  }
+}
+
+function lifecycleTimeoutMs(lifecycle?: ProviderConnectionLifecycle): number {
+  const remaining = lifecycle?.deadlineAt === undefined ? OLIST_DB_MAX_WAIT_MS : lifecycle.deadlineAt - Date.now();
+  return Math.max(1, Math.min(OLIST_DB_MAX_WAIT_MS, remaining));
+}
+
+type MutationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function withOlistMutationTransaction<T>(lifecycle: ProviderConnectionLifecycle | undefined, work: (tx: MutationTransaction) => Promise<T>): Promise<T> {
+  assertLifecycleActive(lifecycle);
+  return db.transaction(async (tx) => {
+    // These are server-side limits: unlike Promise.race they stop lock/query work.
+    await setOlistMutationTimeouts(tx, lifecycle);
+    assertLifecycleActive(lifecycle);
+    const result = await work(tx);
+    // Keep this inside the transaction: an abort after the final mutation must
+    // turn into a rollback rather than a successful commit.
+    assertLifecycleActive(lifecycle);
+    return result;
+  });
+}
+
+async function setOlistMutationTimeouts(tx: MutationTransaction, lifecycle?: ProviderConnectionLifecycle): Promise<void> {
+  const statementTimeoutMs = lifecycleTimeoutMs(lifecycle);
+  await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${statementTimeoutMs}ms'`));
+  const lockTimeoutMs = lifecycleTimeoutMs(lifecycle);
+  await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`));
+  assertLifecycleActive(lifecycle);
+}
+
+async function getLockedVersionedProviderRow(tx: MutationTransaction, orgId: string, provider: ErpProviderId): Promise<VersionedProviderRow | null> {
+  const rows = await tx.execute(sql`SELECT id, status, oauth_client_id AS "oauthClientId", oauth_client_secret AS "oauthClientSecret", access_token AS "accessToken", refresh_token AS "refreshToken" FROM connections WHERE org_id=${orgId} AND provider=${provider} FOR UPDATE`);
+  return (rows[0] as VersionedProviderRow | undefined) ?? null;
 }
 
 export function credentialVersion(clientIdCiphertext: string, clientSecretCiphertext: string): string {
@@ -460,25 +545,6 @@ type CompleteVersionedProviderRow = VersionedProviderRow & {
   accessToken: string;
   refreshToken: string;
 };
-
-async function getVersionedProviderRow(
-  orgId: string,
-  provider: ErpProviderId,
-): Promise<VersionedProviderRow | null> {
-  const [row] = await db
-    .select({
-      id: connections.id,
-      status: connections.status,
-      oauthClientId: connections.oauth_client_id,
-      oauthClientSecret: connections.oauth_client_secret,
-      accessToken: connections.access_token,
-      refreshToken: connections.refresh_token,
-    })
-    .from(connections)
-    .where(and(eq(connections.org_id, orgId), eq(connections.provider, provider)))
-    .limit(1);
-  return row ?? null;
-}
 
 function connectionVersion(row: Omit<VersionedProviderRow, 'id' | 'status'>): string {
   return createHash('sha256')
@@ -520,6 +586,6 @@ function configuredVersionWhere(
 ) {
   return and(
     versionWhere(row, orgId, provider),
-    eq(connections.status, 'configurado'),
+    inArray(connections.status, ['configurado', 'ok']),
   );
 }

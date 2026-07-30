@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { orders } from '@/db/schema';
@@ -41,7 +41,12 @@ async function pedidosPendentes(
   limite: number,
   periodo?: Periodo,
 ): Promise<{ id: string; blingOrderId: string }[]> {
-  const filtros = [eq(orders.org_id, orgId), isNull(orders.enriquecido_em)];
+  const filtros = [
+    eq(orders.org_id, orgId),
+    eq(orders.provider, 'bling'),
+    isNotNull(orders.bling_order_id),
+    isNull(orders.enriquecido_em),
+  ];
   if (periodo) {
     filtros.push(gte(orders.data, periodo.inicio), lte(orders.data, periodo.fim));
   }
@@ -53,14 +58,23 @@ async function pedidosPendentes(
     // histórico antigo, não o período que o cliente está olhando agora.
     .orderBy(sql`${orders.data} desc`)
     .limit(limite);
-  return linhas;
+  return linhas.filter(
+    (linha): linha is { id: string; blingOrderId: string } => linha.blingOrderId !== null,
+  );
 }
 
 async function contarPendentes(orgId: string): Promise<number> {
   const [linha] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(orders)
-    .where(and(eq(orders.org_id, orgId), isNull(orders.enriquecido_em)));
+    .where(
+      and(
+        eq(orders.org_id, orgId),
+        eq(orders.provider, 'bling'),
+        isNotNull(orders.bling_order_id),
+        isNull(orders.enriquecido_em),
+      ),
+    );
   return linha?.n ?? 0;
 }
 

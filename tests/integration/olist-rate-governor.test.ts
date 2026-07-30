@@ -1,0 +1,298 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+
+import { createOlistRateGovernor } from '@/modules/providers/olist/rate-governor.repository';
+
+const url = process.env.DATABASE_URL_TEST;
+const run = `${Date.now()}${Math.floor(Math.random() * 10_000)}`;
+const fingerprint = (suffix: string) => `olist-${run}-${suffix}`.slice(0, 64);
+
+describe.skipIf(!url)('Olist rate governor — PostgreSQL real', () => {
+  const sqlA = postgres(url ?? '', { prepare: false, max: 1 });
+  const sqlB = postgres(url ?? '', { prepare: false, max: 1 });
+  const sqlLock = postgres(url ?? '', { prepare: false, max: 1 });
+  const governorA = createOlistRateGovernor(drizzle(sqlA));
+  const governorB = createOlistRateGovernor(drizzle(sqlB));
+  const orgIds: string[] = [];
+
+  function afterInsertBarrier(client: ReturnType<typeof drizzle>) {
+    let release!: () => void;
+    let reached!: () => void;
+    const inserted = new Promise<void>(resolve => { reached = resolve; });
+    const resume = new Promise<void>(resolve => { release = resolve; });
+    let firstRootQuery = true;
+    return {
+      client: {
+        async execute(query: ReturnType<typeof sql>) {
+          const result = await client.execute(query);
+          if (firstRootQuery) {
+            firstRootQuery = false;
+            reached(); // the INSERT has committed before reserve can decide.
+            await resume;
+          }
+          return result;
+        },
+        async transaction<T>(callback: (transaction: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => Promise<T>): Promise<T> {
+          return client.transaction(transaction => callback(transaction));
+        },
+      },
+      inserted,
+      release,
+    };
+  }
+
+  function afterDecisionBarrier(client: ReturnType<typeof drizzle>) {
+    let release!: () => void;
+    let reached!: (result: unknown) => void;
+    const decided = new Promise<unknown>(resolve => { reached = resolve; });
+    const resume = new Promise<void>(resolve => { release = resolve; });
+    return {
+      client: {
+        execute: client.execute.bind(client),
+        async transaction<T>(callback: (transaction: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => Promise<T>): Promise<T> {
+          return client.transaction(async transaction => {
+            let queries = 0;
+            return callback({
+              async execute(query: ReturnType<typeof sql>) {
+                const result = await transaction.execute(query);
+                queries += 1;
+                if (queries === 3) { // advisory lock, state initialization, then the decision query
+                  reached(result);
+                  await resume;
+                }
+                return result;
+              },
+            });
+          });
+        },
+      },
+      decided,
+      release,
+    };
+  }
+
+  function decisionWakeAt(result: unknown): Date | undefined {
+    const resultRows = Array.isArray(result) ? result : (result as { rows?: unknown[] }).rows ?? [];
+    return new Date((resultRows[0] as { wake_at?: Date | string } | undefined)?.wake_at ?? Number.NaN);
+  }
+
+  async function createOrdersSyncFixture(account: string, input: { backlog: number | null; updatedAgo?: string }) {
+    const [organization] = await sqlA`INSERT INTO organizations (name) VALUES (${`governor ${run} ${account}`}) RETURNING id`;
+    orgIds.push(organization.id);
+    await sqlA`
+      INSERT INTO connections (org_id, provider, provider_account_fingerprint, status)
+      VALUES (${organization.id}, 'olist', ${account}, 'ok')
+    `;
+    await sqlA`
+      INSERT INTO connection_sync_state (org_id, provider, resource, succeeded_at, backlog_count, updated_at)
+      VALUES (
+        ${organization.id}, 'olist', 'orders', clock_timestamp(), ${input.backlog},
+        clock_timestamp() - ${input.updatedAgo ?? '0 seconds'}::interval
+      )
+    `;
+  }
+
+  beforeEach(async () => {
+    await sqlA`DELETE FROM provider_rate_limit_waiters WHERE provider = 'olist' AND account_fingerprint LIKE ${`olist-${run}%`}`;
+    await sqlA`DELETE FROM provider_rate_limit_state WHERE provider = 'olist' AND account_fingerprint LIKE ${`olist-${run}%`}`;
+    await sqlA`DELETE FROM connection_sync_state WHERE org_id = ANY(${orgIds}::uuid[])`;
+    await sqlA`DELETE FROM connections WHERE org_id = ANY(${orgIds}::uuid[])`;
+    await sqlA`DELETE FROM organizations WHERE id = ANY(${orgIds}::uuid[])`;
+    orgIds.length = 0;
+  });
+  afterAll(async () => { await sqlA.end(); await sqlB.end(); await sqlLock.end(); });
+
+  it('serializa o mesmo fingerprint em dois clientes e concede um slot por waiter', async () => {
+    const account = fingerprint('same');
+    const [one, two] = await Promise.all([
+      governorA.reserve({ accountFingerprint: account, priority: 'orders' }),
+      governorB.reserve({ accountFingerprint: account, priority: 'details' }),
+    ]);
+    expect(one.waiterId).not.toBe(two.waiterId);
+    expect(one.startAt.getTime()).not.toBe(two.startAt.getTime());
+  });
+
+  it('mantém waiters inseridos atrás de advisory lock transacional e respeita FIFO', async () => {
+    const account = fingerprint('fifo');
+    let inserts = 0;
+    let inserted!: () => void;
+    const bothInserted = new Promise<void>(resolve => { inserted = resolve; });
+    const barrier = (client: ReturnType<typeof drizzle>) => {
+      let firstRootQuery = true;
+      return {
+        async execute(query: ReturnType<typeof sql>) {
+          const result = await client.execute(query);
+          // reserve inserts through the root client; decisions run through their
+          // own explicit transaction. This observes the real post-INSERT state.
+          if (firstRootQuery) {
+            firstRootQuery = false;
+            inserts += 1;
+            if (inserts === 2) inserted();
+          }
+          return result;
+        },
+        async transaction<T>(callback: (transaction: { execute(query: ReturnType<typeof sql>): PromiseLike<unknown> }) => Promise<T>): Promise<T> {
+          return client.transaction(transaction => callback(transaction));
+        },
+      };
+    };
+    const lockedGovernorA = createOlistRateGovernor(barrier(drizzle(sqlA)));
+    const lockedGovernorB = createOlistRateGovernor(barrier(drizzle(sqlB)));
+    let persistedOrder: string[] = [];
+    const waiting = await sqlLock.begin(async transaction => {
+      await transaction`SELECT pg_advisory_xact_lock(hashtextextended('olist:' || ${account}, 0))`;
+      const first = lockedGovernorA.reserve({ accountFingerprint: account, priority: 'orders' });
+      const second = lockedGovernorB.reserve({ accountFingerprint: account, priority: 'details' });
+      await bothInserted; // real clients crossed the insert barrier while this explicit xact lock is held.
+      const persisted = await transaction`
+        SELECT id
+        FROM provider_rate_limit_waiters
+        WHERE provider = 'olist' AND account_fingerprint = ${account}
+        ORDER BY enqueued_at, id
+      `;
+      persistedOrder = persisted.map(waiter => waiter.id);
+      return [first, second] as const;
+    });
+    const [one, two] = await Promise.all(waiting);
+    const reservations = new Map([
+      [one.waiterId, one],
+      [two.waiterId, two],
+    ]);
+    expect(persistedOrder).toHaveLength(2);
+    const [firstWaiterId, secondWaiterId] = persistedOrder;
+    expect(reservations.has(firstWaiterId)).toBe(true);
+    expect(reservations.has(secondWaiterId)).toBe(true);
+    expect(reservations.get(firstWaiterId)!.startAt.getTime())
+      .toBeLessThan(reservations.get(secondWaiterId)!.startAt.getTime());
+  });
+
+  it('uses a future database wake-up for suppressed stock before cancellation', async () => {
+    const account = fingerprint('slo-expired-next-slot');
+    await createOrdersSyncFixture(account, { backlog: 1 });
+    await sqlA`
+      INSERT INTO provider_rate_limit_state (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
+      VALUES ('olist', ${account}, clock_timestamp() - interval '1 second', clock_timestamp(), 0, 0)
+    `;
+    const controller = new AbortController();
+    const barrier = afterDecisionBarrier(drizzle(sqlA));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const wakeAt = decisionWakeAt(await barrier.decided);
+    expect(wakeAt?.getTime()).toBeGreaterThan(Date.now());
+    controller.abort();
+    barrier.release();
+    await expect(pending).rejects.toThrow('olist_deadline_exceeded');
+    const [waiter] = await sqlB`
+      SELECT granted_at, cancelled_at FROM provider_rate_limit_waiters
+      WHERE provider = 'olist' AND account_fingerprint = ${account}
+    `;
+    expect(waiter.granted_at).toBeNull();
+    expect(waiter.cancelled_at).not.toBeNull();
+  });
+
+  it('uses a future database wake-up when stale orders violate the stock SLO', async () => {
+    const account = fingerprint('slo-stale');
+    await createOrdersSyncFixture(account, { backlog: 0, updatedAgo: '16 minutes' });
+    const controller = new AbortController();
+    const barrier = afterDecisionBarrier(drizzle(sqlB));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const wakeAt = decisionWakeAt(await barrier.decided);
+    expect(wakeAt?.getTime()).toBeGreaterThan(Date.now());
+    controller.abort();
+    barrier.release();
+    await expect(pending).rejects.toThrow('olist_deadline_exceeded');
+    const [waiter] = await sqlA`SELECT granted_at, cancelled_at FROM provider_rate_limit_waiters WHERE provider = 'olist' AND account_fingerprint = ${account}`;
+    expect(waiter.granted_at).toBeNull();
+    expect(waiter.cancelled_at).not.toBeNull();
+  });
+
+  it('uses a future database wake-up for healthy orders when the rate window is full', async () => {
+    const account = fingerprint('slo-healthy-window');
+    await createOrdersSyncFixture(account, { backlog: 0 });
+    await sqlA`
+      INSERT INTO provider_rate_limit_state (provider, account_fingerprint, next_request_at, window_started_at, requests_in_window, consecutive_high_priority)
+      VALUES ('olist', ${account}, clock_timestamp(), clock_timestamp(), 27, 0)
+    `;
+    const controller = new AbortController();
+    const barrier = afterDecisionBarrier(drizzle(sqlA));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'stock', signal: controller.signal });
+    const wakeAt = decisionWakeAt(await barrier.decided);
+    expect(wakeAt?.getTime()).toBeGreaterThan(Date.now());
+    controller.abort();
+    barrier.release();
+    await expect(pending).rejects.toThrow('olist_deadline_exceeded');
+  });
+
+  it('expires a publicly waiting reservation before it can be granted', async () => {
+    const account = fingerprint('expiry');
+    const barrier = afterInsertBarrier(drizzle(sqlA));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'orders' });
+    await barrier.inserted;
+    await sqlB`
+      UPDATE provider_rate_limit_waiters
+      SET expires_at = clock_timestamp() - interval '1 second'
+      WHERE provider = 'olist' AND account_fingerprint = ${account}
+    `;
+    barrier.release();
+    await expect(pending).rejects.toThrow('olist_deadline_exceeded');
+    const [expired] = await sqlB`
+      SELECT id FROM provider_rate_limit_waiters
+      WHERE provider = 'olist' AND account_fingerprint = ${account} AND expires_at <= clock_timestamp()
+    `;
+    expect(expired).toBeUndefined();
+  });
+
+  it('gives a pending stock waiter the sixth turn after five high-priority grants when orders SLO is healthy', async () => {
+    const account = fingerprint('fair');
+    await createOrdersSyncFixture(account, { backlog: 0 });
+    for (let grant = 0; grant < 5; grant += 1) {
+      await governorA.reserve({ accountFingerprint: account, priority: 'details' });
+    }
+    const stockBarrier = afterInsertBarrier(drizzle(sqlA));
+    const highBarrier = afterInsertBarrier(drizzle(sqlB));
+    const stockPending = createOlistRateGovernor(stockBarrier.client).reserve({ accountFingerprint: account, priority: 'stock' });
+    const highPending = createOlistRateGovernor(highBarrier.client).reserve({ accountFingerprint: account, priority: 'details' });
+    await Promise.all([stockBarrier.inserted, highBarrier.inserted]);
+    stockBarrier.release();
+    highBarrier.release();
+    const [stock, high] = await Promise.all([stockPending, highPending]);
+    expect(stock.startAt.getTime()).toBeLessThan(high.startAt.getTime());
+  });
+
+  it('cancels a waiter aborted after insertion without exposing a usable grant', async () => {
+    const account = fingerprint('cancel-post-insert');
+    await governorA.reserve({ accountFingerprint: account, priority: 'orders' });
+    const controller = new AbortController();
+    const barrier = afterInsertBarrier(drizzle(sqlB));
+    const pending = createOlistRateGovernor(barrier.client).reserve({ accountFingerprint: account, priority: 'details', signal: controller.signal });
+    await barrier.inserted;
+    controller.abort();
+    barrier.release();
+    await expect(pending).rejects.toThrow('olist_deadline_exceeded');
+    const [waiter] = await sqlA`SELECT granted_at, cancelled_at FROM provider_rate_limit_waiters WHERE provider = 'olist' AND account_fingerprint = ${account} ORDER BY enqueued_at DESC LIMIT 1`;
+    expect(waiter.cancelled_at).not.toBeNull();
+    expect(waiter.granted_at).toBeNull();
+  });
+
+  it('não bloqueia fingerprints diferentes', async () => {
+    const [one, two] = await Promise.all([
+      governorA.reserve({ accountFingerprint: fingerprint('a'), priority: 'orders' }),
+      governorB.reserve({ accountFingerprint: fingerprint('b'), priority: 'orders' }),
+    ]);
+    expect(Math.abs(one.startAt.getTime() - two.startAt.getTime())).toBeLessThan(1_000);
+  });
+
+  it('observa cada header canônico independentemente e mantém o teto seguro de 27', async () => {
+    const account = fingerprint('headers');
+    await governorA.reserve({ accountFingerprint: account, priority: 'orders' });
+    await governorB.observe(account, new Headers({ 'x-ratelimit-limit': '27' }));
+    await governorB.observe(account, new Headers({ 'x-ratelimit-remaining': '26' }));
+    await governorB.observe(account, new Headers({ 'x-ratelimit-reset': '2000000000' }));
+    await governorB.observe(account, new Headers({ 'x-ratelimit-limit': '27.0' }));
+    const [state] = await sqlA`SELECT observed_limit, observed_remaining, observed_reset_at FROM provider_rate_limit_state WHERE provider = 'olist' AND account_fingerprint = ${account}`;
+    expect(state.observed_limit).toBe(27);
+    expect(state.observed_remaining).toBe(26);
+    expect(new Date(state.observed_reset_at).getTime()).toBe(2_000_000_000_000);
+  });
+});

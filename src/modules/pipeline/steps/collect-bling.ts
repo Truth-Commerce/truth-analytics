@@ -12,13 +12,16 @@ export type CollectResult = {
   total: number;
 };
 
-/** Upsert idempotente de UMA página de pedidos (org_id, bling_order_id). */
+/** Upsert idempotente de UMA página de pedidos pela chave provider-aware do Bling. */
 async function upsertOrdersPage(orgId: string, rawOrders: RawOrder[]): Promise<number> {
   const validOrders = rawOrders.filter((o) => o.blingOrderId.trim() !== '');
   if (validOrders.length === 0) return 0;
 
   const values = validOrders.map((o) => ({
     org_id: orgId,
+    provider: 'bling' as const,
+    source_generation: 1,
+    provider_order_id: o.blingOrderId,
     bling_order_id: o.blingOrderId,
     canal: o.canal,
     data: o.data,
@@ -31,7 +34,7 @@ async function upsertOrdersPage(orgId: string, rawOrders: RawOrder[]): Promise<n
     .insert(orders)
     .values(values)
     .onConflictDoUpdate({
-      target: [orders.org_id, orders.bling_order_id],
+      target: [orders.org_id, orders.provider, orders.source_generation, orders.provider_order_id],
       set: {
         // A listagem NÃO entrega itens, frete nem comissão — só o detalhe entrega.
         // Por isso o update aqui toca apenas o que a listagem realmente sabe.

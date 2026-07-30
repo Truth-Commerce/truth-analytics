@@ -8,6 +8,12 @@ export type OAuthClientCredentials = {
 
 export type OAuthProviderFailureKind = 'permanent' | 'transient';
 
+/** A single cancellation budget shared by an OAuth exchange and its caller. */
+export type OAuthRequestLifecycle = {
+  signal?: AbortSignal;
+  deadlineAt?: number;
+};
+
 export class OAuthProviderError extends Error {
   constructor(
     public readonly code: string,
@@ -29,9 +35,9 @@ export interface OAuthConnectionProvider {
     credentials: OAuthClientCredentials;
     code: string;
     codeVerifier: string;
-  }): Promise<OAuthTokens>;
+  } & OAuthRequestLifecycle): Promise<OAuthTokens>;
   refresh(input: {
     credentials: OAuthClientCredentials;
     refreshToken: string;
-  }): Promise<OAuthTokens>;
+  } & OAuthRequestLifecycle): Promise<OAuthTokens>;
 }

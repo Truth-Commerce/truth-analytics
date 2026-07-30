@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { blingProvider } from '@/modules/providers/bling/provider';
-import { getErpProvider, listRegisteredErpProviders } from '@/modules/providers/registry';
+import { blingDataProvider } from '@/modules/providers/bling/provider';
+import { getErpDataProvider, listRegisteredErpDataProviders } from '@/modules/providers/registry';
 
-describe('ERP provider registry', () => {
+describe('ERP data provider registry', () => {
   it('resolve o Bling pelo identificador tipado', () => {
-    expect(getErpProvider('bling')).toBe(blingProvider);
+    expect(getErpDataProvider('bling')).toBe(blingDataProvider);
   });
 
-  it('não anuncia Olist antes do adaptador existir', () => {
-    expect(listRegisteredErpProviders()).toEqual(['bling']);
-    expect(() => getErpProvider('olist')).toThrow('erp_provider_nao_registrado:olist');
+  it('não anuncia Olist antes do adaptador operacional existir', () => {
+    expect(listRegisteredErpDataProviders()).toEqual(['bling']);
+    expect(() => getErpDataProvider('olist')).toThrow('erp_data_provider_nao_registrado:olist');
   });
 });

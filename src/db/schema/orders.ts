@@ -1,11 +1,13 @@
 import { sql } from 'drizzle-orm';
 import {
   index,
+  integer,
   jsonb,
   numeric,
   pgTable,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -19,10 +21,12 @@ export const orders = pgTable(
     org_id: uuid('org_id')
       .notNull()
       .references(() => organizations.id),
-    bling_order_id: varchar('bling_order_id', { length: 64 }).notNull(),
+    bling_order_id: varchar('bling_order_id', { length: 64 }),
     provider: varchar('provider', { length: 32 }).notNull().default('bling'),
     // The database trigger keeps legacy Bling inserts compatible while new providers send this explicitly.
     provider_order_id: varchar('provider_order_id', { length: 64 }).notNull().default(''),
+    provider_status: varchar('provider_status', { length: 32 }),
+    source_generation: integer('source_generation').notNull().default(1),
     canal: varchar('canal', { length: 32 }).notNull(),
     data: timestamp('data', { withTimezone: true, mode: 'date' }).notNull(),
     valor_total: numeric('valor_total', { precision: 12, scale: 2 }).notNull(),
@@ -37,6 +41,12 @@ export const orders = pgTable(
      * pedido pode legitimamente vir sem item e reentraria na fila para sempre.
      */
     enriquecido_em: timestamp('enriquecido_em', { withTimezone: true, mode: 'date' }),
+    enrichment_attempts: integer('enrichment_attempts').notNull().default(0),
+    enrichment_last_attempt_at: timestamp('enrichment_last_attempt_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    enrichment_last_error_code: varchar('enrichment_last_error_code', { length: 64 }),
     created_at: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .defaultNow()
       .notNull(),
@@ -48,7 +58,14 @@ export const orders = pgTable(
       t.provider,
       t.provider_order_id,
     ),
+    org_provider_generation_order_uq: uniqueIndex('orders_org_provider_generation_order_uq').on(
+      t.org_id,
+      t.provider,
+      t.source_generation,
+      t.provider_order_id,
+    ),
     org_data_idx: index('orders_org_data_idx').on(t.org_id, t.data),
+    org_provider_data_idx: index('orders_org_provider_data_idx').on(t.org_id, t.provider, t.data),
     // Fila de enriquecimento: pedidos ainda não detalhados, mais recentes primeiro.
     org_pendente_idx: index('orders_org_pendente_idx')
       .on(t.org_id, t.data)

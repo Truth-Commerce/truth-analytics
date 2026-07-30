@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   OAuthProviderError,
   type OAuthClientCredentials,
+  type OAuthRequestLifecycle,
 } from '@/modules/providers/oauth.types';
 import type { OAuthTokens } from '@/modules/providers/types';
 
@@ -39,7 +40,7 @@ export async function exchangeCode(input: {
   credentials: OAuthClientCredentials;
   code: string;
   codeVerifier: string;
-}): Promise<OAuthTokens> {
+} & OAuthRequestLifecycle): Promise<OAuthTokens> {
   return requestTokens(
     new URLSearchParams({
       grant_type: 'authorization_code',
@@ -48,45 +49,45 @@ export async function exchangeCode(input: {
       redirect_uri: input.credentials.redirectUri,
       code: input.code,
       code_verifier: input.codeVerifier,
-    }),
+    }), input.signal, input.deadlineAt,
   );
 }
 
 export async function refresh(input: {
   credentials: OAuthClientCredentials;
   refreshToken: string;
-}): Promise<OAuthTokens> {
+} & OAuthRequestLifecycle): Promise<OAuthTokens> {
   return requestTokens(
     new URLSearchParams({
       grant_type: 'refresh_token',
       client_id: input.credentials.clientId,
       client_secret: input.credentials.clientSecret,
       refresh_token: input.refreshToken,
-    }),
+    }), input.signal, input.deadlineAt,
   );
 }
 
-async function requestTokens(body: URLSearchParams): Promise<OAuthTokens> {
+async function requestTokens(body: URLSearchParams, signal?: AbortSignal, deadlineAt?: number): Promise<OAuthTokens> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    let response: Response;
+    if (signal?.aborted || (deadlineAt !== undefined && deadlineAt <= Date.now())) throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
+    let result: { response: Response; tokens?: OAuthTokens };
     try {
-      response = await fetchWithTimeout(TOKEN_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-      });
-    } catch {
+      result = await requestTokenAttempt(body, signal, deadlineAt);
+    } catch (error) {
+      if (error instanceof OAuthProviderError) throw error;
       if (attempt === 0) continue;
       throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
     }
 
-    if (response.ok) return parseTokens(response);
+    if (result.tokens) return result.tokens;
+    const response = result.response;
+    if (response.ok) throw new OAuthProviderError('olist_token_resposta_invalida', 'permanent');
     if (response.status === 400 || response.status === 401) {
       throw new OAuthProviderError('olist_token_erro_permanente', 'permanent');
     }
     if (response.status === 429 || response.status >= 500) {
       if (attempt === 0) {
-        await wait(retryDelayMs(response));
+        await wait(retryDelayMs(response), signal, deadlineAt);
         continue;
       }
       throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
@@ -96,11 +97,32 @@ async function requestTokens(body: URLSearchParams): Promise<OAuthTokens> {
   throw new OAuthProviderError('olist_token_erro_transiente', 'transient');
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function requestTokenAttempt(body: URLSearchParams, signal?: AbortSignal, deadlineAt?: number): Promise<{ response: Response; tokens?: OAuthTokens }> {
+  return withTimeout(async (attemptSignal) => {
+    const response = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      signal: attemptSignal,
+    });
+    return response.ok ? { response, tokens: await parseTokens(response) } : { response };
+  }, signal, deadlineAt);
+}
+
+async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, deadlineAt?: number): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), OLIST_TOKEN_REQUEST_TIMEOUT_MS);
+  const remaining = deadlineAt === undefined ? OLIST_TOKEN_REQUEST_TIMEOUT_MS : Math.max(0, deadlineAt - Date.now());
+  const timeout = setTimeout(() => controller.abort(), Math.min(OLIST_TOKEN_REQUEST_TIMEOUT_MS, remaining));
+  const combined = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await new Promise<T>((resolve, reject) => {
+      const abort = () => reject(new DOMException('aborted', 'AbortError'));
+      combined.addEventListener('abort', abort, { once: true });
+      operation(combined).then(
+        (value) => { combined.removeEventListener('abort', abort); resolve(value); },
+        (error) => { combined.removeEventListener('abort', abort); reject(error); },
+      );
+    });
   } finally {
     clearTimeout(timeout);
   }
@@ -116,9 +138,14 @@ async function parseTokens(response: Response): Promise<OAuthTokens> {
       refreshExpiresInSeconds: parsed.refresh_expires_in ?? 86_400,
       ...(parsed.scope ? { scope: parsed.scope } : {}),
     };
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     throw new OAuthProviderError('olist_token_resposta_invalida', 'permanent');
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function retryDelayMs(response: Response): number {
@@ -127,6 +154,18 @@ function retryDelayMs(response: Response): number {
   return Math.min(seconds, MAX_RETRY_AFTER_SECONDS) * 1000;
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function wait(ms: number, signal?: AbortSignal, deadlineAt?: number): Promise<void> {
+  const delay = Math.min(ms, deadlineAt === undefined ? ms : Math.max(0, deadlineAt - Date.now()));
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      reject(new OAuthProviderError('olist_token_erro_transiente', 'transient'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, delay);
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 }

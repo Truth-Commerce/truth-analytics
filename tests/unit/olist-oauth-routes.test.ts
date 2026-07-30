@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ORG_ID = '00000000-0000-4000-8000-000000000001';
 const cookieStore = {
@@ -25,7 +25,7 @@ vi.mock('@/modules/auth/session', () => ({ getSessionContext: vi.fn() }));
 vi.mock('@/modules/connections/connection-access', () => ({ assertConnectionOrgAccess: vi.fn() }));
 vi.mock('@/modules/connections/provider-connection.repository', () => ({
   getProviderOAuthCredentials: vi.fn(),
-  saveProviderTokens: vi.fn(),
+  getOlistPublicationContext: vi.fn(),
 }));
 vi.mock('@/modules/connections/olist-oauth-attempt', () => ({
   OLIST_OAUTH_COOKIE: 'olist_oauth_attempt',
@@ -44,12 +44,13 @@ vi.mock('@/modules/connections/olist-oauth-attempt', () => ({
     surface === 'client_connections' ? '/conexoes' : `/analista/${orgId}?tab=conexao`),
 }));
 vi.mock('@/modules/providers/oauth-registry', () => ({ getOAuthProvider: vi.fn(() => adapter) }));
+vi.mock('@/modules/providers/olist/account', () => ({ loadAndBindOlistAccount: vi.fn() }));
 
 import { getSessionContext } from '@/modules/auth/session';
 import { assertConnectionOrgAccess } from '@/modules/connections/connection-access';
 import {
   getProviderOAuthCredentials,
-  saveProviderTokens,
+  getOlistPublicationContext,
 } from '@/modules/connections/provider-connection.repository';
 import {
   createOlistOAuthAttempt,
@@ -57,6 +58,7 @@ import {
 } from '@/modules/connections/olist-oauth-attempt';
 import { GET as start } from '@/app/api/connections/olist/route';
 import { GET as callback } from '@/app/api/connections/olist/callback/route';
+import { loadAndBindOlistAccount } from '@/modules/providers/olist/account';
 
 const access = {
   id: 'user-a',
@@ -74,6 +76,7 @@ beforeEach(() => {
     clientSecret: 'secret',
     version: 'version-a',
   });
+  vi.mocked(getOlistPublicationContext).mockResolvedValue({ credentialVersion: 'version-a', dataGeneration: 2 });
   vi.mocked(createOlistOAuthAttempt).mockReturnValue({
     cookieValue: 'signed-cookie',
     state: 'state-a',
@@ -97,8 +100,10 @@ beforeEach(() => {
     refreshToken: 'refresh',
     expiresInSeconds: 14_400,
   });
-  vi.mocked(saveProviderTokens).mockResolvedValue(true);
+  vi.mocked(loadAndBindOlistAccount).mockResolvedValue({ fingerprint: 'a'.repeat(64), sourceGeneration: 2 });
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe('GET /api/connections/olist', () => {
   it('redireciona sessão ausente para sign-in', async () => {
@@ -147,6 +152,38 @@ describe('GET /api/connections/olist', () => {
 });
 
 describe('GET /api/connections/olist/callback', () => {
+  it('interrompe as leituras preliminares quando excedem o budget do callback', async () => {
+    vi.useFakeTimers();
+    vi.mocked(assertConnectionOrgAccess).mockImplementationOnce(() => new Promise(() => undefined));
+
+    const pending = callback(
+      new Request('https://attacker.example/api/connections/olist/callback?code=code-a&state=state-a'),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    const response = await pending;
+    expect(response.headers.get('location')).toContain('olist_oauth_transiente');
+    expect(getProviderOAuthCredentials).not.toHaveBeenCalled();
+    expect(adapter.exchangeCode).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('limpa o timer do callback ao retornar antes do exchange', async () => {
+    vi.useFakeTimers();
+    vi.mocked(getProviderOAuthCredentials).mockResolvedValueOnce({
+      clientId: 'new-client',
+      clientSecret: 'new-secret',
+      version: 'version-b',
+    });
+
+    await callback(
+      new Request('https://attacker.example/api/connections/olist/callback?code=code-a&state=state-a'),
+    );
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('expira no path original antes de trocar o code e salva por compare-and-swap', async () => {
     adapter.exchangeCode.mockImplementationOnce(async () => {
       expect(cookieStore.set).toHaveBeenCalledWith(
@@ -177,12 +214,20 @@ describe('GET /api/connections/olist/callback', () => {
       },
       code: 'code-a',
       codeVerifier: 'verifier-a',
+      signal: expect.any(AbortSignal),
+      deadlineAt: expect.any(Number),
     });
-    expect(saveProviderTokens).toHaveBeenCalledWith(expect.objectContaining({
-      orgId: ORG_ID,
-      provider: 'olist',
+    expect(loadAndBindOlistAccount).toHaveBeenCalledWith(ORG_ID, expect.objectContaining({
       credentialVersion: 'version-a',
+      sourceGeneration: 2,
+      signal: expect.any(AbortSignal),
+      deadlineAt: expect.any(Number),
+      tokens: expect.objectContaining({ accessToken: 'access', refreshToken: 'refresh' }),
     }));
+    const exchangeLifecycle = vi.mocked(adapter.exchangeCode).mock.calls[0]?.[0] as { signal: AbortSignal; deadlineAt: number };
+    const bindingLifecycle = vi.mocked(loadAndBindOlistAccount).mock.calls[0]?.[1] as { signal: AbortSignal; deadlineAt: number };
+    expect(bindingLifecycle.signal).toBe(exchangeLifecycle.signal);
+    expect(bindingLifecycle.deadlineAt).toBe(exchangeLifecycle.deadlineAt);
     expect(response.headers.get('location')).toContain('/conexoes?olist=conectado');
   });
 
@@ -209,7 +254,7 @@ describe('GET /api/connections/olist/callback', () => {
       ),
     );
     expect(adapter.exchangeCode).not.toHaveBeenCalled();
-    expect(saveProviderTokens).not.toHaveBeenCalled();
+    expect(loadAndBindOlistAccount).not.toHaveBeenCalled();
   });
 
   it('não troca code quando versão de credenciais mudou', async () => {
@@ -224,7 +269,7 @@ describe('GET /api/connections/olist/callback', () => {
       ),
     );
     expect(adapter.exchangeCode).not.toHaveBeenCalled();
-    expect(saveProviderTokens).not.toHaveBeenCalled();
+    expect(loadAndBindOlistAccount).not.toHaveBeenCalled();
   });
 
   it('mapeia access_denied sem chamar exchange', async () => {

@@ -49,7 +49,7 @@ describe('mapOrder — canal a partir de loja.id', () => {
 
   it('usa `numero` como id quando `id` falta (payload real tem os dois)', () => {
     const pedido = mapOrder({ numero: 3549, data: '2026-07-23' }, CANAIS);
-    expect(pedido.blingOrderId).toBe('3549');
+    expect(pedido.providerOrderId).toBe('3549');
   });
 
   it('itens e frete saem vazios da listagem — quem preenche e o enriquecimento', () => {
