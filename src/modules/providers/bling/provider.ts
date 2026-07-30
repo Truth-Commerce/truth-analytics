@@ -21,10 +21,11 @@ export const blingDataProvider: ErpDataProvider = {
       const state = context?.blingState;
       if (state?.token !== token) token = state.token;
       else if (state) {
-        state.refreshPromise ??= getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt })
+        const refresh = state.refreshPromise ?? getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt })
           .then(refreshed => { state.token = refreshed; return refreshed; })
           .finally(() => { state.refreshPromise = undefined; });
-        token = await state.refreshPromise;
+        state.refreshPromise = refresh;
+        token = await refresh;
       } else token = await getValidAccessToken(orgId, Number.MAX_SAFE_INTEGER, { deadlineAt: context?.deadlineAt });
       if (context?.deadlineAt !== undefined && Date.now() >= context.deadlineAt) throw new Error('bling_deadline_exceeded');
       return fetchOrderDetail(orgId, providerOrderId, token, context ? { ...context, blingToken: token } : undefined);
