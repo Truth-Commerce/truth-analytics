@@ -78,4 +78,23 @@ describe('Olist shadow preparation window', () => {
     expect(fetchOrders).not.toHaveBeenCalled();
     expect(complete).not.toHaveBeenCalled();
   });
+
+  it('fails ready revalidation without completing the outer lease', async () => {
+    mocks.parse.mockReturnValue({ stage: 'ready' });
+    const reconciliation = await import('@/modules/pipeline/order-reconciliation');
+    vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: false, reasons: ['count_mismatch'], expectedCount: 1, actualCount: 0, pendingDetails: 0, quarantined: 0 });
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'blocked', reason: 'prepare_ready_revalidation_failed' });
+    expect(fail).toHaveBeenCalled(); expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('completes only after ready revalidation and exact publication succeeds', async () => {
+    mocks.parse.mockReturnValue({ stage: 'ready' });
+    const reconciliation = await import('@/modules/pipeline/order-reconciliation');
+    vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: true, reasons: [], expectedCount: 1, actualCount: 1, pendingDetails: 0, quarantined: 0 });
+    execute.mockResolvedValue([{ id: 'published' }]);
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'ready', ready: true });
+    expect(complete).toHaveBeenCalled();
+  });
 });
