@@ -20,7 +20,7 @@ describe.skipIf(!url)('order readiness — integração PostgreSQL', () => {
   const cursor = (overrides = {}) => ({
     version: 1, stage: 'ready', sourceGeneration: 3, accountFingerprint: fingerprint,
     window: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-02T00:00:00.000Z' },
-    catchUpFrom: '2026-07-01T00:00:00.000Z', snapshot: { done: true }, catchup: { done: true, completedAt: '2026-07-02T00:00:00.000Z' },
+    catchUpFrom: '2026-07-02T00:00:00.000Z', snapshot: { done: true }, catchup: { done: true, completedAt: '2026-07-02T00:00:00.000Z' },
     verify1: { done: true, expectedCount: 1, checksum: createHash('md5').update('ready-order||10.00').digest('hex'), dailyChecksum: createHash('md5').update('2026-07-01|10.00').digest('hex'), channelChecksum: createHash('md5').update('Olist|10.00').digest('hex') },
     verify2: { done: true, expectedCount: 1, checksum: createHash('md5').update('ready-order||10.00').digest('hex'), dailyChecksum: createHash('md5').update('2026-07-01|10.00').digest('hex'), channelChecksum: createHash('md5').update('Olist|10.00').digest('hex') }, ...overrides,
   });

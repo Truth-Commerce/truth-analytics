@@ -51,7 +51,7 @@ async function persistPage(lease: SyncLease, source: ErpDataSource, list: RawOrd
     if (!owned.length) return false;
     for (const order of list.filter((o) => o.providerOrderId.trim())) await tx.execute(sql`
       INSERT INTO orders (org_id, provider, source_generation, provider_order_id, provider_status, canal, data, valor_total, frete, itens)
-      VALUES (${source.orgId}, 'olist', ${source.sourceGeneration}, ${order.providerOrderId}, ${order.providerStatus}, ${order.canal}, ${order.data}, ${String(order.valorTotal)}, ${String(order.frete)}, ${JSON.stringify(order.itens)}::jsonb)
+      VALUES (${source.orgId}, 'olist', ${source.sourceGeneration}, ${order.providerOrderId}, ${order.providerStatus}, ${order.canal}, ${order.data.toISOString()}::timestamptz, ${String(order.valorTotal)}, ${String(order.frete)}, ${JSON.stringify(order.itens)}::jsonb)
       ON CONFLICT (org_id, provider, source_generation, provider_order_id) DO UPDATE SET provider_status=EXCLUDED.provider_status, canal=CASE WHEN EXCLUDED.canal='Desconhecido' THEN orders.canal ELSE EXCLUDED.canal END, data=EXCLUDED.data, valor_total=EXCLUDED.valor_total`);
     const advanced = rows(await tx.execute(sql`UPDATE connection_sync_state SET cursor=${JSON.stringify(cursor)}::jsonb, updated_at=clock_timestamp() WHERE id=${owned[0].id} AND lease_token=${lease.token} AND fencing_version=${lease.fencingVersion} AND lease_expires_at > clock_timestamp() RETURNING id`));
     return advanced.length === 1;
