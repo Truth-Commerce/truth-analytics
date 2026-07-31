@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
+import { hasPostgresErrorCode } from '@/db/postgres-error';
 import { decryptConnectionSecret } from '@/modules/connections/connection-secrets';
 import { serverEnv } from '@/lib/env';
 import {
@@ -25,14 +26,31 @@ type LockedConnection = {
 };
 type LockedPreparation = { live: boolean };
 
-type ActivationInput = {
+/**
+ * Test-only seams. Production callers build activation inputs field by field and
+ * never construct this object, so neither seam is reachable outside the suite.
+ */
+export type ActivationTestHooks = {
+  /** Aborts the transaction between demotion and promotion. */
+  failAfterDemotion?: boolean;
+  /** Awaited right after the transaction opens, before any lock is taken. */
+  barrier?: () => Promise<void>;
+};
+
+export type ActivateErpInput = {
   orgId: string;
   target: Provider;
   actorUserId: string | null;
   mode: ActivationMode;
-  /** Test-only fault injection; production callers cannot reach this option. */
-  __testFailAfterDemotion?: boolean;
 };
+
+export type RollbackErpInput = {
+  orgId: string;
+  target: 'bling';
+  actorUserId: string;
+};
+
+type ActivationInput = ActivateErpInput & { __test?: ActivationTestHooks };
 
 export type ActivationResult = {
   previous: Provider | null;
@@ -56,6 +74,7 @@ type SafeAuditDetails = {
 };
 
 const ACTIVATION_CONFLICT = 'erp_ativo_alterado';
+const CONFLICT_CODES = ['23505', '40001', '40P01'];
 
 function activationConflict(): never {
   throw new Error(ACTIVATION_CONFLICT);
@@ -195,7 +214,7 @@ async function switchActiveProvider(
       WHERE org_id = ${input.orgId} AND provider = ${previous} AND status = 'ok'
     `);
   }
-  if (input.__testFailAfterDemotion) throw new Error('erp_activation_test_failure');
+  if (input.__test?.failAfterDemotion) throw new Error('erp_activation_test_failure');
 
   await executor.execute(sql`
     UPDATE connections SET status = 'ok'
@@ -231,7 +250,7 @@ async function activateWithinTransaction(executor: Executor, input: ActivationIn
 
 async function rollbackWithinTransaction(
   executor: Executor,
-  input: { orgId: string; target: 'bling'; actorUserId: string },
+  input: RollbackErpInput & { __test?: ActivationTestHooks },
 ): Promise<ActivationResult> {
   const explicit: ActivationInput = { ...input, mode: 'explicit' };
   await authorize(executor, explicit);
@@ -243,34 +262,41 @@ async function rollbackWithinTransaction(
   return switchActiveProvider(executor, explicit, previous, null, 'erp.revertido');
 }
 
+/**
+ * PostgreSQL conflicts arrive wrapped by the driver/ORM, so the whole cause
+ * chain is inspected before the stable domain error is published.
+ */
 function isDatabaseConflict(error: unknown): boolean {
-  const code = (error as { code?: string }).code;
-  return code === '23505' || code === '40001' || code === '40P01';
+  return CONFLICT_CODES.some((code) => hasPostgresErrorCode(error, code));
 }
 
-async function serializable<T>(operation: (executor: Executor) => Promise<T>): Promise<T> {
+async function serializable<T>(
+  hooks: ActivationTestHooks | undefined,
+  operation: (executor: Executor) => Promise<T>,
+): Promise<T> {
   return db.transaction(async (transaction) => {
     await transaction.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    if (hooks?.barrier) await hooks.barrier();
     return operation(transaction);
   });
 }
 
-export async function activateErp(input: ActivationInput): Promise<ActivationResult> {
+export async function activateErp(
+  input: ActivateErpInput & { __test?: ActivationTestHooks },
+): Promise<ActivationResult> {
   try {
-    return await serializable((executor) => activateWithinTransaction(executor, input));
+    return await serializable(input.__test, (executor) => activateWithinTransaction(executor, input));
   } catch (error) {
     if (isDatabaseConflict(error)) activationConflict();
     throw error;
   }
 }
 
-export async function rollbackErp(input: {
-  orgId: string;
-  target: 'bling';
-  actorUserId: string;
-}): Promise<ActivationResult> {
+export async function rollbackErp(
+  input: RollbackErpInput & { __test?: ActivationTestHooks },
+): Promise<ActivationResult> {
   try {
-    return await serializable((executor) => rollbackWithinTransaction(executor, input));
+    return await serializable(input.__test, (executor) => rollbackWithinTransaction(executor, input));
   } catch (error) {
     if (isDatabaseConflict(error)) activationConflict();
     throw error;
