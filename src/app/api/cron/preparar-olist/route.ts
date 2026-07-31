@@ -2,7 +2,7 @@ import { serverEnv } from '@/lib/env';
 import { secretsMatch } from '@/lib/secret-compare';
 import { registrarHeartbeat } from '@/modules/admin/heartbeat.repository';
 import { listOlistConnectionsPendingPreparation } from '@/modules/connections/provider-connection.repository';
-import { prepareOlistOrders } from '@/modules/pipeline/prepare-olist';
+import { attemptReadyOlistActivations, prepareOlistOrders } from '@/modules/pipeline/prepare-olist';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -15,6 +15,7 @@ export async function GET(request: Request): Promise<Response> {
   const sources = (await listOlistConnectionsPendingPreparation({ orgIds: serverEnv.OLIST_DATA_SYNC_ORG_IDS, limit: 3 })).slice(0, 3);
   let ready = 0; let pending = 0; let blocked = 0; let stale = 0; let failed = 0;
   for (const source of sources) { try { const result = await prepareOlistOrders(source, { deadlineAt }); if (result.ready) ready++; else if (result.stale) stale++; else if (result.blocked) blocked++; else pending++; } catch { failed++; } }
+  try { await attemptReadyOlistActivations({ orgIds: serverEnv.OLIST_DATA_SYNC_ORG_IDS, limit: 3 }); } catch { failed++; }
   const result = { orgs: sources.length, ready, pending, blocked, stale, failed };
   await registrarHeartbeat('preparar-olist', failed === 0, result);
   return Response.json(result);

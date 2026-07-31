@@ -45,7 +45,7 @@ import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.
 import { OlistConnectionCard } from '@/components/connections/olist-connection-card';
 import { olistFeedback } from '@/components/connections/olist-feedback';
 import { olistCallbackUri } from '@/modules/connections/olist-oauth-attempt';
-import { getProviderConnectionSummary } from '@/modules/connections/provider-connection.repository';
+import { getErpConnectionReadModel } from '@/modules/connections/provider-connection.repository';
 
 import type { Metadata } from 'next';
 
@@ -77,7 +77,7 @@ export default async function AnalistaOrgPage(props: {
   const ator = atorFromRole(access.role);
   const agora = new Date();
 
-  const [resumo, dashboardData, visao360, tarefas, templates, produtos, usuariosOrg, olistSummary] = await Promise.all([
+  const [resumo, dashboardData, visao360, tarefas, templates, produtos, usuariosOrg, erpReadModel] = await Promise.all([
     orgResumoUnico(access, orgId, agora),
     getDashboardData(orgId),
     getVisao360(orgId, agora),
@@ -85,7 +85,7 @@ export default async function AnalistaOrgPage(props: {
     listTemplates(true),
     listTrackedProducts(orgId),
     listOrgUsers(orgId),
-    getProviderConnectionSummary(orgId, 'olist'),
+    getErpConnectionReadModel(orgId),
   ]);
 
   const { org, historico, latestDone, doneAnterior, settings, totalMes, conn, ultimaDataPedido, titulosTasksUltimoDone } =
@@ -562,7 +562,8 @@ export default async function AnalistaOrgPage(props: {
               <OlistConnectionCard
                 orgId={orgId}
                 surface="analyst_org"
-                summary={olistSummary}
+                readModel={erpReadModel}
+                canManageErp={true}
                 redirectUri={olistCallbackUri()}
               />
             ),

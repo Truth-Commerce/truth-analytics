@@ -21,12 +21,13 @@ function unstableVerification(value: unknown): boolean {
  * readiness is published only when the current credential binding, preparation
  * cursor and source-scoped order facts all agree.
  */
-export async function reconcileOrderReadiness(source: SyncSource): Promise<OrderReadiness> {
+export type OrderReadinessExecutor = Pick<typeof db, 'execute'>;
+export async function reconcileOrderReadiness(source: SyncSource, executor: OrderReadinessExecutor = db): Promise<OrderReadiness> {
   const accountFingerprint = source.accountFingerprint;
   if (source.provider === 'olist' && (accountFingerprint === null || !/^[a-f0-9]{64}$/i.test(accountFingerprint))) {
     return { ready: false, reasons: ['source_stale', 'preparation_incomplete'], expectedCount: 0, actualCount: 0, pendingDetails: 0, quarantined: 0 };
   }
-  const sourceResult = await db.execute(sql`
+  const sourceResult = await executor.execute(sql`
     SELECT css.cursor,
       EXISTS(SELECT 1 FROM connections c JOIN organizations o ON o.id=c.org_id
         WHERE c.org_id=${source.orgId} AND c.provider=${source.provider} AND c.data_generation=${source.sourceGeneration}
@@ -39,7 +40,7 @@ export async function reconcileOrderReadiness(source: SyncSource): Promise<Order
   const row = sourceResult[0];
   const cursor = row && accountFingerprint !== null ? parsePreparationCursor(row.cursor, source.sourceGeneration, accountFingerprint) : null;
   const verificationUnstable = row ? unstableVerification(row.cursor) : false;
-  const factsResult = cursor ? await db.execute(sql`
+  const factsResult = cursor ? await executor.execute(sql`
     SELECT count(DISTINCT NULLIF(provider_order_id, ''))::int AS actual_count,
       count(*) FILTER (WHERE enriquecido_em IS NULL AND enrichment_attempts < 5)::int AS pending_details,
       count(*) FILTER (WHERE enrichment_attempts >= 5)::int AS quarantined,
