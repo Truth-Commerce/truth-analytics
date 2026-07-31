@@ -8,10 +8,12 @@ describe('friendlyReportError', () => {
     expect(friendlyReportError('analise_ia_invalida')).toContain('não conseguiu concluir a análise');
     expect(friendlyReportError('sem_conexao_erp')).toContain('ERP');
     expect(friendlyReportError('erp_indisponivel')).toContain('ERP');
+    expect(friendlyReportError('erp_sem_pedidos')).toContain('pedidos');
   });
 
   it('não expõe o provider quando recebe código legado específico', () => {
     expect(friendlyReportError('bling_refresh_invalido')).not.toContain('Bling');
+    expect(friendlyReportError('bling_sem_pedidos')).not.toContain('Bling');
     expect(friendlyReportError('olist_indisponivel')).not.toContain('Olist');
   });
 

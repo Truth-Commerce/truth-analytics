@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { connections, organizations } from '@/db/schema';
 import { BACKOFF_FALHA_DIAS } from './scheduler.service';
 import { isErpProviderId } from '@/modules/providers/provider-catalog';
+import { isActiveErpSourceAllowed } from '@/modules/connections/active-provider.repository';
 
 /**
  * Orgs elegíveis para geração automática: active + plano + geracao_automatica
@@ -53,7 +54,9 @@ export async function listOrgsElegiveisParaGeracao(
       ),
     )
     .orderBy(sql`${organizations.proximo_relatorio_liberado_em} asc nulls first`);
-  return rows.filter((r) => r.name !== null && isErpProviderId(r.provider)).map(({ id, name }) => ({ id, name: name! }));
+  return rows
+    .filter((r) => r.name !== null && isErpProviderId(r.provider) && isActiveErpSourceAllowed({ orgId: r.id, provider: r.provider }))
+    .map(({ id, name }) => ({ id, name: name! }));
 }
 
 /**

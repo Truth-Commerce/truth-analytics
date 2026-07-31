@@ -12,7 +12,7 @@ const ERRO_LABEL: Record<string, string> = {
     'A conexão com o ERP não estava disponível. Reconecte em Conexões e tente de novo.',
   erp_indisponivel:
     'O ERP não respondeu a tempo. Aguarde alguns instantes e gere o relatório novamente.',
-  bling_sem_pedidos: 'Não encontramos pedidos no período analisado.',
+  erp_sem_pedidos: 'Não encontramos pedidos no período analisado.',
   relatorio_em_andamento: 'Já existe um relatório em geração para a sua conta. Aguarde ele terminar.',
   ia_nao_configurada:
     'A análise por IA está temporariamente indisponível. Tente novamente em instantes.',
