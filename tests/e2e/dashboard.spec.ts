@@ -79,8 +79,8 @@ test('ver relatório: dashboard mostra último relatório e detalhe exibe métri
   await expect(page.getByTestId('metricas')).toContainText('123,45');
 });
 
-test('gating: cliente sem Bling tem botão de geração desabilitado com motivo', async ({ page }) => {
-  // Login — cliente sem conexão Bling semeada
+test('gating: cliente sem ERP tem botão de geração desabilitado com motivo', async ({ page }) => {
+  // Login — cliente sem conexão ERP semeada
   await page.goto('/sign-in');
   await page.fill('input[name="email"]', clienteEmail);
   await page.fill('input[name="senha"]', clienteSenha);
@@ -93,8 +93,8 @@ test('gating: cliente sem Bling tem botão de geração desabilitado com motivo'
   const btn = page.getByTestId('generate-report-button');
   await expect(btn).toBeDisabled();
 
-  // Motivo: Bling não conectado
-  await expect(page.getByText('Conecte o Bling em Conexões.')).toBeVisible();
+  // Motivo: ERP não conectado
+  await expect(page.getByText('Conecte seu ERP em Conexões.')).toBeVisible();
 });
 
 test('shell mantém um único título principal por página', async ({ page }) => {
