@@ -60,6 +60,34 @@ describe.skipIf(!url)('product_stock Olist expand — integração', () => {
         await readFile(join(migrationRoot, '0025_olist_stock_expand.sql'), 'utf8'),
       );
 
+      const columns = await isolatedSql.unsafe<{
+        column_name: string;
+        data_type: string;
+        is_nullable: 'NO' | 'YES';
+        column_default: string | null;
+      }[]>(`
+        SELECT column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'product_stock'
+          AND column_name IN ('source_generation', 'fencing_version')
+        ORDER BY column_name
+      `);
+      expect(columns).toEqual([
+        {
+          column_name: 'fencing_version',
+          data_type: 'bigint',
+          is_nullable: 'NO',
+          column_default: '0',
+        },
+        {
+          column_name: 'source_generation',
+          data_type: 'integer',
+          is_nullable: 'NO',
+          column_default: '1',
+        },
+      ]);
+
       const rows = await isolatedSql.unsafe<{
         provider: string;
         provider_product_id: string;

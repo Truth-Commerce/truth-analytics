@@ -68,3 +68,15 @@ omitir provider/generation/SKU ou se o índice omitir `updated_at`.
 Concern de release: migrations e integração PostgreSQL precisam rodar na CI com
 `DATABASE_URL_TEST`. A `0025` deve ser aplicada e smoke-tested em produção antes
 de qualquer início da Task 14; nenhuma alteração da Task 14 foi incluída aqui.
+
+## Fix round 1 — contrato físico das colunas
+
+O review identificou que os valores lidos protegiam backfill e defaults, mas não
+falhariam se `source_generation` deixasse de ser `integer`, se `fencing_version`
+deixasse de ser `bigint` ou se qualquer coluna perdesse `NOT NULL`.
+
+O teste agora consulta `information_schema.columns` no schema PostgreSQL isolado,
+depois de aplicar `0025`, e exige literalmente tipo, nulabilidade e default das
+duas colunas. Nenhum arquivo de produção foi alterado. A execução PostgreSQL
+local continua indisponível sem `DATABASE_URL_TEST`; typecheck, lint focal e
+diff-check são repetidos antes do commit desta rodada.
