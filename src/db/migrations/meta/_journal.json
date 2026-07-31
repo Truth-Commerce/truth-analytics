@@ -176,6 +176,13 @@
       "when": 1785406882176,
       "tag": "0024_olist_sync_state_shadow_enable",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785511166608,
+      "tag": "0025_olist_stock_expand",
+      "breakpoints": true
     }
   ]
 }

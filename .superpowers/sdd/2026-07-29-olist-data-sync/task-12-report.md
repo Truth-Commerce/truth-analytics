@@ -181,3 +181,10 @@ npx playwright test tests/e2e/dashboard.spec.ts --grep "gating: cliente sem ERP"
 O Playwright foi bloqueado na carga da configuração, antes de executar testes, porque `DATABASE_URL_TEST` está ausente. O GREEN real desse único cenário permanece como gate da CI com banco de teste configurado.
 
 `npm run typecheck` e `git diff --check` passaram localmente.
+
+## CI final
+
+A CI `30641591710` concluiu com sucesso no commit
+`9e5b67c8430b4ae23f40e4b9ee34796f1d53170d`. O job `verify` passou migrations
+PostgreSQL, audit, lint, typecheck, `test:ci`, build e a suite Playwright completa.
+Com isso, o value gate final da Task 12 está verde.
