@@ -3,8 +3,8 @@ import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
 import {
   listConnectionsExpirando,
-  listOrgsComBlingOk,
 } from '@/modules/connections/connection.repository';
+import { listActiveErpConnections } from '@/modules/connections/active-provider.repository';
 import {
   MARGEM_RENOVACAO_MS,
   renovarConexaoDaOrg,
@@ -21,7 +21,7 @@ export const maxDuration = 300;
 /**
  * Cron diário (7h UTC — Vercel manda `Authorization: Bearer CRON_SECRET`).
  * Passo 1: renova tokens expirando em <24h; Passo 2: sync incremental —
- * sincroniza os pedidos dos últimos 2 dias de cada org com conexão Bling ok,
+ * sincroniza os pedidos dos últimos 2 dias de cada ERP ativo,
  * mantendo `orders` vivo entre relatórios (meta mensal, alertas e "vendas de
  * ontem" deixam de ler uma foto congelada).
  *
@@ -63,20 +63,25 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  const orgIds = (await listOrgsComBlingOk()).slice(0, LOTE_MAXIMO_SYNC);
+  const sources = await listActiveErpConnections({ limit: LOTE_MAXIMO_SYNC });
   let sincronizadas = 0;
   let falhas = 0;
   let enriquecidos = 0;
   let pendentesRestantes = 0;
+  const porProvider: Record<string, { orgs: number; sincronizadas: number; falhas: number }> = {};
 
-  for (const orgId of orgIds) {
+  for (const source of sources) {
+    const counters = (porProvider[source.provider] ??= { orgs: 0, sincronizadas: 0, falhas: 0 });
+    counters.orgs++;
     try {
-      const r = await sincronizarPedidosDaOrg({ orgId, provider: 'bling', sourceGeneration: 1 }, agora);
+      const r = await sincronizarPedidosDaOrg(source, agora);
       sincronizadas++;
+      counters.sincronizadas++;
       enriquecidos += r.enriquecimento.enriquecidos;
       if (r.enriquecimento.restantes > 0) pendentesRestantes += r.enriquecimento.restantes;
       logger.info('cron.sincronizar_pedidos.org', {
-        orgId,
+        orgId: source.orgId,
+        provider: source.provider,
         processados: r.processados,
         total: r.total,
         enriquecidos: r.enriquecimento.enriquecidos,
@@ -85,15 +90,17 @@ export async function GET(req: Request): Promise<Response> {
       });
     } catch (err) {
       falhas++;
+      counters.falhas++;
       logger.error('cron.sincronizar_pedidos.erro', {
-        orgId,
+        orgId: source.orgId,
+        provider: source.provider,
         erro: err instanceof Error ? err.message : String(err),
       });
     }
   }
 
   const resposta = {
-    orgs: orgIds.length,
+    orgs: sources.length,
     sincronizadas,
     falhas,
     renovadas,
@@ -101,6 +108,7 @@ export async function GET(req: Request): Promise<Response> {
     transientes,
     enriquecidos,
     pendentesRestantes,
+    porProvider,
   };
   await registrarHeartbeat('sincronizar-pedidos', true, resposta);
   return Response.json(resposta);

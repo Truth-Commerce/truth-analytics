@@ -18,9 +18,10 @@ export function OnboardingChecklist(props: OnboardingInput) {
     <Card data-testid="onboarding-checklist" className="border-brand/20">
       <CardHeader>
         <CardTitle as="h2" className="text-base">Primeiros passos</CardTitle>
-        <span className="font-mono text-xs text-muted">
-          {feitos}/{steps.length}
-        </span>
+        <div className="flex items-center gap-2 font-mono text-xs text-muted">
+          <span>{props.erpOk ? `ERP ativo: ${props.erpLabel}` : 'ERP não conectado'}</span>
+          <span>{feitos}/{steps.length}</span>
+        </div>
       </CardHeader>
       <CardContent>
         <ol className="flex flex-col gap-2">
