@@ -4,7 +4,8 @@ import { secretsMatch } from '@/lib/secret-compare';
 import {
   listConnectionsExpirando,
 } from '@/modules/connections/connection.repository';
-import { isActiveErpSourceAllowed, listActiveErpConnections } from '@/modules/connections/active-provider.repository';
+import { listActiveErpConnections } from '@/modules/connections/active-provider.repository';
+import type { ActiveErpRef } from '@/modules/orders/order-scope';
 import {
   MARGEM_RENOVACAO_MS,
   renovarConexaoDaOrg,
@@ -17,6 +18,12 @@ import {
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
+
+/** O kill switch limita somente a execução operacional de pedidos Olist. */
+function podeSincronizarPedidos(source: ActiveErpRef): boolean {
+  return source.provider !== 'olist'
+    || (serverEnv.OLIST_DATA_SYNC_ENABLED && serverEnv.OLIST_DATA_SYNC_ORG_IDS.includes(source.orgId));
+}
 
 /**
  * Cron a cada 15 minutos (GitHub Actions manda `Authorization: Bearer CRON_SECRET`).
@@ -63,7 +70,7 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  const sources = (await listActiveErpConnections({ limit: LOTE_MAXIMO_SYNC })).filter(isActiveErpSourceAllowed);
+  const sources = (await listActiveErpConnections({ limit: LOTE_MAXIMO_SYNC })).filter(podeSincronizarPedidos);
   let sincronizadas = 0;
   let falhas = 0;
   let enriquecidos = 0;
