@@ -9,7 +9,7 @@ const RUN = Date.now();
 const PREFIX = 'ta-test-backoff-';
 const DIA = 86_400_000;
 
-async function seedOrgElegivel(nome: string): Promise<string> {
+async function seedOrgElegivel(nome: string, provider: 'bling' | 'olist' = 'bling'): Promise<string> {
   const [org] = await db
     .insert(organizations)
     .values({
@@ -22,7 +22,7 @@ async function seedOrgElegivel(nome: string): Promise<string> {
     .returning({ id: organizations.id });
   await db.insert(connections).values({
     org_id: org!.id,
-    provider: 'bling',
+    provider,
     access_token: 'tok',
     refresh_token: 'rt',
     status: 'ok',
@@ -49,7 +49,7 @@ describe.skipIf(!url)('scheduler — backoff e falhas consecutivas', () => {
 
   beforeAll(async () => {
     orgFalhaRecente = await seedOrgElegivel(`${PREFIX}recente-${RUN}`);
-    orgFalhaAntiga = await seedOrgElegivel(`${PREFIX}antiga-${RUN}`);
+    orgFalhaAntiga = await seedOrgElegivel(`${PREFIX}antiga-${RUN}`, 'olist');
     orgTresFalhas = await seedOrgElegivel(`${PREFIX}tres-${RUN}`);
 
     // último report failed HÁ 1 HORA → excluída por 2 dias
@@ -74,7 +74,7 @@ describe.skipIf(!url)('scheduler — backoff e falhas consecutivas', () => {
     }
   });
 
-  it('exclui org cujo ÚLTIMO report é failed há <2 dias; inclui quando o backoff venceu', async () => {
+  it('aceita ERP registrado sem literal de provider e exclui org cujo ÚLTIMO report é failed há <2 dias', async () => {
     const { listOrgsElegiveisParaGeracao } = await import(
       '@/modules/scheduler/scheduler.repository'
     );

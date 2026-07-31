@@ -1,8 +1,8 @@
 import { getOrganizationById, type ClientOrganization } from '@/modules/admin/admin.repository';
 import { getUltimaDataPedido } from '@/modules/alerts/alert-data.repository';
 import { listAlertasAbertos, type AlertaAberto } from '@/modules/alerts/alert.repository';
-import { getConnection } from '@/modules/connections/connection.repository';
 import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
+import type { ActiveErpRef } from '@/modules/orders/order-scope';
 import {
   getOrgSettings,
   getTotalVendasMesCorrente,
@@ -19,7 +19,9 @@ import {
 import type { ReportDetail, ReportSummary } from './report.types';
 
 export type DashboardData = {
-  conn: Awaited<ReturnType<typeof getConnection>>;
+  source: ActiveErpRef | null;
+  /** @deprecated Consumers should use `source`; retained for staff dashboard freshness. */
+  conn: { last_sync_at: Date | null } | null;
   org: ClientOrganization | null;
   settings: { geracaoAutomatica: boolean; metaMensal: number | null } | null;
   historico: HistoricoDashboardRow[];
@@ -42,10 +44,9 @@ export type DashboardData = {
  */
 export async function getDashboardData(orgId: string): Promise<DashboardData> {
   const source = await getActiveErpConnection(orgId);
-  const [historico, conn, org, doneMaisRecente, produtos, alertas, settings, totalMes, ultimaDataPedido] =
+  const [historico, org, doneMaisRecente, produtos, alertas, settings, totalMes, ultimaDataPedido] =
     await Promise.all([
       listHistoricoDashboard(orgId),
-      getConnection(orgId),
       getOrganizationById(orgId),
       getUltimosDoneDetalhados(orgId, 1),
       listTrackedProducts(orgId),
@@ -80,7 +81,8 @@ export async function getDashboardData(orgId: string): Promise<DashboardData> {
     : null;
 
   return {
-    conn,
+    source,
+    conn: source ? { last_sync_at: source.lastSyncAt } : null,
     org,
     settings,
     historico,

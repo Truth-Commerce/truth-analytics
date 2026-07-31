@@ -16,7 +16,7 @@ on:
     - cron: "15 */2 * * *" # watchdog
     - cron: "17 */2 * * *" # renovar-conexoes
     - cron: "19 */2 * * *" # preparar-olist
-    - cron: "0 7 * * *" # sincronizar-pedidos
+    - cron: "*/15 * * * *" # sincronizar-pedidos
     - cron: "30 7 * * *" # sincronizar-estoque
     - cron: "0 9 * * *" # gerar-relatorios
     - cron: "30 9 * * *" # verificar-alertas
@@ -42,7 +42,7 @@ jobs:
             "15 */2 * * *") rota=watchdog ;;
             "17 */2 * * *") rota=renovar-conexoes ;;
             "19 */2 * * *") rota=preparar-olist ;;
-            "0 7 * * *") rota=sincronizar-pedidos ;;
+            "*/15 * * * *") rota=sincronizar-pedidos ;;
             "30 7 * * *") rota=sincronizar-estoque ;;
             "0 9 * * *") rota=gerar-relatorios ;;
             "30 9 * * *") rota=verificar-alertas ;;
