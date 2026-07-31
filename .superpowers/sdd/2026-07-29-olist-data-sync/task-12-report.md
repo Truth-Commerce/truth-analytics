@@ -163,3 +163,21 @@ git diff --check
 ```
 
 Saída: o arquivo de integração carregou sem erro, mas os 3 testes foram pulados porque `DATABASE_URL_TEST` não está disponível; typecheck e diff check passaram. O GREEN PostgreSQL dos dois casos deve ser confirmado pela CI com banco configurado.
+
+## Fix round 5 — expectativa E2E alinhada à copy neutra de ERP
+
+Base: `25fb7cc test(cron): completar fixtures do scheduler de relatórios`.
+
+A CI `30640774158` passou migrations, lint, typecheck, `test:ci`, build e 25/26 cenários E2E. A única falha foi o cenário de gating do dashboard, que ainda esperava `Conecte o Bling em Conexões.` após a neutralização da UI. O dashboard renderiza canonicamente `Conecte seu ERP em Conexões.` quando não existe ERP ativo.
+
+A correção ficou restrita a `tests/e2e/dashboard.spec.ts`: nome e comentários do cenário agora descrevem ERP, e a asserção usa a copy exata da UI. Nenhum arquivo de produção foi alterado.
+
+Verificação focal tentada:
+
+```powershell
+npx playwright test tests/e2e/dashboard.spec.ts --grep "gating: cliente sem ERP"
+```
+
+O Playwright foi bloqueado na carga da configuração, antes de executar testes, porque `DATABASE_URL_TEST` está ausente. O GREEN real desse único cenário permanece como gate da CI com banco de teste configurado.
+
+`npm run typecheck` e `git diff --check` passaram localmente.
