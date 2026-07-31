@@ -60,3 +60,42 @@ Saída: 4 arquivos/17 testes passaram; 3 arquivos/8 testes de integração foram
 
 - As novas asserções falham se o cron voltar a usar a lista Bling, perder o `limit`, deixar de isolar a falha ou expor o fingerprint; falham se scheduler/onboarding/códigos voltarem aos campos Bling-only.
 - Concern de processo: o primeiro RED continha duas falhas de setup, corrigidas imediatamente; as demais falhas observadas foram as de comportamento esperado. O banco de teste não estava configurado, então integrações e E2E exigem repetição com `DATABASE_URL_TEST` antes de deploy.
+
+## Fix round 1 — política de rollout Olist
+
+O commit base real desta rodada foi `ced8330 feat(erp): operar pedidos e relatórios pelo provider ativo` (o identificador `5651667` acima foi o hash anterior ao amend que incluiu este relatório).
+
+### RED
+
+Adicionado em `tests/unit/sincronizar-pedidos-route.test.ts` o cenário de comportamento: uma lista contendo Olist e Bling, com `OLIST_DATA_SYNC_ENABLED=false`, deve devolver/contabilizar somente Bling e executar apenas esse sync. O teste executa a rota real e observa a resposta/efeito do loop; a lista de fontes é o único boundary dobrado.
+
+Comando:
+
+```powershell
+npm test -- tests/unit/sincronizar-pedidos-route.test.ts tests/unit/report-errors.test.ts
+```
+
+Saída RED: falhou como esperado, com `orgs: 2` e `sincronizadas: 2` quando o esperado era `1`; `erp_sem_pedidos` também caía no fallback genérico.
+
+### GREEN
+
+- `isActiveErpSourceAllowed` aplica exatamente o switch e a allowlist a Olist, preservando Bling.
+- As três consultas de `active-provider.repository` aplicam a política no SQL e antes do retorno, protegendo dashboard e action que resolvem a fonte ativa.
+- Scheduler filtra a mesma política antes de devolver candidatos; cron reaplica o filtro imediatamente antes de enfileirar.
+- `bling_sem_pedidos` foi migrado para `erp_sem_pedidos`; a copy de provider legado não é exposta ao cliente.
+- Comentários do cron agora descrevem frequência de 15 minutos/próxima execução.
+
+Comandos GREEN:
+
+```powershell
+npm test -- tests/unit/sincronizar-pedidos-route.test.ts tests/unit/report-errors.test.ts
+npm test -- tests/unit/sincronizar-pedidos-route.test.ts tests/integration/scheduler-backoff.test.ts tests/unit/scheduler-service.test.ts tests/integration/dashboard-data.test.ts tests/unit/onboarding-model.test.ts tests/unit/report-errors.test.ts tests/integration/cron-gerar-relatorios.test.ts
+npm run typecheck
+git diff --check
+```
+
+Saída: 8/8 testes focados passaram; suite ampliada com 18 testes passou e 8 integrações foram puladas por `DATABASE_URL_TEST` ausente; typecheck e diff check passaram.
+
+### Gate externo
+
+PostgreSQL/integration e E2E reais continuam pendentes exclusivamente porque `DATABASE_URL_TEST` não está disponível no worktree. Não foram simulados; o controller deve executar `db:migrate:test`, integrações e E2E na CI com essa variável configurada.

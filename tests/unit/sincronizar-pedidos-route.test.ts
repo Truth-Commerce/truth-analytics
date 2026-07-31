@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const env = vi.hoisted(() => ({
+  CRON_SECRET: 'cron-wiring-teste-16+++',
+  OLIST_DATA_SYNC_ENABLED: false,
+  OLIST_DATA_SYNC_ORG_IDS: [] as string[],
+}));
+
 /**
  * Wiring do cron /api/cron/sincronizar-pedidos (unit, tudo mockado):
  * Passo 1 (renovação proativa) roda ANTES do Passo 2 (sync) e os contadores
@@ -7,14 +13,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 vi.mock('@/lib/env', () => ({
-  serverEnv: { CRON_SECRET: 'cron-wiring-teste-16+++' },
+  serverEnv: env,
 }));
 
 vi.mock('@/modules/connections/connection.repository', () => ({
   listConnectionsExpirando: vi.fn(),
 }));
 
-vi.mock('@/modules/connections/active-provider.repository', () => ({
+vi.mock('@/modules/connections/active-provider.repository', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/connections/active-provider.repository')>()),
   listActiveErpConnections: vi.fn(),
 }));
 
@@ -40,6 +47,8 @@ function req(auth?: string): Request {
 describe('cron sincronizar-pedidos — wiring do Passo 1 (renovação) + Passo 2 (sync)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    env.OLIST_DATA_SYNC_ENABLED = false;
+    env.OLIST_DATA_SYNC_ORG_IDS = [];
   });
 
   it('renovação roda ANTES do sync e contadores renovadas/expiradas/transientes corretos', async () => {
@@ -47,6 +56,8 @@ describe('cron sincronizar-pedidos — wiring do Passo 1 (renovação) + Passo 2
     const repo = await import('@/modules/connections/connection.repository');
     const renewal = await import('@/modules/connections/token-renewal');
     const sync = await import('@/modules/pipeline/sync-pedidos');
+    env.OLIST_DATA_SYNC_ENABLED = true;
+    env.OLIST_DATA_SYNC_ORG_IDS = ['org-a'];
 
     vi.mocked(repo.listConnectionsExpirando).mockResolvedValue(['org-a', 'org-b', 'org-c']);
     vi.mocked(active.listActiveErpConnections).mockResolvedValue([
@@ -118,6 +129,8 @@ describe('cron sincronizar-pedidos — wiring do Passo 1 (renovação) + Passo 2
     const active = await import('@/modules/connections/active-provider.repository');
     const repo = await import('@/modules/connections/connection.repository');
     const sync = await import('@/modules/pipeline/sync-pedidos');
+    env.OLIST_DATA_SYNC_ENABLED = true;
+    env.OLIST_DATA_SYNC_ORG_IDS = ['org-olist'];
     vi.mocked(repo.listConnectionsExpirando).mockResolvedValue([]);
     vi.mocked(active.listActiveErpConnections).mockResolvedValue([
       { orgId: 'org-olist', provider: 'olist', sourceGeneration: 2, accountFingerprint: 'fingerprint', lastSyncAt: null },
@@ -134,5 +147,28 @@ describe('cron sincronizar-pedidos — wiring do Passo 1 (renovação) + Passo 2
       olist: { orgs: 1, sincronizadas: 0, falhas: 1 }, bling: { orgs: 1, sincronizadas: 1, falhas: 0 },
     } });
     expect(JSON.stringify(json)).not.toContain('fingerprint');
+  });
+
+  it('com kill switch Olist desligado, processa Bling e nunca enfileira Olist', async () => {
+    const active = await import('@/modules/connections/active-provider.repository');
+    const repo = await import('@/modules/connections/connection.repository');
+    const sync = await import('@/modules/pipeline/sync-pedidos');
+    vi.mocked(repo.listConnectionsExpirando).mockResolvedValue([]);
+    vi.mocked(active.listActiveErpConnections).mockResolvedValue([
+      { orgId: 'org-olist', provider: 'olist', sourceGeneration: 2, accountFingerprint: 'fingerprint', lastSyncAt: null },
+      { orgId: 'org-bling', provider: 'bling', sourceGeneration: 1, accountFingerprint: null, lastSyncAt: null },
+    ]);
+    vi.mocked(sync.sincronizarPedidosDaOrg).mockResolvedValue({
+      processados: 1, total: 1, enriquecimento: { enriquecidos: 0, falhas: 0, quarentenados: 0, restantes: 0, incompleto: false },
+    });
+
+    const { GET } = await import('@/app/api/cron/sincronizar-pedidos/route');
+    const json = await (await GET(req('Bearer cron-wiring-teste-16+++'))).json();
+
+    expect(json).toMatchObject({ orgs: 1, sincronizadas: 1, falhas: 0, porProvider: { bling: { orgs: 1, sincronizadas: 1, falhas: 0 } } });
+    expect(sync.sincronizarPedidosDaOrg).toHaveBeenCalledTimes(1);
+    expect(sync.sincronizarPedidosDaOrg).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org-bling', provider: 'bling' }), expect.any(Date),
+    );
   });
 });

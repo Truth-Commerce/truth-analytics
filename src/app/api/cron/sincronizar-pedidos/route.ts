@@ -4,7 +4,7 @@ import { secretsMatch } from '@/lib/secret-compare';
 import {
   listConnectionsExpirando,
 } from '@/modules/connections/connection.repository';
-import { listActiveErpConnections } from '@/modules/connections/active-provider.repository';
+import { isActiveErpSourceAllowed, listActiveErpConnections } from '@/modules/connections/active-provider.repository';
 import {
   MARGEM_RENOVACAO_MS,
   renovarConexaoDaOrg,
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 /**
- * Cron diário (7h UTC — Vercel manda `Authorization: Bearer CRON_SECRET`).
+ * Cron a cada 15 minutos (GitHub Actions manda `Authorization: Bearer CRON_SECRET`).
  * Passo 1: renova tokens expirando em <24h; Passo 2: sync incremental —
  * sincroniza os pedidos dos últimos 2 dias de cada ERP ativo,
  * mantendo `orders` vivo entre relatórios (meta mensal, alertas e "vendas de
@@ -41,7 +41,7 @@ export async function GET(req: Request): Promise<Response> {
   // para que conexões renovadas sincronizem e as que viraram 'expirado' saiam
   // da lista. Falha em UMA conexão não aborta o lote. Falha transitória
   // (Bling fora do ar/rate limit) NÃO conta como expirada: a conexão continua
-  // 'ok' e será re-tentada no próximo cron.
+  // 'ok' e será re-tentada na próxima execução.
   let renovadas = 0;
   let expiradas = 0;
   let transientes = 0;
@@ -54,7 +54,7 @@ export async function GET(req: Request): Promise<Response> {
       logger.info('cron.sincronizar_pedidos.token', { orgId, resultado });
     } catch (err) {
       // Erro inesperado: status/notificação NÃO aconteceram — trata como
-      // transiente (re-tenta amanhã), nunca como expirada.
+      // transiente (re-tenta na próxima execução), nunca como expirada.
       transientes++;
       logger.error('cron.sincronizar_pedidos.token_erro', {
         orgId,
@@ -63,7 +63,7 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  const sources = await listActiveErpConnections({ limit: LOTE_MAXIMO_SYNC });
+  const sources = (await listActiveErpConnections({ limit: LOTE_MAXIMO_SYNC })).filter(isActiveErpSourceAllowed);
   let sincronizadas = 0;
   let falhas = 0;
   let enriquecidos = 0;
