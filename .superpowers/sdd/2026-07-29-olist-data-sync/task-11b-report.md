@@ -17,6 +17,13 @@
 - Replaced GREEN commit: `5993b1c` was rejected by CI `30580802350` because
   the automatic-only fixture incorrectly changed explicit `null` to Bling.
 - Previous rejected GREEN: `76fbbd3`; CI `30579947799`.
+- Rewritten implementation commit: `ae4bc33` (`feat(olist): ativar ERP com transação atômica`).
+- Hardening/final GREEN commit: `72cbddc` (`fix(olist): mapear conflito PostgreSQL e endurecer testes de ativacao`).
+- Failed pre-hardening CI: `30620561268` — 1,683 tests passed and the only failure
+  proved that PostgreSQL serialization errors arrived wrapped by the driver instead
+  of being published as the stable `erp_ativo_alterado` domain error.
+- Final GREEN CI: `30621419570` — dependency audit, test migrations, lint,
+  typecheck, 1,684 PostgreSQL/unit tests, production build and Playwright E2E all passed.
 
 ## Local evidence
 
@@ -27,5 +34,6 @@
 
 ## Caveats
 
-- The final commit SHA and full green CI run are appended after the pushed workflow
-  finishes; no merge is performed by this task.
+- The workflow still reports pre-existing non-blocking lint warnings and GitHub's
+  Node 20 action deprecation notice; neither originates in Task 11B.
+- Task 11B intentionally stops before actions/UI/orchestration and does not merge the PR.
