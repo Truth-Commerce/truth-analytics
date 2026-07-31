@@ -93,3 +93,15 @@ sob o `search_path` do schema descartável, então o UUID existia na tabela erra
 O fixture agora cria a organização válida em `public.organizations` antes do
 estoque e a remove no `finally`, depois de descartar o schema isolado. Nenhum
 arquivo de produção foi alterado.
+
+## Fix round 3 — remover cada identidade legada pelo tipo correto
+
+A CI `30643639955` avançou além do fixture de organização e materializou o RED
+seguinte: 266 arquivos/1717 testes passaram; o único failure foi tentar executar
+`DROP CONSTRAINT product_stock_org_provider_sku_uq`.
+
+A identidade `product_stock_org_sku_uq` nasceu como constraint na migration
+`0012`, enquanto `product_stock_org_provider_sku_uq` nasceu com `CREATE UNIQUE
+INDEX` na `0020`. O teste agora remove a primeira com `ALTER TABLE ... DROP
+CONSTRAINT` e a segunda com `DROP INDEX`, qualificando explicitamente o schema
+descartável em ambas as operações. Produção permanece inalterada.

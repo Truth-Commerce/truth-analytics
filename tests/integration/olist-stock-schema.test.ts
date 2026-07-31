@@ -168,10 +168,11 @@ describe.skipIf(!url)('product_stock Olist expand — integração', () => {
       expect(hasPostgresErrorCode(rollingCompatibilityError, '23505')).toBe(true);
 
       await isolatedSql.unsafe(
-        `ALTER TABLE "product_stock" DROP CONSTRAINT "product_stock_org_sku_uq"`,
+        `ALTER TABLE "${schema}"."product_stock"
+         DROP CONSTRAINT "product_stock_org_sku_uq"`,
       );
       await isolatedSql.unsafe(
-        `ALTER TABLE "product_stock" DROP CONSTRAINT "product_stock_org_provider_sku_uq"`,
+        `DROP INDEX "${schema}"."product_stock_org_provider_sku_uq"`,
       );
       await isolatedSql.unsafe(
         `INSERT INTO "product_stock"
