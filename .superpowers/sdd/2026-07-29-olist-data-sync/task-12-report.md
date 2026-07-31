@@ -131,3 +131,17 @@ git diff --check
 ```
 
 Saída local: 6 testes unitários passaram; 7 testes de integração foram pulados por ausência de `DATABASE_URL_TEST`; typecheck e diff check passaram. A repetição das integrações reais é gate da CI, sem fixtures mascaradas.
+
+## Fix round 3 — filtro SQL antes do limite operacional
+
+Base: `4a05d13 fix(erp): limitar rollout Olist ao cron de pedidos`.
+
+Mesmo com `podeSincronizarPedidos` no cron, `listActiveErpConnections({ limit })` aplicava `LIMIT` antes do filtro em memória. Assim, 50 Olist bloqueados podiam ocupar o lote e impedir que Bling posterior fosse retornado. O único call site de `listActiveErpConnections` é o cron de pedidos; os resolvers centrais de leitura são `getActiveErpConnection` e `getActiveErpConnectionsForOrgIds` e não receberam este filtro.
+
+Foi adicionado em `tests/integration/active-provider-read-isolation.test.ts` um teste PostgreSQL que semeia 50 organizações Olist `ok` bloqueadas antes de uma Bling `ok`. Com o flag desligado, o resultado limitado deve conter Bling e nenhum dos Olist bloqueados. Com o flag ligado e uma única organização allowlisted, deve conter Bling e exatamente aquela Olist. O mesmo arquivo mantém o cutover que prova que o reader central continua servindo Olist ativo.
+
+O teste foi criado antes da alteração SQL. Sem `DATABASE_URL_TEST`, a execução local não pode materializar o RED/green no PostgreSQL; o RED conceitual é que a consulta anterior retornaria as 50 Olist inseridas antes de Bling, e a CI deve executar a prova real.
+
+`operationalOrdersProviderPolicy` agora está restrita a `listActiveErpConnections`, aplica `OLIST_DATA_SYNC_ENABLED` + allowlist na cláusula SQL antes de `.limit(limit)`, e preserva a defesa em memória no cron. Leituras centrais e scheduler não foram alterados.
+
+GREEN local: `npm test -- tests/unit/sincronizar-pedidos-route.test.ts tests/integration/active-provider-read-isolation.test.ts`, `npm run typecheck` e `git diff --check`. Saída: 4 testes unitários passaram; 2 integrações foram puladas somente por `DATABASE_URL_TEST` ausente; typecheck e diff check passaram. O gate PostgreSQL real permanece para CI, sem simulação ou alteração de fixtures para ocultar a regressão.
