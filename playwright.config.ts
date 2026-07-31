@@ -27,6 +27,10 @@ export default defineConfig({
       POSTGRES_URL_DIRECT: testDbDirect,
       AUTH_SECRET: process.env.AUTH_SECRET as string,
       APP_URL: 'http://localhost:3100',
+      // Deterministic, test-only rollout target used by olist-activation.spec.
+      // Production/default env remains disabled with an empty allowlist.
+      OLIST_DATA_SYNC_ENABLED: 'true',
+      OLIST_DATA_SYNC_ORG_IDS: '00000000-0000-4000-8000-000000000011',
     },
   },
 });

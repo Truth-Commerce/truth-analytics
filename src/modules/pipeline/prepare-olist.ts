@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
+import { serverEnv } from '@/lib/env';
+import { activateErp } from '@/modules/connections/erp-activation.repository';
 import { getOlistAccountFingerprint } from '@/modules/connections/provider-connection.repository';
 import { acquireSyncLease, completeSyncLease, failSyncLease, getSyncLeaseRemainingMs, parsePreparationCursor, renewSyncLease, savePreparationCursor, yieldSyncLease, type PreparationCursor, type PreparationPhase, type SyncLease } from '@/modules/connections/sync-state.repository';
 import { enrichOrders } from '@/modules/pipeline/steps/enrich-orders';
@@ -109,7 +111,7 @@ async function fetchPhase(source: ErpDataSource, lease: SyncLease, cursor: Prepa
 }
 
 /** Shadow-only Olist bootstrap. It never changes connection status or invokes normal cron/report flows. */
-export async function prepareOlistOrders(source: ErpDataSource, options: PrepareOlistOptions = {}): Promise<PreparationResult> {
+async function prepareOlistOrdersCore(source: ErpDataSource, options: PrepareOlistOptions = {}): Promise<PreparationResult> {
   if (source.provider !== 'olist') throw new Error('prepare_olist_provider_required');
   for (const value of [options.maxOrders, options.maxDetails]) if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > INITIAL_CAP)) throw new Error('prepare_olist_limit_invalid');
   const clock = rows<{ now: Date | string }>(await db.execute(sql`SELECT clock_timestamp() AS now`))[0]; if (!clock) throw new Error('prepare_database_clock_unavailable');
@@ -165,6 +167,81 @@ export async function prepareOlistOrders(source: ErpDataSource, options: Prepare
     const stale = error instanceof Error && error.message === 'prepare_source_stale'; await failSyncLease({ ...active, errorCode: stale ? 'source_stale' : (error instanceof Error ? error.message.slice(0, 64) : 'prepare_failed') });
     return { stage: stale ? 'stale' : 'blocked', ready: false, blocked: !stale, stale, window, reason: stale ? 'source_stale' : 'prepare_failed' };
   }
+}
+
+async function attemptAutomaticActivation(source: ErpDataSource): Promise<void> {
+  if (!serverEnv.OLIST_DATA_SYNC_ENABLED || !serverEnv.OLIST_DATA_SYNC_ORG_IDS.includes(source.orgId)) return;
+  try {
+    await activateErp({ orgId: source.orgId, target: 'olist', actorUserId: null, mode: 'automatic' });
+  } catch {
+    // Readiness was already published and the preparation lease was completed.
+    // Activation is best-effort: an active Bling ERP, a concurrent switch, or a
+    // transient database failure must never roll the canonical cursor backward.
+  }
+}
+
+type ReadyActivationCandidate = {
+  orgId: string;
+  sourceGeneration: number;
+  accountFingerprint: string;
+  cursor: unknown;
+};
+
+/**
+ * Retries automatic activation for generations whose canonical cursor was
+ * already published by an earlier cron invocation. Ready rows intentionally
+ * leave the normal preparation queue, so they need this bounded recovery pass.
+ */
+export async function attemptReadyOlistActivations(input: { orgIds: string[]; limit: number }): Promise<void> {
+  if (!serverEnv.OLIST_DATA_SYNC_ENABLED || input.limit < 1) return;
+  const allowedOrgIds = input.orgIds.filter((orgId) => serverEnv.OLIST_DATA_SYNC_ORG_IDS.includes(orgId));
+  if (!allowedOrgIds.length) return;
+  const limit = Math.min(Math.trunc(input.limit), 10);
+  const candidates = rows<ReadyActivationCandidate>(await db.execute(sql`
+    SELECT
+      connection.org_id AS "orgId",
+      connection.data_generation AS "sourceGeneration",
+      connection.provider_account_fingerprint AS "accountFingerprint",
+      state.cursor
+    FROM connections connection
+    INNER JOIN organizations organization ON organization.id = connection.org_id
+    INNER JOIN connection_sync_state state
+      ON state.org_id = connection.org_id
+      AND state.provider = 'olist'
+      AND state.source_generation = connection.data_generation
+      AND state.account_fingerprint = connection.provider_account_fingerprint
+      AND state.resource = 'orders_prepare'
+    WHERE connection.provider = 'olist'
+      AND connection.status = 'configurado'
+      AND connection.org_id = ANY(${allowedOrgIds}::uuid[])
+      AND connection.access_token IS NOT NULL
+      AND connection.refresh_token IS NOT NULL
+      AND connection.provider_account_fingerprint IS NOT NULL
+      AND organization.status = 'active'
+      AND state.cursor->>'stage' = 'ready'
+      AND (state.lease_token IS NULL OR state.lease_expires_at <= clock_timestamp())
+      AND NOT EXISTS (
+        SELECT 1 FROM connections active
+        WHERE active.org_id = connection.org_id AND active.status = 'ok'
+      )
+    ORDER BY state.updated_at ASC
+    LIMIT ${limit}
+  `));
+  for (const candidate of candidates) {
+    const cursor = parsePreparationCursor(candidate.cursor, candidate.sourceGeneration, candidate.accountFingerprint);
+    if (cursor?.stage !== 'ready') continue;
+    await attemptAutomaticActivation({
+      orgId: candidate.orgId,
+      provider: 'olist',
+      sourceGeneration: candidate.sourceGeneration,
+    });
+  }
+}
+
+export async function prepareOlistOrders(source: ErpDataSource, options: PrepareOlistOptions = {}): Promise<PreparationResult> {
+  const result = await prepareOlistOrdersCore(source, options);
+  if (result.ready) await attemptAutomaticActivation(source);
+  return result;
 }
 
 /** Narrow integration seam; not part of the production pipeline API. */

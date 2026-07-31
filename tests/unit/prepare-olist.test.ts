@@ -2,7 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const execute = vi.fn();
-  return { execute, transaction: vi.fn(async (work: (tx: { execute: typeof execute }) => Promise<unknown>) => work({ execute })), acquire: vi.fn(), save: vi.fn(), yieldLease: vi.fn(), complete: vi.fn(), fail: vi.fn(), fetchOrders: vi.fn(), parse: vi.fn<() => unknown>(() => null) };
+  return {
+    execute,
+    transaction: vi.fn(async (work: (tx: { execute: typeof execute }) => Promise<unknown>) => work({ execute })),
+    acquire: vi.fn(),
+    save: vi.fn(),
+    yieldLease: vi.fn(),
+    complete: vi.fn(),
+    fail: vi.fn(),
+    fetchOrders: vi.fn(),
+    parse: vi.fn<() => unknown>(() => null),
+    activate: vi.fn(),
+    env: { OLIST_DATA_SYNC_ENABLED: true, OLIST_DATA_SYNC_ORG_IDS: ['org'] as string[] },
+  };
 });
 const { execute, transaction, acquire, save, yieldLease, complete, fail, fetchOrders } = mocks;
 vi.mock('@/db/client', () => ({ db: { execute: mocks.execute, transaction: mocks.transaction } }));
@@ -11,8 +23,10 @@ vi.mock('@/modules/connections/sync-state.repository', () => ({ acquireSyncLease
 vi.mock('@/modules/providers/registry', () => ({ getErpDataProvider: () => ({ fetchOrders: mocks.fetchOrders }) }));
 vi.mock('@/modules/pipeline/steps/enrich-orders', () => ({ enrichOrders: vi.fn() }));
 vi.mock('@/modules/pipeline/order-reconciliation', () => ({ reconcileOrderReadiness: vi.fn() }));
+vi.mock('@/modules/connections/erp-activation.repository', () => ({ activateErp: mocks.activate }));
+vi.mock('@/lib/env', () => ({ serverEnv: mocks.env }));
 
-import { applyVerificationResult, preparationWindow } from '@/modules/pipeline/prepare-olist';
+import { applyVerificationResult, attemptReadyOlistActivations, preparationWindow } from '@/modules/pipeline/prepare-olist';
 
 describe('Olist shadow preparation window', () => {
   const verificationCursor = () => ({ version: 1 as const, stage: 'verify2' as const, sourceGeneration: 1, accountFingerprint: 'a'.repeat(64), window: { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' }, catchUpFrom: '2026-01-02T01:00:00.000Z', snapshot: { done: true }, catchup: { done: true, completedAt: '2026-01-02T01:00:00.000Z' }, verify1: { done: true as const, expectedCount: 1, checksum: 'a'.repeat(32), dailyChecksum: 'b'.repeat(32), channelChecksum: 'c'.repeat(32) }, verify2: null, progress: null });
@@ -25,6 +39,9 @@ describe('Olist shadow preparation window', () => {
     execute.mockResolvedValue([{ now: '2026-07-30T19:42:10.123Z' }]);
     acquire.mockResolvedValue({ orgId: 'org', provider: 'olist', sourceGeneration: 1, accountFingerprint: 'a'.repeat(64), resource: 'orders_prepare', token: 'lease', fencingVersion: 1n, expiresAt: new Date(Date.now() + 60_000), cursor: null });
     save.mockResolvedValue(true); yieldLease.mockResolvedValue(true); complete.mockResolvedValue(true); fail.mockResolvedValue(true);
+    mocks.activate.mockResolvedValue({ previous: null, active: 'olist', mode: 'automatic' });
+    mocks.env.OLIST_DATA_SYNC_ENABLED = true;
+    mocks.env.OLIST_DATA_SYNC_ORG_IDS = ['org'];
   });
   it('uses a UTC half-open 90-day window and preserves the DB watermark', () => {
     expect(preparationWindow('2026-07-30T19:42:10.123Z')).toEqual({
@@ -47,6 +64,7 @@ describe('Olist shadow preparation window', () => {
     expect(fetchOrders).toHaveBeenCalledTimes(1);
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(yieldLease).toHaveBeenCalledTimes(1);
+    expect(mocks.activate).not.toHaveBeenCalled();
   });
 
   it.each([0, -1, 1001, 1.5])('rejects invalid bounded capacity %s before I/O', async (limit) => {
@@ -121,5 +139,78 @@ describe('Olist shadow preparation window', () => {
     const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
     await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'ready', ready: true });
     expect(complete).toHaveBeenCalled();
+    expect(mocks.activate).toHaveBeenCalledWith({ orgId: 'org', target: 'olist', actorUserId: null, mode: 'automatic' });
+  });
+
+  it('keeps the published ready cursor when active Bling rejects automatic replacement', async () => {
+    mocks.parse.mockReturnValue(readyCursor());
+    const reconciliation = await import('@/modules/pipeline/order-reconciliation');
+    vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: true, reasons: [], expectedCount: 1, actualCount: 1, pendingDetails: 0, quarantined: 0 });
+    execute.mockResolvedValueOnce([{ now: '2026-07-30T19:42:10.123Z' }]).mockResolvedValue([{ id: 'published' }]);
+    mocks.activate.mockRejectedValueOnce(new Error('erp_ativo_alterado'));
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'ready', ready: true });
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it('keeps the published ready cursor when automatic activation fails unexpectedly', async () => {
+    mocks.parse.mockReturnValue(readyCursor());
+    const reconciliation = await import('@/modules/pipeline/order-reconciliation');
+    vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: true, reasons: [], expectedCount: 1, actualCount: 1, pendingDetails: 0, quarantined: 0 });
+    execute.mockResolvedValueOnce([{ now: '2026-07-30T19:42:10.123Z' }]).mockResolvedValue([{ id: 'published' }]);
+    mocks.activate.mockRejectedValueOnce(new Error('database_unavailable'));
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'ready', ready: true });
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { enabled: false, orgIds: ['org'] },
+    { enabled: true, orgIds: ['another-org'] },
+  ])('does not attempt automatic activation outside rollout: $enabled/$orgIds', async ({ enabled, orgIds }) => {
+    mocks.parse.mockReturnValue(readyCursor());
+    const reconciliation = await import('@/modules/pipeline/order-reconciliation');
+    vi.mocked(reconciliation.reconcileOrderReadiness).mockResolvedValueOnce({ ready: true, reasons: [], expectedCount: 1, actualCount: 1, pendingDetails: 0, quarantined: 0 });
+    execute.mockResolvedValueOnce([{ now: '2026-07-30T19:42:10.123Z' }]).mockResolvedValue([{ id: 'published' }]);
+    mocks.env.OLIST_DATA_SYNC_ENABLED = enabled;
+    mocks.env.OLIST_DATA_SYNC_ORG_IDS = orgIds;
+    const { prepareOlistOrders } = await import('@/modules/pipeline/prepare-olist');
+
+    await expect(prepareOlistOrders({ orgId: 'org', provider: 'olist', sourceGeneration: 1 })).resolves.toMatchObject({ stage: 'ready', ready: true });
+
+    expect(mocks.activate).not.toHaveBeenCalled();
+  });
+
+  it('attempts activation for a canonical ready row that left the preparation candidate list', async () => {
+    execute.mockResolvedValueOnce([{
+      orgId: 'org',
+      sourceGeneration: 1,
+      accountFingerprint: 'a'.repeat(64),
+      cursor: readyCursor(),
+    }]);
+
+    await attemptReadyOlistActivations({ orgIds: ['org'], limit: 3 });
+
+    expect(mocks.activate).toHaveBeenCalledWith({ orgId: 'org', target: 'olist', actorUserId: null, mode: 'automatic' });
+  });
+
+  it('isolates an automatic activation conflict so another ready organization is attempted', async () => {
+    execute.mockResolvedValueOnce([
+      { orgId: 'org', sourceGeneration: 1, accountFingerprint: 'a'.repeat(64), cursor: readyCursor() },
+      { orgId: 'org-2', sourceGeneration: 1, accountFingerprint: 'b'.repeat(64), cursor: { ...readyCursor(), accountFingerprint: 'b'.repeat(64) } },
+    ]);
+    mocks.env.OLIST_DATA_SYNC_ORG_IDS = ['org', 'org-2'];
+    mocks.activate.mockRejectedValueOnce(new Error('erp_ativo_alterado'));
+
+    await attemptReadyOlistActivations({ orgIds: ['org', 'org-2'], limit: 3 });
+
+    expect(mocks.activate).toHaveBeenCalledTimes(2);
+    expect(mocks.activate).toHaveBeenLastCalledWith({ orgId: 'org-2', target: 'olist', actorUserId: null, mode: 'automatic' });
   });
 });

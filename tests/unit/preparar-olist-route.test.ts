@@ -8,11 +8,12 @@ const env = {
 const candidates = vi.fn();
 const heartbeat = vi.fn();
 const prepare = vi.fn();
+const activateReady = vi.fn();
 
 vi.mock('@/lib/env', () => ({ serverEnv: env }));
 vi.mock('@/modules/connections/provider-connection.repository', () => ({ listOlistConnectionsPendingPreparation: candidates }));
 vi.mock('@/modules/admin/heartbeat.repository', () => ({ registrarHeartbeat: heartbeat }));
-vi.mock('@/modules/pipeline/prepare-olist', () => ({ prepareOlistOrders: prepare }));
+vi.mock('@/modules/pipeline/prepare-olist', () => ({ prepareOlistOrders: prepare, attemptReadyOlistActivations: activateReady }));
 vi.mock('@/lib/secret-compare', () => ({ secretsMatch: (a: string | null, b: string) => a === b }));
 
 const authorization = { authorization: 'Bearer cron-secret-123456' };
@@ -26,6 +27,7 @@ describe('cron preparar-olist', () => {
     env.OLIST_DATA_SYNC_ORG_IDS = [];
     candidates.mockReset();
     prepare.mockReset();
+    activateReady.mockReset().mockResolvedValue(undefined);
     heartbeat.mockReset();
   });
 
@@ -71,6 +73,20 @@ describe('cron preparar-olist', () => {
     expect(await response.json()).toEqual({ orgs: 3, ready: 3, pending: 0, blocked: 0, stale: 0, failed: 0 });
     expect(candidates).toHaveBeenCalledWith({ orgIds: env.OLIST_DATA_SYNC_ORG_IDS, limit: 3 });
     expect(prepare).toHaveBeenCalledTimes(3);
+    expect(activateReady).toHaveBeenCalledWith({ orgIds: env.OLIST_DATA_SYNC_ORG_IDS, limit: 3 });
+  });
+
+  it('retries already-ready generations even when the preparation queue is empty', async () => {
+    env.OLIST_DATA_SYNC_ENABLED = true;
+    env.OLIST_DATA_SYNC_ORG_IDS = ['00000000-0000-4000-8000-000000000001'];
+    candidates.mockResolvedValue([]);
+    const { GET } = await import('@/app/api/cron/preparar-olist/route');
+
+    const response = await GET(request());
+
+    expect((await response.json()).orgs).toBe(0);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(activateReady).toHaveBeenCalledWith({ orgIds: env.OLIST_DATA_SYNC_ORG_IDS, limit: 3 });
   });
 
   it('prepares sources serially and shares a deadline capped at 235 seconds', async () => {
