@@ -99,3 +99,35 @@ Saída: 8/8 testes focados passaram; suite ampliada com 18 testes passou e 8 int
 ### Gate externo
 
 PostgreSQL/integration e E2E reais continuam pendentes exclusivamente porque `DATABASE_URL_TEST` não está disponível no worktree. Não foram simulados; o controller deve executar `db:migrate:test`, integrações e E2E na CI com essa variável configurada.
+
+## Fix round 2 — rollout apenas no cron operacional
+
+Base: `e4679e9 fix(erp): respeitar rollout Olist nas fontes ativas`.
+
+### Causa confirmada
+
+A política adicionada no round 1 a `getActiveErpConnection`, `listActiveErpConnections` e `getActiveErpConnectionsForOrgIds` convertia uma conexão Olist já `ok` em ausência de fonte quando o flag tinha o default `false`. Isso quebrou o isolamento de leitura após cutover e consumidores de carteira/dashboard/action. A CI `30639505144` reproduziu o problema em `active-provider-read-isolation`, `scheduler-backoff` e `cron-gerar-relatorios`.
+
+O contrato correto é: o flag/allowlist bloqueia novas execuções operacionais Olist no cron de pedidos (e o preparar-olist já tem seu próprio guard), mas nunca oculta uma fonte já ativa das leituras, scheduler de relatórios ou action. Assim o incident flag-off preserva e serve datasets existentes.
+
+### RED
+
+Evidência RED foi a CI `30639505144`: oito testes em cinco arquivos falharam no commit base. Em particular, o teste de integração de isolamento faz cutover para uma conexão Olist `ok` sob o default do flag e recebeu `null` do resolver central. O teste de cron que já existia continua cobrindo, no boundary real da rota, Olist ignorado + Bling processado com switch desligado.
+
+O teste estático legado `cron-bling-only` que exigia o literal `provider: 'bling'` foi removido; esse contrato é agora coberto pela rota executada, não por texto-fonte.
+
+### GREEN
+
+- Removida a política de rollout dos três resolvers centrais e do scheduler.
+- `podeSincronizarPedidos` fica local ao cron `sincronizar-pedidos`, aplicando switch e allowlist imediatamente antes do enqueue; Bling sempre passa.
+- Mantidos os testes de comportamento da rota para switch false e para Olist autorizado.
+
+Comando:
+
+```powershell
+npm test -- tests/unit/sincronizar-pedidos-route.test.ts tests/unit/cron-bling-only.test.ts tests/integration/active-provider-read-isolation.test.ts tests/integration/scheduler-backoff.test.ts tests/integration/cron-gerar-relatorios.test.ts
+npm run typecheck
+git diff --check
+```
+
+Saída local: 6 testes unitários passaram; 7 testes de integração foram pulados por ausência de `DATABASE_URL_TEST`; typecheck e diff check passaram. A repetição das integrações reais é gate da CI, sem fixtures mascaradas.

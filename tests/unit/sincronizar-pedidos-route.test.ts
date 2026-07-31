@@ -20,8 +20,7 @@ vi.mock('@/modules/connections/connection.repository', () => ({
   listConnectionsExpirando: vi.fn(),
 }));
 
-vi.mock('@/modules/connections/active-provider.repository', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/modules/connections/active-provider.repository')>()),
+vi.mock('@/modules/connections/active-provider.repository', () => ({
   listActiveErpConnections: vi.fn(),
 }));
 

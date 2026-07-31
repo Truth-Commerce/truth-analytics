@@ -1,8 +1,7 @@
-import { and, eq, inArray, isNotNull, ne, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { connections, organizations } from '@/db/schema';
-import { serverEnv } from '@/lib/env';
 import { MAX_ACTIVE_ERP_BATCH, type ActiveErpRef } from '@/modules/orders/order-scope';
 import { isErpProviderId } from '@/modules/providers/provider-catalog';
 
@@ -16,30 +15,13 @@ function uniqueRefs(rows: readonly ActiveErpRef[]): ActiveErpRef[] {
   return rows.filter((row) => !seen.has(row.orgId) && (seen.add(row.orgId), true));
 }
 
-type ErpSourceIdentity = Pick<ActiveErpRef, 'orgId' | 'provider'>;
-
-/** Olist only becomes operational after its explicit rollout switch and org allowlist. */
-export function isActiveErpSourceAllowed(source: ErpSourceIdentity): boolean {
-  return source.provider !== 'olist'
-    || (serverEnv.OLIST_DATA_SYNC_ENABLED && serverEnv.OLIST_DATA_SYNC_ORG_IDS.includes(source.orgId));
-}
-
-function activeProviderPolicy(orgIds?: readonly string[]) {
-  const olistAllowed = serverEnv.OLIST_DATA_SYNC_ENABLED
-    ? serverEnv.OLIST_DATA_SYNC_ORG_IDS.filter((orgId) => orgIds === undefined || orgIds.includes(orgId))
-    : [];
-  return olistAllowed.length
-    ? or(ne(connections.provider, 'olist'), and(eq(connections.provider, 'olist'), inArray(connections.org_id, olistAllowed)))
-    : ne(connections.provider, 'olist');
-}
-
 export { MAX_ACTIVE_ERP_BATCH };
 
 export async function getActiveErpConnection(orgId: string): Promise<ActiveErpRef | null> {
-  const rows = await db.select({ orgId: connections.org_id, provider: connections.provider, sourceGeneration: connections.data_generation, accountFingerprint: connections.provider_account_fingerprint, lastSyncAt: connections.last_sync_at })
+  const [row] = await db.select({ orgId: connections.org_id, provider: connections.provider, sourceGeneration: connections.data_generation, accountFingerprint: connections.provider_account_fingerprint, lastSyncAt: connections.last_sync_at })
     .from(connections).innerJoin(organizations, eq(organizations.id, connections.org_id))
-    .where(and(eq(connections.org_id, orgId), eq(organizations.status, 'active'), eq(connections.status, 'ok'), isNotNull(connections.access_token), activeProviderPolicy([orgId]))).limit(2);
-  return rows.map(toRef).filter((row): row is ActiveErpRef => row !== null && isActiveErpSourceAllowed(row))[0] ?? null;
+    .where(and(eq(connections.org_id, orgId), eq(organizations.status, 'active'), eq(connections.status, 'ok'), isNotNull(connections.access_token))).limit(1);
+  return row ? toRef(row) : null;
 }
 
 export async function listActiveErpConnections(options: { limit?: number } = {}): Promise<ActiveErpRef[]> {
@@ -47,9 +29,9 @@ export async function listActiveErpConnections(options: { limit?: number } = {})
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACTIVE_ERP_BATCH) throw new Error('active_erp_batch_limit_exceeded');
   const rows = await db.select({ orgId: connections.org_id, provider: connections.provider, sourceGeneration: connections.data_generation, accountFingerprint: connections.provider_account_fingerprint, lastSyncAt: connections.last_sync_at })
     .from(connections).innerJoin(organizations, eq(organizations.id, connections.org_id))
-    .where(and(eq(organizations.status, 'active'), eq(connections.status, 'ok'), isNotNull(connections.access_token), activeProviderPolicy()))
+    .where(and(eq(organizations.status, 'active'), eq(connections.status, 'ok'), isNotNull(connections.access_token)))
     .limit(limit);
-  return uniqueRefs(rows.map(toRef).filter((row): row is ActiveErpRef => row !== null && isActiveErpSourceAllowed(row)));
+  return uniqueRefs(rows.map(toRef).filter((row): row is ActiveErpRef => row !== null));
 }
 
 export async function getActiveErpConnectionsForOrgIds(orgIds: readonly string[]): Promise<ActiveErpRef[]> {
@@ -58,7 +40,7 @@ export async function getActiveErpConnectionsForOrgIds(orgIds: readonly string[]
   if (uniqueOrgIds.length === 0) return [];
   const rows = await db.select({ orgId: connections.org_id, provider: connections.provider, sourceGeneration: connections.data_generation, accountFingerprint: connections.provider_account_fingerprint, lastSyncAt: connections.last_sync_at })
     .from(connections).innerJoin(organizations, eq(organizations.id, connections.org_id))
-    .where(and(inArray(connections.org_id, uniqueOrgIds), eq(organizations.status, 'active'), eq(connections.status, 'ok'), isNotNull(connections.access_token), activeProviderPolicy(uniqueOrgIds)))
+    .where(and(inArray(connections.org_id, uniqueOrgIds), eq(organizations.status, 'active'), eq(connections.status, 'ok'), isNotNull(connections.access_token)))
     .limit(MAX_ACTIVE_ERP_BATCH);
-  return uniqueRefs(rows.map(toRef).filter((row): row is ActiveErpRef => row !== null && isActiveErpSourceAllowed(row)));
+  return uniqueRefs(rows.map(toRef).filter((row): row is ActiveErpRef => row !== null));
 }
