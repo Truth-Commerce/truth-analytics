@@ -80,3 +80,16 @@ depois de aplicar `0025`, e exige literalmente tipo, nulabilidade e default das
 duas colunas. Nenhum arquivo de produção foi alterado. A execução PostgreSQL
 local continua indisponível sem `DATABASE_URL_TEST`; typecheck, lint focal e
 diff-check são repetidos antes do commit desta rodada.
+
+## Fix round 2 — organização referenciada pelo fixture isolado
+
+A CI `30643154939` materializou o RED PostgreSQL: 266 arquivos/1717 testes
+passaram e apenas `olist-stock-schema.test.ts` falhou com a FK
+`product_stock_org_id_organizations_id_fk`.
+
+A migration `0012` cria a FK do `product_stock` isolado apontando explicitamente
+para `public.organizations`. O fixture inseria a organização sem qualificação,
+sob o `search_path` do schema descartável, então o UUID existia na tabela errada.
+O fixture agora cria a organização válida em `public.organizations` antes do
+estoque e a remove no `finally`, depois de descartar o schema isolado. Nenhum
+arquivo de produção foi alterado.

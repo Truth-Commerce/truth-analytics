@@ -20,6 +20,7 @@ describe.skipIf(!url)('product_stock Olist expand — integração', () => {
       throw new Error('invalid isolated migration schema');
     }
     const isolatedSql = postgres(url!, { prepare: false, max: 1 });
+    let organizationId: string | undefined;
 
     try {
       for (const file of await readdir(migrationRoot)) {
@@ -44,10 +45,12 @@ describe.skipIf(!url)('product_stock Olist expand — integração', () => {
       });
 
       const [organization] = await isolatedSql.unsafe<{ id: string }[]>(
-        `INSERT INTO "organizations" ("name", "status") VALUES ($1, $2) RETURNING "id"`,
+        `INSERT INTO "public"."organizations" ("name", "status")
+         VALUES ($1, $2) RETURNING "id"`,
         [`ta-legacy-stock-${RUN}`, 'active'],
       );
       if (!organization?.id) throw new Error('failed to seed legacy organization');
+      organizationId = organization.id;
 
       await isolatedSql.unsafe(
         `INSERT INTO "product_stock"
@@ -188,6 +191,11 @@ describe.skipIf(!url)('product_stock Olist expand — integração', () => {
       expect(hasPostgresErrorCode(generationDuplicateError, '23505')).toBe(true);
     } finally {
       await isolatedSql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => undefined);
+      if (organizationId) {
+        await isolatedSql
+          .unsafe(`DELETE FROM "public"."organizations" WHERE "id" = $1`, [organizationId])
+          .catch(() => undefined);
+      }
       await isolatedSql.end();
       await rm(migrationDir, { recursive: true, force: true });
     }
