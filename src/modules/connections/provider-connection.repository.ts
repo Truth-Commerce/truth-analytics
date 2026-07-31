@@ -19,6 +19,7 @@ import {
 import type { ErpProviderId, OAuthTokens } from '@/modules/providers/types';
 import type { ErpDataSource } from '@/modules/providers/data.types';
 import { parsePreparationCursor } from '@/modules/connections/sync-state.repository';
+import { reconcileOrderReadiness } from '@/modules/pipeline/order-reconciliation';
 
 export type ProviderConnectionSummary = {
   provider: ErpProviderId;
@@ -31,6 +32,28 @@ export type ProviderConnectionSummary = {
   lastRefreshAt: Date | null;
   lastSyncAt: Date | null;
   lastErrorCode: string | null;
+};
+
+export type OlistPreparationReadModel = {
+  stage: 'not_started' | 'snapshot' | 'catchup' | 'verify1' | 'verify2' | 'details' | 'ready' | 'blocked';
+  ready: boolean;
+  expectedCount: number;
+  persistedCount: number;
+  pendingDetails: number;
+  quarantinedDetails: number;
+  processedCount: number;
+  backlogCount: number | null;
+};
+
+export type ErpConnectionReadModel = {
+  activeProvider: ErpProviderId | null;
+  bling: {
+    authorized: boolean;
+    operational: boolean;
+    lastSuccessfulSyncAt: Date | null;
+  } | null;
+  olist: ProviderConnectionSummary | null;
+  preparation: OlistPreparationReadModel | null;
 };
 
 export type ProviderOAuthCredentials = {
@@ -163,6 +186,76 @@ export async function getProviderConnectionSummary(
     lastRefreshAt: row.lastRefreshAt,
     lastSyncAt: row.lastSyncAt,
     lastErrorCode: row.lastErrorCode,
+  };
+}
+
+/**
+ * Read-only presentation model. Secret columns are reduced to booleans by the
+ * existing summary boundary and are never returned to a page or client component.
+ */
+export async function getErpConnectionReadModel(orgId: string): Promise<ErpConnectionReadModel> {
+  const [bling, olist, sourceRow] = await Promise.all([
+    getProviderConnectionSummary(orgId, 'bling'),
+    getProviderConnectionSummary(orgId, 'olist'),
+    db
+      .select({
+        sourceGeneration: connections.data_generation,
+        accountFingerprint: connections.provider_account_fingerprint,
+        cursor: connectionSyncState.cursor,
+        processedCount: connectionSyncState.processed_count,
+        backlogCount: connectionSyncState.backlog_count,
+      })
+      .from(connections)
+      .leftJoin(
+        connectionSyncState,
+        and(
+          eq(connectionSyncState.org_id, connections.org_id),
+          eq(connectionSyncState.provider, connections.provider),
+          eq(connectionSyncState.source_generation, connections.data_generation),
+          eq(connectionSyncState.resource, 'orders_prepare'),
+        ),
+      )
+      .where(and(eq(connections.org_id, orgId), eq(connections.provider, 'olist')))
+      .limit(1),
+  ]);
+
+  const source = sourceRow[0];
+  let preparation: OlistPreparationReadModel | null = null;
+  if (olist?.authorized && source?.accountFingerprint) {
+    const cursor = parsePreparationCursor(
+      source.cursor,
+      source.sourceGeneration,
+      source.accountFingerprint,
+    );
+    const readiness = await reconcileOrderReadiness({
+      orgId,
+      provider: 'olist',
+      sourceGeneration: source.sourceGeneration,
+      accountFingerprint: source.accountFingerprint,
+    });
+    preparation = {
+      stage: cursor?.stage ?? 'not_started',
+      ready: readiness.ready,
+      expectedCount: readiness.expectedCount,
+      persistedCount: readiness.actualCount,
+      pendingDetails: readiness.pendingDetails,
+      quarantinedDetails: readiness.quarantined,
+      processedCount: source.processedCount ?? 0,
+      backlogCount: source.backlogCount ?? null,
+    };
+  }
+
+  return {
+    activeProvider: bling?.operational ? 'bling' : olist?.operational ? 'olist' : null,
+    bling: bling
+      ? {
+          authorized: bling.authorized,
+          operational: bling.operational,
+          lastSuccessfulSyncAt: bling.lastSyncAt,
+        }
+      : null,
+    olist,
+    preparation,
   };
 }
 

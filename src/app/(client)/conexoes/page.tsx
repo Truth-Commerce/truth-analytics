@@ -15,7 +15,7 @@ import { feedbackDeCallback } from './callback-feedback';
 import { OlistConnectionCard } from '@/components/connections/olist-connection-card';
 import { olistFeedback } from '@/components/connections/olist-feedback';
 import { olistCallbackUri } from '@/modules/connections/olist-oauth-attempt';
-import { getProviderConnectionSummary } from '@/modules/connections/provider-connection.repository';
+import { getErpConnectionReadModel } from '@/modules/connections/provider-connection.repository';
 
 export const metadata: Metadata = { title: 'Conexões' };
 
@@ -24,11 +24,11 @@ export default async function ConexoesPage(props: {
 }) {
   const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
-  const [conn, produtos, settings, olistSummary] = await Promise.all([
+  const [conn, produtos, settings, erpReadModel] = await Promise.all([
     getConnection(access.orgId),
     listTrackedProducts(access.orgId),
     getOrgSettings(access.orgId),
-    getProviderConnectionSummary(access.orgId, 'olist'),
+    getErpConnectionReadModel(access.orgId),
   ]);
 
   return (
@@ -87,7 +87,8 @@ export default async function ConexoesPage(props: {
       <OlistConnectionCard
         orgId={access.orgId}
         surface="client_connections"
-        summary={olistSummary}
+        readModel={erpReadModel}
+        canManageErp={false}
         redirectUri={olistCallbackUri()}
       />
 
