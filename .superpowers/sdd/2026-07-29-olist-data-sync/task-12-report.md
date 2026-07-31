@@ -145,3 +145,21 @@ O teste foi criado antes da alteração SQL. Sem `DATABASE_URL_TEST`, a execuç�
 `operationalOrdersProviderPolicy` agora está restrita a `listActiveErpConnections`, aplica `OLIST_DATA_SYNC_ENABLED` + allowlist na cláusula SQL antes de `.limit(limit)`, e preserva a defesa em memória no cron. Leituras centrais e scheduler não foram alterados.
 
 GREEN local: `npm test -- tests/unit/sincronizar-pedidos-route.test.ts tests/integration/active-provider-read-isolation.test.ts`, `npm run typecheck` e `git diff --check`. Saída: 4 testes unitários passaram; 2 integrações foram puladas somente por `DATABASE_URL_TEST` ausente; typecheck e diff check passaram. O gate PostgreSQL real permanece para CI, sem simulação ou alteração de fixtures para ocultar a regressão.
+
+## Fix round 4 — fixtures do cron de relatórios completos
+
+Base: `a21509c fix(cron): filtrar rollout Olist antes do lote`.
+
+A CI `30640079700` executou PostgreSQL e expôs duas falhas em `tests/integration/cron-gerar-relatorios.test.ts`: `resultadoElegivel` e `resultadoRunning` ficaram `undefined`. A consulta do scheduler exige, por contrato, organização ativa, geração automática, `connections.status = 'ok'` e `connections.access_token IS NOT NULL`. Os três fixtures Bling do arquivo declaravam status `ok`, mas omitiam o token, de modo que as duas organizações que deveriam entrar no scheduler eram filtradas antes de o cron exercitar os comportamentos testados.
+
+O RED é a própria execução PostgreSQL da CI. A correção mínima adiciona o mesmo token sintético e não secreto aos fixtures elegível, sem automação e com relatório running. O fixture sem automação também recebe uma conexão contratualmente completa para garantir que sua exclusão continue sendo causada por `geracao_automatica = false`, e não incidentalmente pela ausência de credencial. Nenhum arquivo de produção foi alterado.
+
+Verificação local:
+
+```powershell
+npm test -- tests/integration/cron-gerar-relatorios.test.ts
+npm run typecheck
+git diff --check
+```
+
+Saída: o arquivo de integração carregou sem erro, mas os 3 testes foram pulados porque `DATABASE_URL_TEST` não está disponível; typecheck e diff check passaram. O GREEN PostgreSQL dos dois casos deve ser confirmado pela CI com banco configurado.

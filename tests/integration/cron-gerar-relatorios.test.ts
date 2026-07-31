@@ -19,6 +19,7 @@ vi.mock('@/lib/env', async (importOriginal) => {
 
 const CRON_SECRET_TEST = 'cron-gerar-relatorios-teste-16+';
 const PIPELINE_SECRET_TEST = 'pipeline-secret-teste-16-chars+';
+const ACCESS_TOKEN_TEST = 'token-sintetico-nao-secreto';
 
 import { db } from '@/db/client';
 import { connections, organizations, reports } from '@/db/schema';
@@ -50,7 +51,12 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('cron gerar-relatorios', () => {
     orgElegivelId = elegivel.id;
     await db
       .insert(connections)
-      .values({ org_id: orgElegivelId, provider: 'bling', status: 'ok' });
+      .values({
+        org_id: orgElegivelId,
+        provider: 'bling',
+        status: 'ok',
+        access_token: ACCESS_TOKEN_TEST,
+      });
 
     const [semAutomacao] = await db
       .insert(organizations)
@@ -65,7 +71,12 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('cron gerar-relatorios', () => {
     orgSemAutomacaoId = semAutomacao.id;
     await db
       .insert(connections)
-      .values({ org_id: orgSemAutomacaoId, provider: 'bling', status: 'ok' });
+      .values({
+        org_id: orgSemAutomacaoId,
+        provider: 'bling',
+        status: 'ok',
+        access_token: ACCESS_TOKEN_TEST,
+      });
 
     const [comRunning] = await db
       .insert(organizations)
@@ -80,7 +91,12 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)('cron gerar-relatorios', () => {
     orgComRunningId = comRunning.id;
     await db
       .insert(connections)
-      .values({ org_id: orgComRunningId, provider: 'bling', status: 'ok' });
+      .values({
+        org_id: orgComRunningId,
+        provider: 'bling',
+        status: 'ok',
+        access_token: ACCESS_TOKEN_TEST,
+      });
     await db.insert(reports).values({
       org_id: orgComRunningId,
       status: 'running',
