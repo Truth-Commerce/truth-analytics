@@ -36,6 +36,7 @@ export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
       // G3/T10: admin precisa de caminho até a fila de revisão do analista
       // (acesso a /analista permitido para admin_truth).
       { href: '/analista', label: 'Carteira', icon: 'portfolio', description: 'Clientes sob acompanhamento' },
+      { href: '/analista/conexoes', label: 'Conexões', icon: 'connections', description: 'Configure o ERP dos clientes' },
       // H4/T13: painéis de operação e gestão.
       { href: '/admin/performance', label: 'Performance', icon: 'performance', description: 'Resultados da equipe' },
       { href: '/admin/operacoes', label: 'Operações', icon: 'operations', description: 'Saúde dos processos' },
@@ -57,7 +58,7 @@ export function navItems(variant: 'client' | 'admin' | 'analista'): NavItem[] {
       { href: '/dashboard/estoque', label: 'Estoque', icon: 'inventory', description: 'Cobertura e disponibilidade' },
       { href: '/dashboard/kits', label: 'Kits', icon: 'kits', description: 'Oportunidades de combinação' },
       { href: '/dashboard/calendario', label: 'Calendário', icon: 'calendar', description: 'Planejamento comercial' },
-      { href: '/conexoes', label: 'Conexões', icon: 'connections', description: 'Integrações e canais' },
+      { href: '/analista/conexoes', label: 'Conexões', icon: 'connections', description: 'Configure o ERP dos clientes' },
       { href: '/configuracoes', label: 'Configurações', icon: 'settings', description: 'Preferências da conta' },
     ];
   }

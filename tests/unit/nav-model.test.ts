@@ -34,6 +34,7 @@ describe('navItems — nav por papel', () => {
       '/admin/playbooks',
       '/admin/consultoria',
       '/analista',
+      '/analista/conexoes',
       '/admin/performance',
       '/admin/operacoes',
       '/admin/usuarios',
@@ -57,7 +58,7 @@ describe('navItems — nav por papel', () => {
       { href: '/dashboard/estoque', label: 'Estoque', icon: 'inventory', description: 'Cobertura e disponibilidade' },
       { href: '/dashboard/kits', label: 'Kits', icon: 'kits', description: 'Oportunidades de combinação' },
       { href: '/dashboard/calendario', label: 'Calendário', icon: 'calendar', description: 'Planejamento comercial' },
-      { href: '/conexoes', label: 'Conexões', icon: 'connections', description: 'Integrações e canais' },
+      { href: '/analista/conexoes', label: 'Conexões', icon: 'connections', description: 'Configure o ERP dos clientes' },
       { href: '/configuracoes', label: 'Configurações', icon: 'settings', description: 'Preferências da conta' },
     ]);
   });
