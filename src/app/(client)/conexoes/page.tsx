@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getConnection } from '@/modules/connections/connection.repository';
@@ -24,6 +25,9 @@ export default async function ConexoesPage(props: {
 }) {
   const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
+  if (access.role === 'analista' || access.role === 'admin_truth') {
+    redirect('/analista/conexoes');
+  }
   const [conn, produtos, settings, erpReadModel] = await Promise.all([
     getConnection(access.orgId),
     listTrackedProducts(access.orgId),
