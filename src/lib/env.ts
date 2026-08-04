@@ -65,6 +65,7 @@ const schema = z
   ADMIN_ALERT_EMAIL: z.string().optional(),
   PIPELINE_SECRET: z.string().min(16).optional(),
   CRON_SECRET: z.string().min(16).optional(),
+  KEY_ROTATION_SECRET: z.string().min(32).optional(),
   OLIST_DATA_SYNC_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   OLIST_DATA_SYNC_ORG_IDS: z.string().default('').transform((value, ctx) => {
     if (!value) return [] as string[];

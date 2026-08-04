@@ -50,7 +50,7 @@ async function seed(): Promise<void> {
   try {
     const passwordHash = await hashPassword(PASSWORD);
     const now = new Date();
-    const orderDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 15, 12));
+    const orderDate = new Date(now.getTime() - 60_000);
     const windowFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
     const windowTo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const catchUpFrom = new Date(windowTo.getTime() + 60_000);
