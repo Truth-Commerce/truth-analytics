@@ -8,26 +8,12 @@ const ERRO_LABEL: Record<string, string> = {
     'A geração demorou mais que o esperado e foi interrompida. Tente novamente — se persistir, fale com o suporte.',
   analise_ia_invalida:
     'Nossa IA não conseguiu concluir a análise desta vez. Gere o relatório novamente.',
-  sem_conexao_bling:
-    'A conexão com o Bling não estava disponível. Reconecte em Conexões e tente de novo.',
-  refresh_bling_falhou:
-    'A autorização do Bling expirou. Reconecte em Conexões e gere o relatório novamente.',
-  bling_sem_pedidos: 'Não encontramos pedidos no período analisado.',
+  sem_conexao_erp:
+    'A conexão com o ERP não estava disponível. Reconecte em Conexões e tente de novo.',
+  erp_indisponivel:
+    'O ERP não respondeu a tempo. Aguarde alguns instantes e gere o relatório novamente.',
+  erp_sem_pedidos: 'Não encontramos pedidos no período analisado.',
   relatorio_em_andamento: 'Já existe um relatório em geração para a sua conta. Aguarde ele terminar.',
-  // Códigos adicionais que podem chegar a reports.erro pelo orchestrator
-  // (fallback genérico já cobriria — estas são só copy mais amigável).
-  bling_indisponivel:
-    'O Bling não respondeu a tempo. Aguarde alguns instantes e gere o relatório novamente.',
-  // Legado: 'bling_token_falhou' não é mais lançado (substituído pela
-  // classificação invalido/transiente), mas relatórios antigos podem tê-lo.
-  bling_token_falhou:
-    'A autorização do Bling expirou. Reconecte em Conexões e gere o relatório novamente.',
-  bling_refresh_invalido:
-    'A autorização do Bling expirou. Reconecte em Conexões e gere o relatório novamente.',
-  bling_refresh_transiente:
-    'O Bling não respondeu a tempo. Aguarde alguns instantes e gere o relatório novamente.',
-  bling_oauth_nao_configurado:
-    'A conexão com o Bling não está configurada. Reconecte em Conexões e tente de novo.',
   ia_nao_configurada:
     'A análise por IA está temporariamente indisponível. Tente novamente em instantes.',
   sem_plano: 'Sua conta não tem um plano ativo. Fale com o suporte para gerar relatórios.',

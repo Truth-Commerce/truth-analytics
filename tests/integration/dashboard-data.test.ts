@@ -134,8 +134,8 @@ describe.skipIf(!url)('getDashboardData — view-model único do dashboard', () 
     expect(data.doneAnterior?.metricas?.truth_score?.score).toBe(58);
     expect(data.totalMes).toBe(300.5); // SUM() no SQL, só o mês corrente BRT
     expect(data.settings).toEqual({ geracaoAutomatica: true, metaMensal: 45000 });
-    expect(data.conn?.connected).toBe(true);
-    expect(data.conn?.last_sync_at).not.toBeNull();
+    expect(data.source).toMatchObject({ orgId, provider: 'bling', sourceGeneration: 1 });
+    expect(data.source?.lastSyncAt).not.toBeNull();
     expect(data.temProdutos).toBe(false);
     expect(data.alertas).toEqual([]);
     expect(data.titulosTasksUltimoDone).toEqual([]); // sem analiseIa no seed → sem consulta de tasks

@@ -18,7 +18,6 @@ import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { paceMeta, progressoMeta } from '@/modules/reports/compare';
 import { formatBRL, formatData, formatDataCurta, formatDataUtc, formatPeriodo } from '@/lib/format';
 import { hojeBrt } from '@/lib/timezone';
-import { Alert } from '@/components/ui/Alert';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -43,26 +42,27 @@ export default async function DashboardPage() {
   const access = await requireActiveOrg();
 
   const data = await getDashboardData(access.orgId);
-  const { alertas, conn, doneAnterior, historico, latest, latestDone, org, settings, totalMes } = data;
+  const { alertas, doneAnterior, historico, latest, latestDone, org, settings, source, totalMes } = data;
 
   const metaAtual = settings?.metaMensal ?? null;
   const progresso = progressoMeta(totalMes, metaAtual);
   const pace = paceMeta(totalMes, metaAtual, hojeBrt());
   // Ancoragem temporal: last_sync_at (instante real → BRT) ou MAX(orders.data)
   // (data pura → UTC) — disponíveis via G0.
-  const dadosAte = conn?.last_sync_at
-    ? formatData(conn.last_sync_at)
+  const dadosAte = source?.lastSyncAt
+    ? formatData(source.lastSyncAt)
     : data.ultimaDataPedido
       ? formatDataUtc(data.ultimaDataPedido)
       : null;
 
-  const blingOk = !!conn?.connected;
+  const erpOk = source !== null;
+  const erpLabel = source?.provider === 'olist' ? 'Olist ERP' : source?.provider === 'bling' ? 'Bling' : 'ERP';
   const gate = org ? podeGerar(org) : { ok: false as const, motivo: 'org_nao_encontrada' };
   // G0/Task 9: relatório em andamento (inclusive gerado pelo cron/admin) →
   // remonta o stepper do server e trava o botão.
   const emAndamentoReportId =
     latest && (latest.status === 'queued' || latest.status === 'running') ? latest.id : null;
-  const canGenerate = blingOk && gate.ok && !emAndamentoReportId;
+  const canGenerate = erpOk && gate.ok && !emAndamentoReportId;
 
   let motivo: string | undefined;
   if (!canGenerate) {
@@ -70,8 +70,8 @@ export default async function DashboardPage() {
       motivo = 'Um relatório está sendo gerado agora.';
     } else if (!org) {
       motivo = 'Organização não encontrada. Recarregue a página.';
-    } else if (!blingOk) {
-      motivo = 'Conecte o Bling em Conexões.';
+    } else if (!erpOk) {
+      motivo = 'Conecte seu ERP em Conexões.';
     } else if (!gate.ok) {
       if (gate.motivo === 'ciclo_em_andamento') {
         const proxData = org.proximo_relatorio_liberado_em;
@@ -99,22 +99,15 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
       <PageHeader eyebrow="Visão geral" title="Dashboard" description={org?.name ?? undefined} />
+      <p data-testid="erp-source" className="text-sm text-muted">
+        {erpOk ? `ERP ativo: ${erpLabel}${dadosAte ? ` · Última sincronização: ${dadosAte}` : ''}` : 'Nenhum ERP conectado.'}
+      </p>
 
-      {/* 1. Conexão expirada — persistente até reconectar (G0/Task 7) */}
-      {conn && conn.status === 'expirado' ? (
-        <Alert variant="danger" title="Sua conexão com o Bling expirou">
-          Seus dados de vendas pararam de atualizar e os relatórios automáticos foram pausados.{' '}
-          <Link href="/conexoes" className="font-medium underline underline-offset-2">
-            Reconectar em Conexões →
-          </Link>
-        </Alert>
-      ) : null}
-
-      {/* 2. Alertas abertos — a decisão mais urgente primeiro (some sem alertas) */}
+      {/* 1. Alertas abertos — a decisão mais urgente primeiro (some sem alertas) */}
       <AlertasSection alertas={alertas} />
       <EstoqueResumo orgId={access.orgId} />
 
-      {/* 3. Como está minha loja: Truth Score + Ação nº 1 da IA */}
+      {/* 2. Como está minha loja: Truth Score + Ação nº 1 da IA */}
       {latestDone?.metricas?.truth_score || acao ? (
         <section data-testid="como-esta-minha-loja" className="grid gap-4 lg:grid-cols-2">
           <TruthScoreCard
@@ -146,7 +139,8 @@ export default async function DashboardPage() {
 
       {/* 5. Primeiros passos — o componente se esconde sozinho quando completo */}
       <OnboardingChecklist
-        blingOk={blingOk}
+        erpOk={erpOk}
+        erpLabel={erpLabel}
         temProdutos={data.temProdutos}
         temRelatorio={historico.length > 0}
       />
@@ -288,7 +282,7 @@ export default async function DashboardPage() {
         ) : (
           <EmptyState
             title="Nenhum relatório ainda."
-            description="Conecte o Bling, adicione produtos e gere sua primeira análise por IA."
+            description="Conecte seu ERP, adicione produtos e gere sua primeira análise por IA."
             action={
               <Button as="a" href="#gerar-relatorio" variant="primary" size="sm">
                 Gerar primeira análise

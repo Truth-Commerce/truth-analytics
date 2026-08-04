@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { serverEnv } from '@/lib/env';
 import { requireActiveOrgParaMutacao } from '@/modules/auth/require-active-org';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
-import { getConnection } from '@/modules/connections/connection.repository';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import { podeGerar } from '@/modules/pipeline/plan-lock';
 import { enqueueReport } from '@/modules/pipeline/enqueue';
 
@@ -14,7 +14,7 @@ export type GenerateState = { error?: string; reportId?: string };
 /**
  * Enfileira a geração de um relatório para a org autenticada.
  *
- * 1. Gating (fica na action): sessão + org active, podeGerar, Bling conectado,
+ * 1. Gating (fica na action): sessão + org active, podeGerar, ERP conectado,
  *    PIPELINE_SECRET presente.
  * 2. `enqueueReport` (helper canônico, compartilhado com o cron de geração
  *    automática): createQueuedReport insere 'queued' — o índice parcial
@@ -39,8 +39,8 @@ export async function generateReportAction(
   if (!gerar.ok) return { error: gerar.motivo };
   if (!org.plano) return { error: 'sem_plano' };
 
-  const conn = await getConnection(access.orgId);
-  if (!conn?.connected) return { error: 'bling_nao_conectado' };
+  const source = await getActiveErpConnection(access.orgId);
+  if (!source) return { error: 'sem_conexao_erp' };
 
   if (!serverEnv.PIPELINE_SECRET) return { error: 'pipeline_nao_configurado' };
 

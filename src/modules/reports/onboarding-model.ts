@@ -1,20 +1,21 @@
 export type OnboardingInput = {
-  blingOk: boolean;
+  erpOk: boolean;
+  erpLabel: string;
   temProdutos: boolean;
   temRelatorio: boolean;
 };
 
 export type OnboardingStep = {
-  id: 'bling' | 'produtos' | 'relatorio';
+  id: 'erp' | 'produtos' | 'relatorio';
   label: string;
   done: boolean;
   href: string;
 };
 
-/** Checklist pós-ativação (pura): conectar Bling → produtos → primeiro relatório. */
+/** Checklist pós-ativação (pura): conectar ERP → produtos → primeiro relatório. */
 export function onboardingSteps(input: OnboardingInput): OnboardingStep[] {
   return [
-    { id: 'bling', label: 'Conectar o Bling', done: input.blingOk, href: '/conexoes' },
+    { id: 'erp', label: 'Conectar seu ERP', done: input.erpOk, href: '/conexoes' },
     {
       id: 'produtos',
       label: 'Adicionar produtos para monitorar',
@@ -31,5 +32,5 @@ export function onboardingSteps(input: OnboardingInput): OnboardingStep[] {
 }
 
 export function onboardingCompleto(input: OnboardingInput): boolean {
-  return input.blingOk && input.temProdutos && input.temRelatorio;
+  return input.erpOk && input.temProdutos && input.temRelatorio;
 }

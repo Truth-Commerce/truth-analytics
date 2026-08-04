@@ -1,4 +1,15 @@
-import { index, numeric, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  bigint,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  timestamp,
+  unique,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
 import { organizations } from './organizations';
 
@@ -11,6 +22,10 @@ export const productStock = pgTable(
       .notNull()
       .references(() => organizations.id),
     provider: varchar('provider', { length: 32 }).notNull().default('bling'),
+    source_generation: integer('source_generation').notNull().default(1),
+    fencing_version: bigint('fencing_version', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
     provider_product_id: varchar('provider_product_id', { length: 64 }),
     sku: varchar('sku', { length: 64 }).notNull(),
     nome: varchar('nome', { length: 255 }).notNull(),
@@ -27,6 +42,12 @@ export const productStock = pgTable(
       t.provider,
       t.sku,
     ),
+    org_provider_generation_sku_uq: unique(
+      'product_stock_org_provider_generation_sku_uq',
+    ).on(t.org_id, t.provider, t.source_generation, t.sku),
+    org_provider_generation_updated_idx: index(
+      'product_stock_org_provider_generation_updated_idx',
+    ).on(t.org_id, t.provider, t.source_generation, t.updated_at),
     org_idx: index('product_stock_org_idx').on(t.org_id),
   }),
 );

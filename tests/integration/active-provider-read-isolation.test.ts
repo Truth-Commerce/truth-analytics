@@ -4,6 +4,7 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { connections, orders, organizations, productStock, reports, trackedProducts } from '@/db/schema';
+import { serverEnv } from '@/lib/env';
 
 const url = process.env.DATABASE_URL_TEST;
 const sql = postgres(url ?? '', { prepare: false });
@@ -13,6 +14,8 @@ const RUN = Date.now();
 describe.skipIf(!url)('active provider order read isolation', () => {
   let orgId = '';
   let reportId = '';
+  let blockedOlistOrgIds: string[] = [];
+  let blingAfterBlockedOrgId = '';
   const agora = new Date('2026-07-30T12:00:00Z');
 
   beforeAll(async () => {
@@ -33,7 +36,7 @@ describe.skipIf(!url)('active provider order read isolation', () => {
     await tdb.insert(trackedProducts).values([{ org_id: orgId, nome: 'Bling', sku: `sku-bling-${RUN}`, keywords: [], ativo: true }, { org_id: orgId, nome: 'Olist', sku: `sku-olist-${RUN}`, keywords: [], ativo: true }]);
     await tdb.insert(productStock).values([{ org_id: orgId, sku: `sku-bling-${RUN}`, nome: 'Bling', saldo: '10' }, { org_id: orgId, sku: `sku-olist-${RUN}`, nome: 'Olist', saldo: '10' }]);
   });
-  afterAll(async () => { await tdb.delete(orders).where(eq(orders.org_id, orgId)); await tdb.delete(reports).where(eq(reports.org_id, orgId)); await tdb.delete(trackedProducts).where(eq(trackedProducts.org_id, orgId)); await tdb.delete(productStock).where(eq(productStock.org_id, orgId)); await tdb.delete(connections).where(eq(connections.org_id, orgId)); await tdb.delete(organizations).where(eq(organizations.id, orgId)); await sql.end(); });
+  afterAll(async () => { await tdb.delete(orders).where(eq(orders.org_id, orgId)); await tdb.delete(reports).where(eq(reports.org_id, orgId)); await tdb.delete(trackedProducts).where(eq(trackedProducts.org_id, orgId)); await tdb.delete(productStock).where(eq(productStock.org_id, orgId)); await tdb.delete(connections).where(eq(connections.org_id, orgId)); await tdb.delete(organizations).where(eq(organizations.id, orgId)); for (const id of [...blockedOlistOrgIds, blingAfterBlockedOrgId]) { await tdb.delete(connections).where(eq(connections.org_id, id)); await tdb.delete(organizations).where(eq(organizations.id, id)); } await sql.end(); });
 
   it('selects only the active source and changes atomically after cutover', async () => {
     const { getActiveErpConnection, getActiveErpConnectionsForOrgIds, MAX_ACTIVE_ERP_BATCH } = await import('@/modules/connections/active-provider.repository');
@@ -71,5 +74,39 @@ describe.skipIf(!url)('active provider order read isolation', () => {
       expect.objectContaining({ orgId, provider: 'olist', sourceGeneration: 3 }),
     ]);
     await expect(getActiveErpConnectionsForOrgIds(Array.from({ length: MAX_ACTIVE_ERP_BATCH + 1 }, (_, i) => `org-${i}`))).rejects.toThrow('active_erp_batch_limit_exceeded');
+  });
+
+  it('exclui Olist bloqueado antes do limite sem esconder Bling posterior e aceita só a allowlist exata', async () => {
+    const { listActiveErpConnections } = await import('@/modules/connections/active-provider.repository');
+    const originalEnabled = serverEnv.OLIST_DATA_SYNC_ENABLED;
+    const originalOrgIds = serverEnv.OLIST_DATA_SYNC_ORG_IDS;
+    try {
+      const blocked = await tdb.insert(organizations).values(
+        Array.from({ length: 50 }, (_, index) => ({ name: `blocked-olist-${RUN}-${index}`, status: 'active' as const })),
+      ).returning({ id: organizations.id });
+      blockedOlistOrgIds = blocked.map((row) => row.id);
+      await tdb.insert(connections).values(blockedOlistOrgIds.map((orgId) => ({ org_id: orgId, provider: 'olist' as const, access_token: 'test', status: 'ok' as const })));
+      const [bling] = await tdb.insert(organizations).values({ name: `bling-after-blocked-${RUN}`, status: 'active' }).returning({ id: organizations.id });
+      blingAfterBlockedOrgId = bling.id;
+      await tdb.insert(connections).values({ org_id: blingAfterBlockedOrgId, provider: 'bling', access_token: 'test', status: 'ok' });
+
+      serverEnv.OLIST_DATA_SYNC_ENABLED = false;
+      serverEnv.OLIST_DATA_SYNC_ORG_IDS = [];
+      const disabled = await listActiveErpConnections({ limit: 50 });
+      expect(disabled).toEqual(expect.arrayContaining([expect.objectContaining({ orgId: blingAfterBlockedOrgId, provider: 'bling' })]));
+      expect(disabled.some((source) => blockedOlistOrgIds.includes(source.orgId))).toBe(false);
+
+      serverEnv.OLIST_DATA_SYNC_ENABLED = true;
+      serverEnv.OLIST_DATA_SYNC_ORG_IDS = [blockedOlistOrgIds[0]!];
+      const allowlisted = await listActiveErpConnections({ limit: 50 });
+      expect(allowlisted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ orgId: blingAfterBlockedOrgId, provider: 'bling' }),
+        expect.objectContaining({ orgId: blockedOlistOrgIds[0], provider: 'olist' }),
+      ]));
+      expect(allowlisted.filter((source) => source.provider === 'olist' && blockedOlistOrgIds.includes(source.orgId))).toHaveLength(1);
+    } finally {
+      serverEnv.OLIST_DATA_SYNC_ENABLED = originalEnabled;
+      serverEnv.OLIST_DATA_SYNC_ORG_IDS = originalOrgIds;
+    }
   });
 });
