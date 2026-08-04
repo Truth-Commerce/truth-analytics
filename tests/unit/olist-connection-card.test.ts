@@ -59,7 +59,8 @@ describe('OlistConnectionCard', () => {
     expect(html).toContain('data-testid="olist-connection-status"');
     expect(html).toContain(redirectUri);
     expect(html).toMatch(/somente leitura/i);
-    expect(html).toMatch(/relatórios continuam usando Bling/i);
+    expect(html).toMatch(/pedidos e relatórios usarão os dados do Olist/i);
+    expect(html).not.toMatch(/relatórios continuam usando Bling/i);
     expect(html).toContain('type="password"');
     expect(html).toContain('autoComplete="off"');
     expect(html).toContain('Salvar credenciais');

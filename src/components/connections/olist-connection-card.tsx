@@ -192,8 +192,7 @@ export function OlistConnectionCard(props: {
             {props.redirectUri}
           </code>
           <p className="text-xs text-dim">
-            Nesta etapa, os relatórios continuam usando Bling; o Olist ainda não importa pedidos ou
-            estoque.
+            Quando este ERP estiver conectado e ativo, pedidos e relatórios usarão os dados do Olist.
           </p>
         </div>
 
