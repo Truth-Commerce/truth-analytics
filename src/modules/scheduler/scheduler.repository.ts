@@ -1,12 +1,13 @@
-import { and, eq, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { connections, organizations } from '@/db/schema';
 import { BACKOFF_FALHA_DIAS } from './scheduler.service';
+import { isErpProviderId } from '@/modules/providers/provider-catalog';
 
 /**
  * Orgs elegíveis para geração automática: active + plano + geracao_automatica
- * + conexão Bling status 'ok' + ciclo vencido (proximo_relatorio_liberado_em
+ * + conexão ERP registrada status 'ok' + ciclo vencido (proximo_relatorio_liberado_em
  * <= agora OU null). Ordena por proximo_relatorio_liberado_em asc nulls first.
  *
  * G0 (backoff): exclui org cujo relatório MAIS RECENTE é 'failed' criado há
@@ -21,17 +22,18 @@ export async function listOrgsElegiveisParaGeracao(
 ): Promise<{ id: string; name: string }[]> {
   const corteFalha = new Date(agora.getTime() - BACKOFF_FALHA_DIAS * 86_400_000);
   const rows = await db
-    .select({ id: organizations.id, name: organizations.name })
+    .select({ id: organizations.id, name: organizations.name, provider: connections.provider })
     .from(organizations)
     .innerJoin(
       connections,
-      and(eq(connections.org_id, organizations.id), eq(connections.provider, 'bling')),
+      eq(connections.org_id, organizations.id),
     )
     .where(
       and(
         eq(organizations.status, 'active'),
         eq(organizations.geracao_automatica, true),
         eq(connections.status, 'ok'),
+        isNotNull(connections.access_token),
         or(
           isNull(organizations.proximo_relatorio_liberado_em),
           lte(organizations.proximo_relatorio_liberado_em, agora),
@@ -51,7 +53,7 @@ export async function listOrgsElegiveisParaGeracao(
       ),
     )
     .orderBy(sql`${organizations.proximo_relatorio_liberado_em} asc nulls first`);
-  return rows.filter((r) => r.name !== null);
+  return rows.filter((r) => r.name !== null && isErpProviderId(r.provider)).map(({ id, name }) => ({ id, name: name! }));
 }
 
 /**

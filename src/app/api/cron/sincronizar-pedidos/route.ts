@@ -3,8 +3,9 @@ import { logger } from '@/lib/logger';
 import { secretsMatch } from '@/lib/secret-compare';
 import {
   listConnectionsExpirando,
-  listOrgsComBlingOk,
 } from '@/modules/connections/connection.repository';
+import { listActiveErpConnections } from '@/modules/connections/active-provider.repository';
+import type { ActiveErpRef } from '@/modules/orders/order-scope';
 import {
   MARGEM_RENOVACAO_MS,
   renovarConexaoDaOrg,
@@ -18,10 +19,16 @@ import {
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
+/** O kill switch limita somente a execução operacional de pedidos Olist. */
+function podeSincronizarPedidos(source: ActiveErpRef): boolean {
+  return source.provider !== 'olist'
+    || (serverEnv.OLIST_DATA_SYNC_ENABLED && serverEnv.OLIST_DATA_SYNC_ORG_IDS.includes(source.orgId));
+}
+
 /**
- * Cron diário (7h UTC — Vercel manda `Authorization: Bearer CRON_SECRET`).
+ * Cron a cada 15 minutos (GitHub Actions manda `Authorization: Bearer CRON_SECRET`).
  * Passo 1: renova tokens expirando em <24h; Passo 2: sync incremental —
- * sincroniza os pedidos dos últimos 2 dias de cada org com conexão Bling ok,
+ * sincroniza os pedidos dos últimos 2 dias de cada ERP ativo,
  * mantendo `orders` vivo entre relatórios (meta mensal, alertas e "vendas de
  * ontem" deixam de ler uma foto congelada).
  *
@@ -41,7 +48,7 @@ export async function GET(req: Request): Promise<Response> {
   // para que conexões renovadas sincronizem e as que viraram 'expirado' saiam
   // da lista. Falha em UMA conexão não aborta o lote. Falha transitória
   // (Bling fora do ar/rate limit) NÃO conta como expirada: a conexão continua
-  // 'ok' e será re-tentada no próximo cron.
+  // 'ok' e será re-tentada na próxima execução.
   let renovadas = 0;
   let expiradas = 0;
   let transientes = 0;
@@ -54,7 +61,7 @@ export async function GET(req: Request): Promise<Response> {
       logger.info('cron.sincronizar_pedidos.token', { orgId, resultado });
     } catch (err) {
       // Erro inesperado: status/notificação NÃO aconteceram — trata como
-      // transiente (re-tenta amanhã), nunca como expirada.
+      // transiente (re-tenta na próxima execução), nunca como expirada.
       transientes++;
       logger.error('cron.sincronizar_pedidos.token_erro', {
         orgId,
@@ -63,20 +70,25 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  const orgIds = (await listOrgsComBlingOk()).slice(0, LOTE_MAXIMO_SYNC);
+  const sources = (await listActiveErpConnections({ limit: LOTE_MAXIMO_SYNC })).filter(podeSincronizarPedidos);
   let sincronizadas = 0;
   let falhas = 0;
   let enriquecidos = 0;
   let pendentesRestantes = 0;
+  const porProvider: Record<string, { orgs: number; sincronizadas: number; falhas: number }> = {};
 
-  for (const orgId of orgIds) {
+  for (const source of sources) {
+    const counters = (porProvider[source.provider] ??= { orgs: 0, sincronizadas: 0, falhas: 0 });
+    counters.orgs++;
     try {
-      const r = await sincronizarPedidosDaOrg({ orgId, provider: 'bling', sourceGeneration: 1 }, agora);
+      const r = await sincronizarPedidosDaOrg(source, agora);
       sincronizadas++;
+      counters.sincronizadas++;
       enriquecidos += r.enriquecimento.enriquecidos;
       if (r.enriquecimento.restantes > 0) pendentesRestantes += r.enriquecimento.restantes;
       logger.info('cron.sincronizar_pedidos.org', {
-        orgId,
+        orgId: source.orgId,
+        provider: source.provider,
         processados: r.processados,
         total: r.total,
         enriquecidos: r.enriquecimento.enriquecidos,
@@ -85,15 +97,17 @@ export async function GET(req: Request): Promise<Response> {
       });
     } catch (err) {
       falhas++;
+      counters.falhas++;
       logger.error('cron.sincronizar_pedidos.erro', {
-        orgId,
+        orgId: source.orgId,
+        provider: source.provider,
         erro: err instanceof Error ? err.message : String(err),
       });
     }
   }
 
   const resposta = {
-    orgs: orgIds.length,
+    orgs: sources.length,
     sincronizadas,
     falhas,
     renovadas,
@@ -101,6 +115,7 @@ export async function GET(req: Request): Promise<Response> {
     transientes,
     enriquecidos,
     pendentesRestantes,
+    porProvider,
   };
   await registrarHeartbeat('sincronizar-pedidos', true, resposta);
   return Response.json(resposta);

@@ -6,17 +6,15 @@ describe('friendlyReportError', () => {
   it('mapeia códigos conhecidos para pt-BR', () => {
     expect(friendlyReportError('timeout_watchdog')).toContain('demorou mais que o esperado');
     expect(friendlyReportError('analise_ia_invalida')).toContain('não conseguiu concluir a análise');
-    expect(friendlyReportError('sem_conexao_bling')).toContain('Bling');
-    expect(friendlyReportError('refresh_bling_falhou')).toContain('Reconecte');
+    expect(friendlyReportError('sem_conexao_erp')).toContain('ERP');
+    expect(friendlyReportError('erp_indisponivel')).toContain('ERP');
+    expect(friendlyReportError('erp_sem_pedidos')).toContain('pedidos');
   });
 
-  it('mapeia os códigos novos do refresh classificado (invalido/transiente)', () => {
-    // Permanente: exige re-OAuth do cliente
-    expect(friendlyReportError('bling_refresh_invalido')).toContain('Reconecte');
-    // Transiente: NÃO manda reconectar — só tentar de novo
-    const transiente = friendlyReportError('bling_refresh_transiente');
-    expect(transiente).toContain('novamente');
-    expect(transiente).not.toContain('Reconecte');
+  it('não expõe o provider quando recebe código legado específico', () => {
+    expect(friendlyReportError('bling_refresh_invalido')).not.toContain('Bling');
+    expect(friendlyReportError('bling_sem_pedidos')).not.toContain('Bling');
+    expect(friendlyReportError('olist_indisponivel')).not.toContain('Olist');
   });
 
   it('NUNCA ecoa código desconhecido (stack/objeto técnico não vaza)', () => {
