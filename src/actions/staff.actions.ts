@@ -151,7 +151,6 @@ export async function staffGenerateReportAction(
 export type StaffBackfillState = { error?: string; ok?: boolean; processados?: number; pendentesEnriquecimento?: number };
 
 const BACKFILL_MESES = 12;
-const BACKFILL_COLETA_DEADLINE_MS = 120_000;
 const BACKFILL_ENRIQUECIMENTO = { maxPedidos: 200, prazoMs: 90_000 } as const;
 
 /**
@@ -176,7 +175,10 @@ export async function staffBackfillHistoricoAction(
   let coleta: Awaited<ReturnType<typeof collectOrders>>;
   let enriquecimento: Awaited<ReturnType<typeof enrichOrders>>;
   try {
-    coleta = await collectOrders(source, periodo, { deadlineMs: BACKFILL_COLETA_DEADLINE_MS });
+    // Sem deadline: no Bling a coleta pagina até o fim (o ramo não lê `deadlineMs`),
+    // então passar a opção só documentaria uma proteção inexistente. Org muito grande
+    // pode estourar o maxDuration=300s da rota — follow-up conhecido.
+    coleta = await collectOrders(source, periodo);
     enriquecimento = await enrichOrders(source, BACKFILL_ENRIQUECIMENTO);
   } catch (e) {
     logger.error('backfill de historico falhou', { orgId, provider: source.provider }, e);
