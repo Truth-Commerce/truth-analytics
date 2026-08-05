@@ -112,20 +112,59 @@ describe('staffGenerateReportAction', () => {
     });
     vi.mocked(enqueueReport).mockResolvedValueOnce({ ok: true, reportId: 'report-1' });
 
-    const result = await staffGenerateReportAction({}, form({ orgId: 'org-cliente' }));
+    const result = await staffGenerateReportAction({}, form({ orgId: 'org-cliente', periodDays: '30' }));
 
     expect(result).toEqual({ ok: true, reportId: 'report-1' });
     expect(assertOrgAccess).toHaveBeenCalledWith(expect.objectContaining({ role: 'analista' }), 'org-cliente');
     expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
       orgId: 'org-cliente', userId: 'staff1', acao: 'report.disparado_staff',
-      detalhes: { reportId: 'report-1', provider: 'olist' },
+      detalhes: expect.objectContaining({ reportId: 'report-1', provider: 'olist', periodDays: 30 }),
     }));
+  });
+
+  it('encaminha 180 dias fechados e audita as fronteiras escolhidas', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-05T15:00:00Z'));
+    vi.mocked(getActiveErpConnection).mockResolvedValueOnce({
+      orgId: 'org-cliente', provider: 'olist', sourceGeneration: 2,
+      accountFingerprint: 'a'.repeat(64), lastSyncAt: new Date(),
+    });
+    vi.mocked(enqueueReport).mockResolvedValueOnce({ ok: true, reportId: 'report-180' });
+
+    try {
+      const result = await staffGenerateReportAction({}, form({
+        orgId: 'org-cliente', periodDays: '180',
+      }));
+
+      expect(result).toEqual({ ok: true, reportId: 'report-180' });
+      expect(enqueueReport).toHaveBeenCalledWith('org-cliente', {
+        inicio: new Date('2026-02-06T00:00:00.000Z'),
+        fim: new Date('2026-08-04T23:59:59.999Z'),
+      });
+      expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+        detalhes: {
+          reportId: 'report-180', provider: 'olist', periodDays: 180,
+          periodStart: '2026-02-06T00:00:00.000Z',
+          periodEnd: '2026-08-04T23:59:59.999Z',
+        },
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([undefined, '15', '30.5', 'abc'])('recusa período inválido %s antes da fila', async (periodDays) => {
+    const input = { orgId: 'org-cliente', ...(periodDays === undefined ? {} : { periodDays }) };
+    expect(await staffGenerateReportAction({}, form(input))).toEqual({
+      error: 'Selecione um período válido.',
+    });
+    expect(enqueueReport).not.toHaveBeenCalled();
   });
 
   it('recusa analista fora da carteira antes da fila', async () => {
     vi.mocked(assertOrgAccess).mockRejectedValueOnce(new Error('acesso_negado'));
 
-    expect(await staffGenerateReportAction({}, form({ orgId: 'org-fora' }))).toEqual({ error: 'Acesso negado.' });
+    expect(await staffGenerateReportAction({}, form({ orgId: 'org-fora', periodDays: '30' }))).toEqual({ error: 'Acesso negado.' });
     expect(getActiveErpConnection).not.toHaveBeenCalled();
     expect(enqueueReport).not.toHaveBeenCalled();
   });
@@ -133,7 +172,7 @@ describe('staffGenerateReportAction', () => {
   it('recusa organização sem ERP ativo', async () => {
     vi.mocked(getActiveErpConnection).mockResolvedValueOnce(null);
 
-    expect(await staffGenerateReportAction({}, form({ orgId: 'org-cliente' }))).toEqual({ error: 'Nenhum ERP ativo para este cliente.' });
+    expect(await staffGenerateReportAction({}, form({ orgId: 'org-cliente', periodDays: '30' }))).toEqual({ error: 'Nenhum ERP ativo para este cliente.' });
     expect(enqueueReport).not.toHaveBeenCalled();
   });
 
@@ -144,7 +183,7 @@ describe('staffGenerateReportAction', () => {
     });
     vi.mocked(enqueueReport).mockResolvedValueOnce({ ok: false, motivo: 'relatorio_em_andamento' });
 
-    expect(await staffGenerateReportAction({}, form({ orgId: 'org-cliente' }))).toEqual({ error: 'Já existe um relatório em andamento para este cliente.' });
+    expect(await staffGenerateReportAction({}, form({ orgId: 'org-cliente', periodDays: '30' }))).toEqual({ error: 'Já existe um relatório em andamento para este cliente.' });
     expect(recordAudit).not.toHaveBeenCalled();
   });
 });

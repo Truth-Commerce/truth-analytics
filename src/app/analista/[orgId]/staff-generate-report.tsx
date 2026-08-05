@@ -6,6 +6,8 @@ import { staffGenerateReportAction, type StaffReportState } from '@/actions/staf
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Select';
+import { REPORT_PERIOD_DAYS } from '@/modules/reports/manual-report-period';
 
 type Props = {
   orgId: string;
@@ -36,8 +38,20 @@ export function StaffGenerateReport({ orgId, provider, reportInProgressId }: Pro
       <CardContent className="space-y-3">
         {providerLabel ? <p className="text-sm text-muted">{providerLabel}</p> : <Alert variant="warning">Nenhum ERP ativo para este cliente.</Alert>}
         {providerLabel ? (
-          <form action={action}>
+          <form action={action} className="space-y-3">
             <input type="hidden" name="orgId" value={orgId} />
+            <div className="space-y-1.5">
+              <label htmlFor="periodDays" className="block text-sm font-medium text-ink">
+                Período analisado
+              </label>
+              <Select id="periodDays" name="periodDays" defaultValue="30">
+                {REPORT_PERIOD_DAYS.map((days) => (
+                  <option key={days} value={days}>
+                    Últimos {days} dias
+                  </option>
+                ))}
+              </Select>
+            </div>
             <Submit disabled={Boolean(reportInProgressId)} />
           </form>
         ) : null}

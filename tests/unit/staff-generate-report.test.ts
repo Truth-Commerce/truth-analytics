@@ -17,6 +17,11 @@ describe('StaffGenerateReport', () => {
     expect(html).toContain('Olist ERP ativo');
     expect(html).toContain('name="orgId"');
     expect(html).toContain('value="org-a"');
+    expect(html).toContain('name="periodDays"');
+    expect(html).toContain('<option value="30" selected="">Últimos 30 dias</option>');
+    for (const days of [7, 14, 30, 60, 90, 180]) {
+      expect(html).toContain(`value="${days}"`);
+    }
     expect(html).toContain('Gerar relatório agora');
   });
 
