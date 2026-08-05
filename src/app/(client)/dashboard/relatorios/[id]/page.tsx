@@ -5,6 +5,7 @@ import { AchadosCards } from '@/components/tasks/AchadosCards';
 import { AchadosParaTasks } from '@/components/tasks/AchadosParaTasks';
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getDoneAnterior, getReportById } from '@/modules/reports/report.repository';
+import { resolveReportOrgId } from '@/modules/reports/report-access';
 import { heroKpis } from '@/modules/reports/report-view-model';
 import { STATUS_LABEL, reportStatusVariant } from '@/modules/reports/report.types';
 import { friendlyReportError } from '@/modules/reports/report-errors';
@@ -25,28 +26,50 @@ import { HeroKpisFaixa } from './hero-kpis';
 
 import type { Metadata } from 'next';
 
-export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
+export async function generateMetadata(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ orgId?: string }>;
+}): Promise<Metadata> {
   const params = await props.params;
+  const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
-  const rel = await getReportById(params.id, access.orgId);
+  let orgId: string;
+  try {
+    orgId = await resolveReportOrgId(access, searchParams.orgId);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'acesso_negado') notFound();
+    throw error;
+  }
+  const rel = await getReportById(params.id, orgId);
   if (!rel) return { title: 'Relatório' };
   return { title: `Relatório ${formatPeriodo(rel.periodoInicio, rel.periodoFim)}` };
 }
 
-export default async function RelatorioDetalhePage(props: { params: Promise<{ id: string }> }) {
+export default async function RelatorioDetalhePage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ orgId?: string }>;
+}) {
   const params = await props.params;
+  const searchParams = await props.searchParams;
   const access = await requireActiveOrg();
-  const rel = await getReportById(params.id, access.orgId);
+  let orgId: string;
+  try {
+    orgId = await resolveReportOrgId(access, searchParams.orgId);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'acesso_negado') notFound();
+    throw error;
+  }
+  const rel = await getReportById(params.id, orgId);
 
   if (!rel) notFound();
 
   const anterior =
     rel.status === 'done' && rel.metricas
-      ? await getDoneAnterior(access.orgId, rel.createdAt, rel.id, rel)
+      ? await getDoneAnterior(orgId, rel.createdAt, rel.id, rel)
       : null;
 
   const titulosExistentes = rel.analiseIa
-    ? await listTaskTitulosAbertos(access.orgId)
+    ? await listTaskTitulosAbertos(orgId)
     : [];
 
   // Playbook sugerido por tipo no mini-form de conversão achado→task: 1º
@@ -59,7 +82,7 @@ export default async function RelatorioDetalhePage(props: { params: Promise<{ id
 
   return (
     <main className="mx-auto max-w-6xl p-6 md:p-8">
-      <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-ink">
+      <Link href={searchParams.orgId ? `/analista/${orgId}` : '/dashboard'} className="text-sm text-muted transition-colors hover:text-ink">
         ← Voltar
       </Link>
 
@@ -89,7 +112,7 @@ export default async function RelatorioDetalhePage(props: { params: Promise<{ id
               <>
                 <Button
                   as="a"
-                  href={`/dashboard/relatorios/comparar?a=${rel.id}`}
+                  href={searchParams.orgId ? `/analista/comparativo` : `/dashboard/relatorios/comparar?a=${rel.id}`}
                   variant="secondary"
                   size="sm"
                   data-testid="comparar-link"
@@ -98,7 +121,7 @@ export default async function RelatorioDetalhePage(props: { params: Promise<{ id
                 </Button>
                 <Button
                   as="a"
-                  href={`/api/reports/${rel.id}/pdf`}
+                  href={`/api/reports/${rel.id}/pdf${searchParams.orgId ? `?orgId=${orgId}` : ''}`}
                   variant="secondary"
                   size="sm"
                   data-testid="export-pdf"
