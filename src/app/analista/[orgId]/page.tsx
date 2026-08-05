@@ -46,6 +46,7 @@ import { OlistConnectionCard } from '@/components/connections/olist-connection-c
 import { olistFeedback } from '@/components/connections/olist-feedback';
 import { olistCallbackUri } from '@/modules/connections/olist-oauth-attempt';
 import { getErpConnectionReadModel } from '@/modules/connections/provider-connection.repository';
+import { StaffGenerateReport } from './staff-generate-report';
 
 import type { Metadata } from 'next';
 
@@ -88,7 +89,7 @@ export default async function AnalistaOrgPage(props: {
     getErpConnectionReadModel(orgId),
   ]);
 
-  const { org, historico, latestDone, doneAnterior, settings, totalMes, conn, ultimaDataPedido, titulosTasksUltimoDone } =
+  const { org, historico, latest, latestDone, doneAnterior, settings, source, totalMes, conn, ultimaDataPedido, titulosTasksUltimoDone } =
     dashboardData;
   if (!org) notFound();
 
@@ -149,6 +150,12 @@ export default async function AnalistaOrgPage(props: {
           </ul>
         ) : null}
       </div>
+
+      <StaffGenerateReport
+        orgId={orgId}
+        provider={source?.provider ?? null}
+        reportInProgressId={latest && (latest.status === 'queued' || latest.status === 'running') ? latest.id : null}
+      />
 
       {/* 2. Pauta IA do ciclo (T4 briefing) — card destacado, primeira coisa que o analista lê */}
       <Reveal data-testid="analista-360-briefing">
