@@ -57,6 +57,24 @@ describe('desempenho-anual (puro)', () => {
     expect(meses[11]).toEqual({ mes: '2026-08', canais: { shopee: 100, 'mercado livre': 40 } });
   });
 
+  it('porCanalMensal agrega canais com nomes herdados de Object.prototype', () => {
+    // Nomes de canal vem de texto editavel no Bling — um acumulador com objeto
+    // literal descartaria '__proto__' e transformaria 'constructor' em NaN.
+    const rows = [
+      row({ canal: '__proto__', valor_total: '100.00' }),
+      row({ canal: 'constructor', valor_total: '40.00' }),
+      row({ canal: '__proto__', valor_total: '5.00' }),
+    ];
+    const { canais } = porCanalMensal(rows, AGORA, 1)[0];
+    expect(Object.keys(canais).sort()).toEqual(['__proto__', 'constructor']);
+    expect(canais['__proto__']).toBe(105);
+    expect(canais['constructor']).toBe(40);
+  });
+
+  it('inicioJanela rejeita janela menor que um mês', () => {
+    expect(() => inicioJanela(AGORA, 0)).toThrow('meses_invalido');
+  });
+
   it('topSkus agrega por sku, ordena por quantidade e respeita o limite', () => {
     const rows = [
       row({ itens: [{ sku: 'A', nome: 'Produto A', quantidade: 1, valor: 10 }] }),

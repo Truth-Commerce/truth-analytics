@@ -42,6 +42,9 @@ export function mesesJanela(agora: Date, meses: number): string[] {
 
 /** SP não tem DST desde 2019 — offset fixo -03:00. */
 export function inicioJanela(agora: Date, meses: number): Date {
+  // Sem a guarda, `mesesJanela` devolveria [] e o Date sairia Invalid — um filtro
+  // silenciosamente vazio lá na frente. Melhor estourar aqui.
+  if (!Number.isInteger(meses) || meses < 1) throw new Error('meses_invalido');
   return new Date(`${mesesJanela(agora, meses)[0]}-01T00:00:00-03:00`);
 }
 
@@ -75,14 +78,18 @@ export function agruparPorMes(rows: PedidoRow[], agora: Date, meses: number): Me
 }
 
 export function porCanalMensal(rows: PedidoRow[], agora: Date, meses: number): { mes: string; canais: Record<string, number> }[] {
-  const buckets = new Map<string, Record<string, number>>();
-  for (const chave of mesesJanela(agora, meses)) buckets.set(chave, {});
+  // O acumulador é Map, não objeto literal: nomes de canal vêm de texto editável no
+  // Bling, e chaves herdadas de Object.prototype ('__proto__' seria descartado,
+  // 'constructor' viraria NaN) corromperiam o total. `Object.fromEntries` materializa
+  // o Record só na saída, com own properties de verdade.
+  const buckets = new Map<string, Map<string, number>>();
+  for (const chave of mesesJanela(agora, meses)) buckets.set(chave, new Map());
   for (const r of rows) {
     const b = buckets.get(chaveMes(r.data));
     if (!b) continue;
-    b[r.canal] = round2((b[r.canal] ?? 0) + num(r.valor_total));
+    b.set(r.canal, round2((b.get(r.canal) ?? 0) + num(r.valor_total)));
   }
-  return [...buckets.entries()].map(([mes, canais]) => ({ mes, canais }));
+  return [...buckets.entries()].map(([mes, canais]) => ({ mes, canais: Object.fromEntries(canais) }));
 }
 
 export function topSkus(rows: PedidoRow[], limite: number): { sku: string; nome: string; quantidade: number; receita: number }[] {
