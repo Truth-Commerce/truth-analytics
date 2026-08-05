@@ -80,7 +80,7 @@ export default async function ConexoesPage(props: {
               <p data-testid="bling-status" className="text-sm text-muted">
                 Não conectado
               </p>
-              <Button as="a" href="/api/connections/bling" variant="primary" size="sm">
+              <Button as="a" href={`/api/connections/bling?orgId=${access.orgId}&surface=client_connections`} variant="primary" size="sm">
                 Conectar Bling
               </Button>
             </div>
