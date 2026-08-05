@@ -9,6 +9,8 @@ vi.mock('@/modules/auth/require-analista', () => ({
 vi.mock('@/modules/analista/analista.repository', () => ({ assertOrgAccess: vi.fn() }));
 vi.mock('@/modules/admin/admin.repository', () => ({ getOrganizationById: vi.fn() }));
 vi.mock('@/modules/audit/audit.repository', () => ({ recordAudit: vi.fn() }));
+vi.mock('@/modules/connections/active-provider.repository', () => ({ getActiveErpConnection: vi.fn() }));
+vi.mock('@/modules/pipeline/enqueue', () => ({ enqueueReport: vi.fn() }));
 vi.mock('@/modules/tracked-products/tracked-product.repository', () => ({
   addTrackedProduct: vi.fn(),
   removeTrackedProduct: vi.fn(),
@@ -17,12 +19,15 @@ vi.mock('@/modules/tracked-products/tracked-product.repository', () => ({
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
+import { enqueueReport } from '@/modules/pipeline/enqueue';
 import {
   addTrackedProduct,
   removeTrackedProduct,
 } from '@/modules/tracked-products/tracked-product.repository';
 import {
   staffAddTrackedProductAction,
+  staffGenerateReportAction,
   staffRemoveTrackedProductAction,
 } from '@/actions/staff.actions';
 
@@ -96,5 +101,50 @@ describe('staffRemoveTrackedProductAction', () => {
       orgId: 'org-cliente', userId: 'staff1', acao: 'tracked_product.removido_staff',
       detalhes: { id: 'prod-1' },
     }));
+  });
+});
+
+describe('staffGenerateReportAction', () => {
+  it('analista atribuído gera relatório com Olist ativo', async () => {
+    vi.mocked(getActiveErpConnection).mockResolvedValueOnce({
+      orgId: 'org-cliente', provider: 'olist', sourceGeneration: 2,
+      accountFingerprint: 'a'.repeat(64), lastSyncAt: new Date(),
+    });
+    vi.mocked(enqueueReport).mockResolvedValueOnce({ ok: true, reportId: 'report-1' });
+
+    const result = await staffGenerateReportAction({}, form({ orgId: 'org-cliente' }));
+
+    expect(result).toEqual({ ok: true, reportId: 'report-1' });
+    expect(assertOrgAccess).toHaveBeenCalledWith(expect.objectContaining({ role: 'analista' }), 'org-cliente');
+    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+      orgId: 'org-cliente', userId: 'staff1', acao: 'report.disparado_staff',
+      detalhes: { reportId: 'report-1', provider: 'olist' },
+    }));
+  });
+
+  it('recusa analista fora da carteira antes da fila', async () => {
+    vi.mocked(assertOrgAccess).mockRejectedValueOnce(new Error('acesso_negado'));
+
+    expect(await staffGenerateReportAction({}, form({ orgId: 'org-fora' }))).toEqual({ error: 'Acesso negado.' });
+    expect(getActiveErpConnection).not.toHaveBeenCalled();
+    expect(enqueueReport).not.toHaveBeenCalled();
+  });
+
+  it('recusa organização sem ERP ativo', async () => {
+    vi.mocked(getActiveErpConnection).mockResolvedValueOnce(null);
+
+    expect(await staffGenerateReportAction({}, form({ orgId: 'org-cliente' }))).toEqual({ error: 'Nenhum ERP ativo para este cliente.' });
+    expect(enqueueReport).not.toHaveBeenCalled();
+  });
+
+  it('traduz relatório concorrente sem registrar auditoria', async () => {
+    vi.mocked(getActiveErpConnection).mockResolvedValueOnce({
+      orgId: 'org-cliente', provider: 'bling', sourceGeneration: 1,
+      accountFingerprint: null, lastSyncAt: new Date(),
+    });
+    vi.mocked(enqueueReport).mockResolvedValueOnce({ ok: false, motivo: 'relatorio_em_andamento' });
+
+    expect(await staffGenerateReportAction({}, form({ orgId: 'org-cliente' }))).toEqual({ error: 'Já existe um relatório em andamento para este cliente.' });
+    expect(recordAudit).not.toHaveBeenCalled();
   });
 });
