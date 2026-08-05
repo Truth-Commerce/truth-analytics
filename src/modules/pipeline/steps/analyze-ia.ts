@@ -7,6 +7,7 @@ import { formatBRL, formatDataUtc } from '@/lib/format';
 import { logger } from '@/lib/logger';
 import { getAnthropic } from '@/modules/ai/claude';
 import type { Plano } from '@/modules/auth/user.types';
+import type { MesDesempenho } from '@/modules/desempenho/desempenho-anual';
 import { AnaliseIaSchema, type AnaliseIa, type Metricas } from '@/modules/pipeline/contracts';
 import type { Periodo } from '@/modules/providers/types';
 
@@ -96,6 +97,8 @@ export type AnalysisContext = {
     totalPeriodo: number | null;
   } | null;
   datasComerciais: DataComercial[];
+  /** Série mensal dos últimos 12 meses (staff/IA) — null quando não há histórico. */
+  contextoAnual: MesDesempenho[] | null;
 };
 
 /**
@@ -168,6 +171,16 @@ Responda EXCLUSIVAMENTE com um objeto JSON válido conforme o schema fornecido. 
           .join('\n')
       : 'Nenhuma data comercial relevante nos próximos 60 dias.';
 
+  const anualTexto =
+    contexto.contextoAnual && contexto.contextoAnual.some((m) => m.pedidos > 0)
+      ? contexto.contextoAnual
+          .map(
+            (m) =>
+              `${m.mes}: ${formatBRL(m.faturamento)} · ${m.pedidos} pedidos · ticket ${formatBRL(m.ticketMedio)} · receita líquida ${formatBRL(m.receitaLiquida)}`,
+          )
+          .join('\n')
+      : 'Sem histórico anual disponível (backfill ainda não executado).';
+
   const user = `### Sobre a loja
 Loja: ${contexto.orgName}
 Nicho: ${contexto.nicho ?? 'não informado'}
@@ -182,6 +195,9 @@ ${anteriorTexto}
 
 ### Datas comerciais nos próximos 60 dias
 ${calendarioTexto}
+
+### Histórico dos últimos 12 meses
+${anualTexto}
 
 ### Métricas do período (JSON)
 ${JSON.stringify(metricas, null, 2)}`;
