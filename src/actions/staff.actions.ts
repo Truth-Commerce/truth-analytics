@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { logger } from '@/lib/logger';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
@@ -172,8 +173,15 @@ export async function staffBackfillHistoricoAction(
 
   const agora = new Date();
   const periodo = { inicio: inicioJanela(agora, BACKFILL_MESES), fim: agora };
-  const coleta = await collectOrders(source, periodo, { deadlineMs: BACKFILL_COLETA_DEADLINE_MS });
-  const enriquecimento = await enrichOrders(source, BACKFILL_ENRIQUECIMENTO);
+  let coleta: Awaited<ReturnType<typeof collectOrders>>;
+  let enriquecimento: Awaited<ReturnType<typeof enrichOrders>>;
+  try {
+    coleta = await collectOrders(source, periodo, { deadlineMs: BACKFILL_COLETA_DEADLINE_MS });
+    enriquecimento = await enrichOrders(source, BACKFILL_ENRIQUECIMENTO);
+  } catch (e) {
+    logger.error('backfill de historico falhou', { orgId, provider: source.provider }, e);
+    return { error: 'Falha ao sincronizar com o Bling. Tente novamente em alguns minutos.' };
+  }
 
   await recordAudit({
     orgId,

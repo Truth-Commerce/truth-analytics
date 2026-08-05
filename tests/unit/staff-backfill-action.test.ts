@@ -35,6 +35,16 @@ describe('staffBackfillHistoricoAction', () => {
     expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: 'desempenho.backfill_disparado' }));
   });
 
+  it('falha parcial nao corrompe: erro do Bling vira mensagem pt-BR sem lancar e sem gravar auditoria', async () => {
+    getActiveErpConnection.mockResolvedValue({ orgId: 'org-a', provider: 'bling', sourceGeneration: 1 });
+    collectOrders.mockRejectedValueOnce(new Error('bling_timeout'));
+    const { staffBackfillHistoricoAction } = await import('@/actions/staff.actions');
+    await expect(staffBackfillHistoricoAction({}, form('org-a'))).resolves.toEqual({
+      error: 'Falha ao sincronizar com o Bling. Tente novamente em alguns minutos.',
+    });
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
   it('recusa org sem ERP ativo', async () => {
     getActiveErpConnection.mockResolvedValue(null);
     const { staffBackfillHistoricoAction } = await import('@/actions/staff.actions');
