@@ -7,12 +7,15 @@ import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { requireAnalista } from '@/modules/auth/require-analista';
 import type { UserAccess } from '@/modules/auth/user.types';
+import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
+import { enqueueReport } from '@/modules/pipeline/enqueue';
 import {
   addTrackedProduct,
   removeTrackedProduct,
 } from '@/modules/tracked-products/tracked-product.repository';
 
 export type StaffProdutosState = { error?: string; ok?: boolean };
+export type StaffReportState = { error?: string; ok?: boolean; reportId?: string };
 
 /**
  * Gate de staff: admin_truth sempre passa; analista só nas orgs da carteira.
@@ -94,4 +97,35 @@ export async function staffRemoveTrackedProductAction(
   });
   revalidarPaginas(orgId);
   return { ok: true };
+}
+
+export async function staffGenerateReportAction(
+  _prev: StaffReportState,
+  formData: FormData,
+): Promise<StaffReportState> {
+  const orgId = String(formData.get('orgId') ?? '');
+  if (!orgId) return { error: 'Cliente inválido.' };
+  const access = await autorizarStaff(orgId);
+  if (!access) return { error: 'Acesso negado.' };
+
+  const source = await getActiveErpConnection(orgId);
+  if (!source) return { error: 'Nenhum ERP ativo para este cliente.' };
+
+  const result = await enqueueReport(orgId);
+  if (!result.ok) {
+    if (result.motivo === 'relatorio_em_andamento') {
+      return { error: 'Já existe um relatório em andamento para este cliente.' };
+    }
+    if (result.motivo === 'sem_plano') return { error: 'Organização sem plano definido.' };
+    return { error: 'Não foi possível iniciar o relatório.', ...(result.reportId ? { reportId: result.reportId } : {}) };
+  }
+
+  await recordAudit({
+    orgId,
+    userId: access.id,
+    acao: 'report.disparado_staff',
+    detalhes: { reportId: result.reportId, provider: source.provider },
+  });
+  revalidatePath(`/analista/${orgId}`);
+  return { ok: true, reportId: result.reportId };
 }
