@@ -22,7 +22,17 @@ export function applyVerificationResult(cursor: PreparationCursor, phase: 'verif
   if (remoteTotal !== evidence.expectedCount) { cursor.progress = null; cursor.reason = 'verification_count_mismatch'; return cursor; }
   if (phase === 'verify1') { cursor.verify1 = { done: true, ...evidence }; cursor.stage = 'verify2'; delete cursor.reason; return cursor; }
   if (!cursor.verify1 || JSON.stringify(cursor.verify1) !== JSON.stringify({ done: true, ...evidence })) { cursor.verify1 = { done: true, ...evidence }; cursor.verify2 = null; cursor.progress = null; cursor.stage = 'verify2'; cursor.reason = 'verification_unstable'; return cursor; }
-  cursor.verify2 = { done: true, ...evidence }; cursor.stage = 'details'; delete cursor.reason; return cursor;
+  cursor.verify2 = { done: true, ...evidence }; cursor.stage = cursor.detailsCompleted ? 'ready' : 'details'; delete cursor.reason; return cursor;
+}
+
+export function beginPostDetailsVerification(cursor: PreparationCursor): PreparationCursor {
+  cursor.detailsCompleted = true;
+  cursor.verify1 = null;
+  cursor.verify2 = null;
+  cursor.progress = null;
+  cursor.stage = 'verify1';
+  delete cursor.reason;
+  return cursor;
 }
 
 export function preparationWindow(capturedAt: string): { from: string; to: string; catchUpFrom: string } {
@@ -153,14 +163,9 @@ async function prepareOlistOrdersCore(source: ErpDataSource, options: PrepareOli
       const result = await enrichOrders(source, { maxPedidos: options.maxDetails ?? INITIAL_CAP, deadlineAt, periodo: { inicio: new Date(cursor.window.from), fim: new Date(cursor.window.to) } });
       const afterDetailsLease = await renew(active); if (!afterDetailsLease) throw new Error('prepare_lease_lost'); active = afterDetailsLease;
       if (result.incompleto || result.quarentenados > 0) { if (result.quarentenados > 0) { cursor.stage = 'blocked'; cursor.reason = 'details_quarantined'; if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); } else { if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); } return outcome(cursor, window, result.quarentenados > 0 ? 'details_quarantined' : 'details_pending'); }
-      const readiness = await reconcileOrderReadiness({ ...source, accountFingerprint: fingerprint });
-      if (!readiness.ready) { cursor.stage = 'blocked'; cursor.reason = readiness.reasons[0] ?? 'reconciliation_failed'; if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost'); return outcome(cursor, window); }
-      cursor.stage = 'ready'; delete cursor.reason;
-    }
-    if (cursor.stage === 'ready') {
-      const completedAt = cursor.catchup.completedAt; if (!completedAt || !await current(source, fingerprint)) throw new Error('prepare_source_stale');
-      if (!await publishReady(active, source, cursor)) throw new Error('prepare_publish_cas_failed');
-      if (!await completeSyncLease(active)) throw new Error('prepare_lease_lost');
+      beginPostDetailsVerification(cursor);
+      if (!await save(active, cursor) || !await yieldSyncLease(active)) throw new Error('prepare_lease_lost');
+      return outcome(cursor, window);
     }
     return outcome(cursor, window);
   } catch (error) {

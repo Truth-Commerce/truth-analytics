@@ -177,6 +177,7 @@ export type PreparationCursor = {
   verify1: PreparationVerification | null;
   verify2: PreparationVerification | null;
   progress: PreparationProgress | null;
+  detailsCompleted?: boolean;
   reason?: string;
 };
 export type PreparationVerification = { done: true; expectedCount: number; checksum: string; dailyChecksum: string; channelChecksum: string };
@@ -211,7 +212,7 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
     if (!phaseKey || typeof p.cycleId !== 'string' || p.cycleId.length < 1 || offset === null || (total === null && p.total !== null) || (total !== null && offset > total)) return null;
     progress = { phaseKey, cycleId: p.cycleId, offset, total };
   }
-  if (cursor.version !== 1 || !stage || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(to) || typeof snapshot?.done !== 'boolean' || typeof catchup?.done !== 'boolean' || (catchupCompletedAt === null && catchup?.completedAt !== null) || (cursor.verify1 !== null && !verify1) || (cursor.verify2 !== null && !verify2)) return null;
+  if (cursor.version !== 1 || !stage || generation !== sourceGeneration || fingerprint === null || !/^[a-f0-9]{64}$/i.test(fingerprint) || fingerprint !== accountFingerprint || !from || !to || !catchUpFrom || new Date(from) >= new Date(to) || new Date(catchUpFrom) < new Date(to) || typeof snapshot?.done !== 'boolean' || typeof catchup?.done !== 'boolean' || (catchupCompletedAt === null && catchup?.completedAt !== null) || (cursor.verify1 !== null && !verify1) || (cursor.verify2 !== null && !verify2) || (cursor.detailsCompleted !== undefined && typeof cursor.detailsCompleted !== 'boolean')) return null;
   if (!['snapshot', 'blocked'].includes(stage) && snapshot.done !== true) return null;
   if (!['snapshot', 'catchup', 'blocked'].includes(stage) && (catchup.done !== true || !catchupCompletedAt)) return null;
   if (catchup.done === false && catchupCompletedAt !== null) return null;
@@ -222,5 +223,5 @@ export function parsePreparationCursor(value: unknown, sourceGeneration: number,
   if (progress && stage !== 'blocked' && progress.phaseKey !== stage) return null;
   if (stage === 'blocked' && typeof cursor.reason !== 'string') return null;
   if (stage === 'ready' && (!verify1 || !verify2 || verify1.expectedCount !== verify2.expectedCount || verify1.checksum !== verify2.checksum || verify1.dailyChecksum !== verify2.dailyChecksum || verify1.channelChecksum !== verify2.channelChecksum)) return null;
-  return { version: 1, stage, sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: snapshot.done }, catchup: { done: catchup.done, completedAt: catchupCompletedAt }, verify1, verify2, ...(rawProgress === undefined ? {} : { progress }), ...(typeof cursor.reason === 'string' ? { reason: cursor.reason } : {}) } as PreparationCursor;
+  return { version: 1, stage, sourceGeneration: generation, accountFingerprint: fingerprint, window: { from, to }, catchUpFrom, snapshot: { done: snapshot.done }, catchup: { done: catchup.done, completedAt: catchupCompletedAt }, verify1, verify2, ...(rawProgress === undefined ? {} : { progress }), ...(cursor.detailsCompleted === true ? { detailsCompleted: true } : {}), ...(typeof cursor.reason === 'string' ? { reason: cursor.reason } : {}) } as PreparationCursor;
 }

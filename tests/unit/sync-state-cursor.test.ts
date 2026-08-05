@@ -77,6 +77,18 @@ describe('parsePreparationCursor', () => {
     expect(parsePreparationCursor({ ...valid, verify2: { ...valid.verify2, dailyChecksum: 'd'.repeat(32) } }, 3, 'a'.repeat(64))).toBeNull();
   });
 
+  it('preserves the post-detail verification marker', () => {
+    const cursor = {
+      version: 1 as const, stage: 'verify1' as const, sourceGeneration: 3,
+      accountFingerprint: 'a'.repeat(64),
+      window: { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' },
+      catchUpFrom: '2026-01-02T01:00:00.000Z', snapshot: { done: true },
+      catchup: { done: true, completedAt: '2026-01-02T01:00:00.000Z' },
+      verify1: null, verify2: null, progress: null, detailsCompleted: true,
+    };
+    expect(parsePreparationCursor(cursor, 3, 'a'.repeat(64))).toEqual(cursor);
+  });
+
   it('preserva progresso retomável por fase e recusa offset inválido', () => {
     const cursor = {
       version: 1, stage: 'snapshot', sourceGeneration: 3, accountFingerprint: 'a'.repeat(64),
