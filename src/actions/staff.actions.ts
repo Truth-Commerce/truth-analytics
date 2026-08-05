@@ -10,6 +10,10 @@ import type { UserAccess } from '@/modules/auth/user.types';
 import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
 import { enqueueReport } from '@/modules/pipeline/enqueue';
 import {
+  manualReportPeriod,
+  parseReportPeriodDays,
+} from '@/modules/reports/manual-report-period';
+import {
   addTrackedProduct,
   removeTrackedProduct,
 } from '@/modules/tracked-products/tracked-product.repository';
@@ -108,10 +112,14 @@ export async function staffGenerateReportAction(
   const access = await autorizarStaff(orgId);
   if (!access) return { error: 'Acesso negado.' };
 
+  const periodDays = parseReportPeriodDays(formData.get('periodDays'));
+  if (!periodDays) return { error: 'Selecione um período válido.' };
+  const period = manualReportPeriod(periodDays);
+
   const source = await getActiveErpConnection(orgId);
   if (!source) return { error: 'Nenhum ERP ativo para este cliente.' };
 
-  const result = await enqueueReport(orgId);
+  const result = await enqueueReport(orgId, period);
   if (!result.ok) {
     if (result.motivo === 'relatorio_em_andamento') {
       return { error: 'Já existe um relatório em andamento para este cliente.' };
@@ -124,7 +132,13 @@ export async function staffGenerateReportAction(
     orgId,
     userId: access.id,
     acao: 'report.disparado_staff',
-    detalhes: { reportId: result.reportId, provider: source.provider },
+    detalhes: {
+      reportId: result.reportId,
+      provider: source.provider,
+      periodDays,
+      periodStart: period.inicio.toISOString(),
+      periodEnd: period.fim.toISOString(),
+    },
   });
   revalidatePath(`/analista/${orgId}`);
   return { ok: true, reportId: result.reportId };

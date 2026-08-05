@@ -16,6 +16,8 @@ export type EnqueueResult =
       reportId?: string;
     };
 
+type ReportPeriod = { inicio: Date; fim: Date };
+
 /**
  * Helper canônico de enfileiramento — usado tanto pela `generateReportAction`
  * (geração manual) quanto pelo cron `gerar-relatorios` (geração automática):
@@ -30,14 +32,17 @@ export type EnqueueResult =
  * validou `podeGerar`/Bling antes de chamar; o cron filtra elegibilidade via
  * `listOrgsElegiveisParaGeracao` antes de chamar.
  */
-export async function enqueueReport(orgId: string): Promise<EnqueueResult> {
+export async function enqueueReport(
+  orgId: string,
+  explicitPeriod?: ReportPeriod,
+): Promise<EnqueueResult> {
   const org = await getOrganizationById(orgId);
   if (!org) return { ok: false, motivo: 'org_nao_encontrada' };
   if (!org.plano) return { ok: false, motivo: 'sem_plano' };
 
   // G0: janela em dias FECHADOS no calendário America/Sao_Paulo (fonte única
   // compartilhada com o disparo manual do admin — periodoDoPlano).
-  const periodo = periodoDoPlano(org.plano, new Date());
+  const periodo = explicitPeriod ?? periodoDoPlano(org.plano, new Date());
 
   let reportId: string;
   try {
