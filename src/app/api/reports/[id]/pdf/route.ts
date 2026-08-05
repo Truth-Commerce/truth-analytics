@@ -1,5 +1,6 @@
 import { requireActiveOrg } from '@/modules/auth/require-active-org';
 import { getReportById } from '@/modules/reports/report.repository';
+import { resolveReportOrgId } from '@/modules/reports/report-access';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { getOrgAnalistaUser } from '@/modules/notifications/recipients';
 import { renderReportPdf } from '@/modules/pdf/report-pdf';
@@ -8,12 +9,21 @@ import { formatData, formatPeriodo, slugify } from '@/lib/format';
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const access = await requireActiveOrg();
-  const rel = await getReportById(id, access.orgId);
+  let orgId: string;
+  try {
+    orgId = await resolveReportOrgId(access, new URL(req.url).searchParams.get('orgId') ?? undefined);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'acesso_negado') {
+      return new Response('Relatório não disponível para exportação.', { status: 404 });
+    }
+    throw error;
+  }
+  const rel = await getReportById(id, orgId);
   if (!rel || rel.status !== 'done' || !rel.metricas) {
     return new Response('Relatório não disponível para exportação.', {
       status: 404,
@@ -22,8 +32,8 @@ export async function GET(
   }
 
   const [org, analista] = await Promise.all([
-    getOrganizationById(access.orgId),
-    getOrgAnalistaUser(access.orgId),
+    getOrganizationById(orgId),
+    getOrgAnalistaUser(orgId),
   ]);
   const buffer = await renderReportPdf({
     orgName: org?.name ?? 'Cliente Truth',
