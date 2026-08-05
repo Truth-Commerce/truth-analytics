@@ -2,13 +2,17 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { logger } from '@/lib/logger';
 import { getOrganizationById } from '@/modules/admin/admin.repository';
 import { assertOrgAccess } from '@/modules/analista/analista.repository';
 import { recordAudit } from '@/modules/audit/audit.repository';
 import { requireAnalista } from '@/modules/auth/require-analista';
 import type { UserAccess } from '@/modules/auth/user.types';
 import { getActiveErpConnection } from '@/modules/connections/active-provider.repository';
+import { inicioJanela } from '@/modules/desempenho/desempenho-anual';
 import { enqueueReport } from '@/modules/pipeline/enqueue';
+import { collectOrders } from '@/modules/pipeline/steps/collect-orders';
+import { enrichOrders } from '@/modules/pipeline/steps/enrich-orders';
 import {
   manualReportPeriod,
   parseReportPeriodDays,
@@ -142,4 +146,57 @@ export async function staffGenerateReportAction(
   });
   revalidatePath(`/analista/${orgId}`);
   return { ok: true, reportId: result.reportId };
+}
+
+export type StaffBackfillState = { error?: string; ok?: boolean; processados?: number; pendentesEnriquecimento?: number };
+
+const BACKFILL_MESES = 12;
+const BACKFILL_ENRIQUECIMENTO = { maxPedidos: 200, prazoMs: 90_000 } as const;
+
+/**
+ * Backfill staff de 12 meses (SÓ Bling): coleta paginada idempotente + um lote
+ * de enriquecimento inline. O restante da fila drena pelo cron sincronizar-pedidos.
+ */
+export async function staffBackfillHistoricoAction(
+  _prev: StaffBackfillState,
+  formData: FormData,
+): Promise<StaffBackfillState> {
+  const orgId = String(formData.get('orgId') ?? '');
+  if (!orgId) return { error: 'Cliente inválido.' };
+  const access = await autorizarStaff(orgId);
+  if (!access) return { error: 'Acesso negado.' };
+
+  const source = await getActiveErpConnection(orgId);
+  if (!source) return { error: 'Nenhum ERP ativo para este cliente.' };
+  if (source.provider !== 'bling') return { error: 'Backfill de historico disponivel apenas para Bling.' };
+
+  const agora = new Date();
+  const periodo = { inicio: inicioJanela(agora, BACKFILL_MESES), fim: agora };
+  let coleta: Awaited<ReturnType<typeof collectOrders>>;
+  let enriquecimento: Awaited<ReturnType<typeof enrichOrders>>;
+  try {
+    // Sem deadline: no Bling a coleta pagina até o fim (o ramo não lê `deadlineMs`),
+    // então passar a opção só documentaria uma proteção inexistente. Org muito grande
+    // pode estourar o maxDuration=300s da rota — follow-up conhecido.
+    coleta = await collectOrders(source, periodo);
+    enriquecimento = await enrichOrders(source, BACKFILL_ENRIQUECIMENTO);
+  } catch (e) {
+    logger.error('backfill de historico falhou', { orgId, provider: source.provider }, e);
+    return { error: 'Falha ao sincronizar com o Bling. Tente novamente em alguns minutos.' };
+  }
+
+  await recordAudit({
+    orgId,
+    userId: access.id,
+    acao: 'desempenho.backfill_disparado',
+    detalhes: {
+      processados: coleta.processados,
+      total: coleta.total,
+      enriquecidos: enriquecimento.enriquecidos,
+      pendentes: enriquecimento.restantes,
+      periodoInicio: periodo.inicio.toISOString(),
+    },
+  });
+  revalidatePath(`/analista/${orgId}/desempenho`);
+  return { ok: true, processados: coleta.processados, pendentesEnriquecimento: Math.max(0, enriquecimento.restantes) };
 }

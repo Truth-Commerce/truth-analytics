@@ -7,6 +7,7 @@ import { formatBRL, formatDataUtc } from '@/lib/format';
 import { logger } from '@/lib/logger';
 import { getAnthropic } from '@/modules/ai/claude';
 import type { Plano } from '@/modules/auth/user.types';
+import type { MesDesempenho } from '@/modules/desempenho/desempenho-anual';
 import { AnaliseIaSchema, type AnaliseIa, type Metricas } from '@/modules/pipeline/contracts';
 import type { Periodo } from '@/modules/providers/types';
 
@@ -96,6 +97,14 @@ export type AnalysisContext = {
     totalPeriodo: number | null;
   } | null;
   datasComerciais: DataComercial[];
+  /** Série mensal dos últimos 12 meses (staff/IA) — null quando não há histórico. */
+  contextoAnual: MesDesempenho[] | null;
+  /**
+   * Cobertura do histórico anual — null quando não há histórico OU quando a leitura
+   * falhou. Sem esse número não dá para afirmar comissão/frete/receita líquida: pedido
+   * ainda não enriquecido tem os dois zerados e a conta sairia inflada.
+   */
+  coberturaAnual: { pendentesEnriquecimento: number } | null;
 };
 
 /**
@@ -168,6 +177,33 @@ Responda EXCLUSIVAMENTE com um objeto JSON válido conforme o schema fornecido. 
           .join('\n')
       : 'Nenhuma data comercial relevante nos próximos 60 dias.';
 
+  // O texto da IA é lido pelo CLIENTE, então nada aqui pode virar afirmação falsa:
+  // - meses sem pedido coletado não entram (backfill pendente parece "queda de vendas");
+  // - o último mês da série é o corrente, sempre parcial;
+  // - receita líquida só aparece com a fila de enriquecimento vazia (frete/comissão reais).
+  const mesesComVenda = contexto.contextoAnual?.filter((m) => m.pedidos > 0) ?? [];
+  const mesCorrente = contexto.contextoAnual?.at(-1)?.mes;
+  const pendentes = contexto.coberturaAnual?.pendentesEnriquecimento ?? null;
+  const anualTexto =
+    mesesComVenda.length > 0
+      ? [
+          ...mesesComVenda.map((m) => {
+            const liquida = pendentes === 0 ? ` · receita líquida ${formatBRL(m.receitaLiquida)}` : '';
+            const parcial = m.mes === mesCorrente ? ' (mês corrente, parcial)' : '';
+            return `${m.mes}: ${formatBRL(m.faturamento)} · ${m.pedidos} pedidos · ticket ${formatBRL(m.ticketMedio)}${liquida}${parcial}`;
+          }),
+          pendentes !== null && pendentes > 0
+            ? `Atenção: há ${pendentes} pedidos ainda não enriquecidos; comissão/frete/receita líquida indisponíveis para o período.`
+            : null,
+          pendentes === null
+            ? 'Atenção: cobertura de enriquecimento indisponível; comissão/frete/receita líquida omitidos para não afirmar número não verificado.'
+            : null,
+          'Meses sem linha acima não tiveram pedidos coletados — o histórico pode estar incompleto se o backfill de 12 meses ainda não foi executado; não interprete ausência como queda de vendas.',
+        ]
+          .filter((l): l is string => l !== null)
+          .join('\n')
+      : 'Sem histórico anual disponível (backfill ainda não executado).';
+
   const user = `### Sobre a loja
 Loja: ${contexto.orgName}
 Nicho: ${contexto.nicho ?? 'não informado'}
@@ -182,6 +218,9 @@ ${anteriorTexto}
 
 ### Datas comerciais nos próximos 60 dias
 ${calendarioTexto}
+
+### Histórico dos últimos 12 meses
+${anualTexto}
 
 ### Métricas do período (JSON)
 ${JSON.stringify(metricas, null, 2)}`;

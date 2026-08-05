@@ -8,6 +8,7 @@ const EXPECTED_READS: Record<string, number> = {
   'modules/alerts/alert-data.repository.ts': 3,
   'modules/analista/carteira-data.repository.ts': 2,
   'modules/calendario/gerar-calendario.ts': 1,
+  'modules/desempenho/desempenho-anual.repository.ts': 3,
   'modules/estoque/stock.repository.ts': 2,
   'modules/kits/gerar-kits.ts': 1,
   'modules/organizations/organization-settings.repository.ts': 2,

@@ -68,6 +68,8 @@ const CONTEXTO: AnalysisContext = {
   totalMesCorrente: 0,
   relatorioAnterior: null,
   datasComerciais: [],
+  contextoAnual: null,
+  coberturaAnual: null,
 };
 
 /** Build a fake Anthropic Message with a thinking block followed by a text block */

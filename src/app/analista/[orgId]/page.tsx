@@ -12,6 +12,7 @@ import { MetaProgress } from '@/components/dashboard/meta-progress';
 import { StatCards } from '@/components/dashboard/stat-cards';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { LineChart } from '@/components/ui/charts/LineChart';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -160,16 +161,19 @@ export default async function AnalistaOrgPage(props: {
         reportInProgressId={latest && (latest.status === 'queued' || latest.status === 'running') ? latest.id : null}
       />
 
-      {latestDone ? (
-        <div className="flex justify-end">
+      <div className="flex justify-end gap-3">
+        <Button as="a" href={`/analista/${orgId}/desempenho`} variant="secondary" data-testid="link-desempenho-anual">
+          Desempenho anual
+        </Button>
+        {latestDone ? (
           <Link
             href={`/dashboard/relatorios/${latestDone.id}?orgId=${orgId}`}
             className="inline-flex min-h-10 items-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand/90"
           >
             Abrir relatório completo →
           </Link>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       {/* 2. Pauta IA do ciclo (T4 briefing) — card destacado, primeira coisa que o analista lê */}
       <Reveal data-testid="analista-360-briefing">

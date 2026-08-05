@@ -23,6 +23,7 @@ import { Reveal } from './reveal';
 import { Toc } from './toc';
 import { MetricasSection } from './metricas-section';
 import { HeroKpisFaixa } from './hero-kpis';
+import { ContextoAnualStaff, deveExibirContextoAnual } from './contexto-anual-staff';
 
 import type { Metadata } from 'next';
 
@@ -318,6 +319,10 @@ export default async function RelatorioDetalhePage(props: {
                   </Reveal>
                 ) : null}
               </>
+            ) : null}
+
+            {deveExibirContextoAnual(access.role, searchParams.orgId) ? (
+              <ContextoAnualStaff orgId={orgId} />
             ) : null}
           </div>
         </div>
