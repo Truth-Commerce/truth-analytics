@@ -43,24 +43,13 @@ describe('navItems — nav por papel', () => {
     expect(hrefs).not.toContain('/conexoes');
   });
 
-  it('analista vê o menu operacional unificado na ordem aprovada', () => {
+  it('analista usa somente rotas com contexto explícito de cliente', () => {
     expect(navItems('analista')).toEqual([
-      { href: '/dashboard', label: 'Visão geral', icon: 'dashboard', description: 'Visão geral do negócio' },
       { href: '/analista', label: 'Carteira', icon: 'portfolio', description: 'Clientes sob acompanhamento' },
       { href: '/analista/comparativo', label: 'Comparativo', icon: 'compare', description: 'Compare contas e períodos' },
-      {
-        href: '/dashboard/plano-de-acao',
-        label: 'Plano de Ação',
-        icon: 'tasks',
-        description: 'Prioridades e execução',
-        badge: true,
-      },
-      { href: '/dashboard/estoque', label: 'Estoque', icon: 'inventory', description: 'Cobertura e disponibilidade' },
-      { href: '/dashboard/kits', label: 'Kits', icon: 'kits', description: 'Oportunidades de combinação' },
-      { href: '/dashboard/calendario', label: 'Calendário', icon: 'calendar', description: 'Planejamento comercial' },
       { href: '/analista/conexoes', label: 'Conexões', icon: 'connections', description: 'Configure o ERP dos clientes' },
-      { href: '/configuracoes', label: 'Configurações', icon: 'settings', description: 'Preferências da conta' },
     ]);
+    expect(navItems('analista').some((item) => item.href.startsWith('/dashboard'))).toBe(false);
   });
 
   it('cliente não recebe áreas exclusivas do analista', () => {
