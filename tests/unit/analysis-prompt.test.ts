@@ -35,6 +35,7 @@ const CONTEXTO: AnalysisContext = {
     { nome: 'Dia dos Pais', data: new Date('2026-08-09T00:00:00Z'), dica: 'Kits presenteáveis.' },
   ],
   contextoAnual: null,
+  coberturaAnual: null,
 };
 
 describe('buildAnalysisMessages — system', () => {

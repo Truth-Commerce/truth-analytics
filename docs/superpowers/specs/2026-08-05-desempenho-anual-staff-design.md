@@ -44,18 +44,31 @@ cria a visão de 12 meses.
   A página funciona para org com Olist ativo lendo o que existir em `orders`.
 - **LGPD:** nenhuma tabela nova; `orders` já está no `purgeOrg`.
 
-### Agregação: repository de leitura pura
+### Agregação: leitura mínima no repository + agregação pura em JS
 
-`src/modules/desempenho/desempenho-anual.repository.ts` — agregações SQL sobre
-`orders`, sempre via `orderScope(ref)` (ERP ativo). Por mês (12 meses, meses sem
-venda zerados):
+> Ajustado na implementação (aprovado no plano): a spec original prescrevia
+> agregação SQL com `unnest` do jsonb. O que foi implementado busca as colunas
+> mínimas e agrega em JS puro — precedente do `stock.repository.ts`. Ganho: as
+> funções de agregação ficam testáveis sem banco e a lógica de mês comercial
+> (America/Sao_Paulo) mora num lugar só.
 
-- faturamento (`sum(valor_total)`), pedidos (`count`), ticket médio, unidades
-  (soma de `quantidade` dos itens), frete, comissão
+`src/modules/desempenho/desempenho-anual.repository.ts` — leitura fina sobre
+`orders`, sempre via `orderScope(ref)` (ERP ativo):
+
+- `getPedidos12Meses(source, agora)` seleciona só
+  `data, valor_total, frete, comissao, canal, itens` da janela de 12 meses.
+- `getCoberturaHistorico(source)` devolve `desde` (menor `data`) e
+  `pendentesEnriquecimento` (pedidos com `enriquecido_em IS NULL`).
+
+`src/modules/desempenho/desempenho-anual.ts` (puro, sem banco) agrega essas
+linhas. Por mês (12 meses, meses sem venda zerados):
+
+- faturamento, pedidos, ticket médio, unidades (soma de `quantidade` dos itens),
+  frete, comissão
 - **receita líquida** = faturamento − comissão − frete
 - faturamento por canal (para área/barras empilhadas)
-- top SKUs por quantidade e receita (unnest do jsonb `itens`), com seletor de
-  período 3/6/12 meses
+- top SKUs por quantidade e receita (a partir do jsonb `itens` já carregado), com
+  seletor de período 3/6/12 meses
 
 Padrão do app mantido: telas só leem, pipeline só escreve.
 
@@ -79,6 +92,15 @@ Padrão do app mantido: telas só leem, pipeline só escreve.
 - `analysis-context` ganha `contextoAnual`: série mensal compacta dos 12 meses
   (mês, faturamento, pedidos, ticket), computada ao vivo do `orders` no momento
   da geração. Nova seção `### Histórico 12 meses` em `buildAnalysisMessages`.
+- `analysis-context` ganha também `coberturaAnual` (`pendentesEnriquecimento`).
+  O texto que a IA escreve é lido pelo CLIENTE, então a seção do prompt carrega
+  ressalvas obrigatórias: só entram meses com pedidos (mês zerado por backfill
+  pendente não pode virar "queda de vendas"), o último mês é marcado como
+  parcial, e receita líquida/comissão/frete só aparecem com a fila de
+  enriquecimento vazia — caso contrário a linha os omite e o prompt avisa que
+  são indisponíveis. Sempre há a linha dizendo que mês ausente ≠ queda.
+- Falha na leitura anual (`getPedidos12Meses`/`getCoberturaHistorico`) não
+  derruba a geração do relatório: cai para `contextoAnual: null`.
 - Seção visual "Contexto anual" APENAS na visão staff do relatório (rotas do
   analista). Computada ao vivo pelo repository — nada gravado em
   `reports.metricas`, então não existe caminho de API para o cliente acessar.

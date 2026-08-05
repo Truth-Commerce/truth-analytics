@@ -26,7 +26,7 @@ export function BackfillHistorico({ orgId }: { orgId: string }) {
       {state.ok ? (
         <p className="mt-1 text-xs text-muted">
           {state.processados} pedidos sincronizados
-          {state.pendentesEnriquecimento ? ` · ${state.pendentesEnriquecimento} aguardando enriquecimento (o cron completa em ~1h)` : ''}
+          {state.pendentesEnriquecimento ? ` · ${state.pendentesEnriquecimento} aguardando enriquecimento (o cron completa aos poucos)` : ''}
         </p>
       ) : null}
     </form>

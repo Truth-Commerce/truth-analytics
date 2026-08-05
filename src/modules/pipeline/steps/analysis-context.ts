@@ -1,7 +1,7 @@
 import { proximasDatas } from '@/lib/calendario-comercial';
 import type { Plano } from '@/modules/auth/user.types';
 import { agruparPorMes } from '@/modules/desempenho/desempenho-anual';
-import { getPedidos12Meses } from '@/modules/desempenho/desempenho-anual.repository';
+import { getCoberturaHistorico, getPedidos12Meses } from '@/modules/desempenho/desempenho-anual.repository';
 import { getOrgSettings, getTotalVendasMesCorrente } from '@/modules/organizations/organization-settings.repository';
 import type { AnalysisContext } from '@/modules/pipeline/steps/analyze-ia';
 import type { Periodo } from '@/modules/providers/types';
@@ -27,15 +27,20 @@ export async function buildAnalysisContext(input: {
   source: ErpDataSource;
 }): Promise<AnalysisContext> {
   const agora = new Date();
-  const [settings, totalMesCorrente, anteriores, pedidos12m] = await Promise.all([
+  // O histórico anual é enriquecimento do prompt, não requisito do relatório: se a
+  // leitura falhar, o report continua sendo gerado sem a seção anual.
+  const [settings, totalMesCorrente, anteriores, pedidos12m, cobertura] = await Promise.all([
     getOrgSettings(input.orgId),
     getTotalVendasMesCorrente(input.source),
     getUltimosDoneDetalhados(input.orgId, 1, input.source),
-    getPedidos12Meses(input.source, agora),
+    getPedidos12Meses(input.source, agora).catch(() => null),
+    getCoberturaHistorico(input.source).catch(() => null),
   ]);
   const anterior = anteriores[0];
-  const serieAnual = agruparPorMes(pedidos12m, agora, MESES_CONTEXTO_ANUAL);
-  const contextoAnual = serieAnual.some((m) => m.pedidos > 0) ? serieAnual : null;
+  const serieAnual = pedidos12m ? agruparPorMes(pedidos12m, agora, MESES_CONTEXTO_ANUAL) : null;
+  const contextoAnual = serieAnual?.some((m) => m.pedidos > 0) ? serieAnual : null;
+  const coberturaAnual =
+    contextoAnual && cobertura ? { pendentesEnriquecimento: cobertura.pendentesEnriquecimento } : null;
   return {
     orgName: input.orgName,
     nicho: input.nicho,
@@ -55,5 +60,6 @@ export async function buildAnalysisContext(input: {
       : null,
     datasComerciais: proximasDatas(input.periodo.fim, CALENDARIO_JANELA_DIAS),
     contextoAnual,
+    coberturaAnual,
   };
 }
