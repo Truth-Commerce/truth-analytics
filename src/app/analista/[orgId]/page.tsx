@@ -43,6 +43,7 @@ import { atorFromRole } from '@/modules/tasks/task.types';
 import { listTasksKanban } from '@/modules/tasks/task.repository';
 import { listTrackedProducts } from '@/modules/tracked-products/tracked-product.repository';
 import { OlistConnectionCard } from '@/components/connections/olist-connection-card';
+import { BlingConnectionCard } from '@/components/connections/bling-connection-card';
 import { olistFeedback } from '@/components/connections/olist-feedback';
 import { olistCallbackUri } from '@/modules/connections/olist-oauth-attempt';
 import { getErpConnectionReadModel } from '@/modules/connections/provider-connection.repository';
@@ -56,11 +57,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function AnalistaOrgPage(props: {
   params: Promise<{ orgId: string }>;
-  searchParams?: Promise<{ tab?: string; olist?: string; erro?: string }>;
+  searchParams?: Promise<{ tab?: string; olist?: string; bling?: string; erro?: string }>;
 }) {
   const params = await props.params;
   const searchParams = await props.searchParams;
-  const connectionFeedback = olistFeedback(searchParams);
+  const connectionFeedback = searchParams?.bling === 'conectado'
+    ? { variant: 'success' as const, title: 'Bling conectado', message: 'A conexão foi autorizada para esta organização.' }
+    : olistFeedback(searchParams);
   const access = await requireAnalista();
 
   // Multi-tenancy: analista só acessa orgs da carteira; org fora da carteira
@@ -577,13 +580,20 @@ export default async function AnalistaOrgPage(props: {
             id: 'conexao',
             label: 'Conexão',
             content: (
-              <OlistConnectionCard
-                orgId={orgId}
-                surface="analyst_org"
-                readModel={erpReadModel}
-                canManageErp={true}
-                redirectUri={olistCallbackUri()}
-              />
+              <div className="space-y-4">
+                <BlingConnectionCard
+                  orgId={orgId}
+                  surface="analyst_org"
+                  readModel={erpReadModel}
+                />
+                <OlistConnectionCard
+                  orgId={orgId}
+                  surface="analyst_org"
+                  readModel={erpReadModel}
+                  canManageErp={true}
+                  redirectUri={olistCallbackUri()}
+                />
+              </div>
             ),
           },
         ]}
